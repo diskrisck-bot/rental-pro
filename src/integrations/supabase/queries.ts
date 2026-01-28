@@ -142,3 +142,15 @@ export const fetchInventoryAnalytics = async () => {
   if (error) throw error;
   return data;
 };
+
+// Função para buscar todos os ativos (serial numbers) de um produto
+export const fetchProductAssets = async (productId: string) => {
+  const { data, error } = await supabase
+    .from('assets')
+    .select('id, serial_number, created_at')
+    .eq('product_id', productId)
+    .order('created_at', { ascending: true });
+
+  if (error) throw error;
+  return data;
+};

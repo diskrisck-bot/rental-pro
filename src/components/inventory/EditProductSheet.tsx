@@ -22,6 +22,8 @@ import { Loader2, Save } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { showSuccess, showError } from '@/utils/toast';
 import { useQueryClient } from '@tanstack/react-query';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import AssetManagement from './AssetManagement';
 
 // Tipagem básica para os dados da view (incluindo active_rentals para validação)
 interface InventoryItem {
@@ -51,6 +53,7 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
   });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState('details');
 
   // 1. Carregar dados do produto (da view, que contém active_rentals)
   useEffect(() => {
@@ -74,6 +77,7 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
             total_quantity: data.total_quantity,
             price: Number(data.price),
           });
+          setActiveTab('details'); // Volta para a aba de detalhes ao abrir
         } catch (error: any) {
           showError("Erro ao carregar dados do produto: " + error.message);
           onOpenChange(false);
@@ -142,6 +146,9 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
     }
   };
 
+  // O botão de salvar só deve estar ativo na aba de detalhes
+  const isSaveDisabled = activeTab !== 'details' || saving || loading || !productData;
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="sm:max-w-md flex flex-col h-full">
@@ -156,64 +163,80 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
             <p className="text-sm text-muted-foreground mt-2">Carregando dados...</p>
           </div>
         ) : productData ? (
-          <div className="flex-1 overflow-y-auto py-6 space-y-6">
-            {/* Informação de Aluguel Ativo */}
-            <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 text-sm text-orange-800">
-                <p className="font-semibold">Alugados Ativos: {productData.active_rentals}</p>
-                <p className="text-xs mt-1">A Quantidade Total não pode ser menor que este número.</p>
-            </div>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="details">Detalhes</TabsTrigger>
+              <TabsTrigger value="assets" disabled={productData.type === 'bulk'}>Ativos (Seriais)</TabsTrigger>
+            </TabsList>
+            
+            <div className="flex-1 overflow-y-auto py-6">
+              <TabsContent value="details" className="mt-0 space-y-6">
+                {/* Informação de Aluguel Ativo */}
+                <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 text-sm text-orange-800">
+                    <p className="font-semibold">Alugados Ativos: {productData.active_rentals}</p>
+                    <p className="text-xs mt-1">A Quantidade Total não pode ser menor que este número.</p>
+                </div>
 
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Nome do Produto</Label>
-                <Input 
-                  id="name" 
-                  value={formData.name} 
-                  onChange={handleChange}
-                  placeholder="Nome do Produto" 
-                />
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Tipo</Label>
-                  <Select 
-                    value={formData.type} 
-                    onValueChange={(val) => handleSelectChange('type', val)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="trackable">Rastreável (Serial)</SelectItem>
-                      <SelectItem value="bulk">Granel (Quantidade)</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Nome do Produto</Label>
+                    <Input 
+                      id="name" 
+                      value={formData.name} 
+                      onChange={handleChange}
+                      placeholder="Nome do Produto" 
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Tipo</Label>
+                      <Select 
+                        value={formData.type} 
+                        onValueChange={(val) => handleSelectChange('type', val)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="trackable">Rastreável (Serial)</SelectItem>
+                          <SelectItem value="bulk">Granel (Quantidade)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="total_quantity">Quantidade Total</Label>
+                      <Input 
+                        id="total_quantity" 
+                        type="number"
+                        min={productData.active_rentals} // Mínimo baseado no que está alugado
+                        value={formData.total_quantity} 
+                        onChange={handleChange}
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="price">Preço da Diária (R$)</Label>
+                    <Input 
+                      id="price" 
+                      type="number"
+                      step="0.01"
+                      value={formData.price} 
+                      onChange={handleChange}
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="total_quantity">Quantidade Total</Label>
-                  <Input 
-                    id="total_quantity" 
-                    type="number"
-                    min={productData.active_rentals} // Mínimo baseado no que está alugado
-                    value={formData.total_quantity} 
-                    onChange={handleChange}
-                  />
-                </div>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="price">Preço da Diária (R$)</Label>
-                <Input 
-                  id="price" 
-                  type="number"
-                  step="0.01"
-                  value={formData.price} 
-                  onChange={handleChange}
+              </TabsContent>
+
+              <TabsContent value="assets" className="mt-0">
+                <AssetManagement 
+                  productId={productId} 
+                  productType={productData.type} 
                 />
-              </div>
+              </TabsContent>
             </div>
-          </div>
+          </Tabs>
         ) : (
           <div className="flex-1 flex items-center justify-center text-muted-foreground">
             Produto não encontrado.
@@ -224,10 +247,10 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
           <Button 
             className="w-full h-12 bg-blue-600 hover:bg-blue-700" 
             onClick={handleSave}
-            disabled={saving || loading || !productData}
+            disabled={isSaveDisabled}
           >
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
-            Salvar Alterações
+            {activeTab === 'details' ? 'Salvar Detalhes' : 'Salvar (Detalhes)'}
           </Button>
           <Button variant="outline" className="w-full h-12" onClick={() => onOpenChange(false)}>
             Cancelar
