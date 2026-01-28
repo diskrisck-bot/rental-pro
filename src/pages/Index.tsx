@@ -4,10 +4,10 @@ import React from 'react';
 import { 
   Users, 
   Package, 
-  Calendar, 
   TrendingUp,
   Loader2,
-  Clock
+  Clock,
+  Info
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useQuery } from '@tanstack/react-query';
@@ -18,12 +18,29 @@ import {
 } from '@/integrations/supabase/queries';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { 
+  Tooltip, 
+  TooltipContent, 
+  TooltipTrigger 
+} from '@/components/ui/tooltip';
 
 // Componente de Card de Métrica
-const DashboardCard = ({ title, value, icon: Icon, description, isLoading }: any) => (
+const DashboardCard = ({ title, value, icon: Icon, description, isLoading, tooltipContent }: any) => (
   <Card className="rounded-xl shadow-sm hover:shadow-md transition-shadow">
     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-      <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
+      <div className="flex items-center gap-1">
+        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
+        {tooltipContent && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs bg-gray-800 text-white border-none rounded-lg shadow-lg p-3">
+              <p className="text-xs">{tooltipContent}</p>
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </div>
       <Icon className="h-4 w-4 text-blue-600" />
     </CardHeader>
     <CardContent>
@@ -42,10 +59,22 @@ const DashboardCard = ({ title, value, icon: Icon, description, isLoading }: any
 );
 
 // Componente de Lista de Tarefas
-const TaskListCard = ({ title, data, dateKey, emptyMessage, isLoading }: any) => (
+const TaskListCard = ({ title, data, dateKey, emptyMessage, isLoading, tooltipContent }: any) => (
   <Card className="col-span-1 rounded-xl shadow-sm">
     <CardHeader>
-      <CardTitle>{title}</CardTitle>
+      <div className="flex items-center gap-2">
+        <CardTitle>{title}</CardTitle>
+        {tooltipContent && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs bg-gray-800 text-white border-none rounded-lg shadow-lg p-3">
+              <p className="text-xs">{tooltipContent}</p>
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </div>
     </CardHeader>
     <CardContent>
       {isLoading ? (
@@ -118,6 +147,7 @@ const Index = () => {
           icon={TrendingUp} 
           description="valor total de todos os pedidos" 
           isLoading={isLoadingMetrics}
+          tooltipContent="Soma do valor financeiro de todos os pedidos registrados (Faturamento Bruto)."
         />
         <DashboardCard 
           title="Itens na Rua (Ativos)" 
@@ -125,6 +155,7 @@ const Index = () => {
           icon={Package} 
           description="pedidos atualmente com clientes" 
           isLoading={isLoadingMetrics}
+          tooltipContent="Quantidade de pedidos que estão atualmente com o status 'Retirado' (na mão do cliente)."
         />
         <DashboardCard 
           title="Reservas Futuras" 
@@ -132,6 +163,7 @@ const Index = () => {
           icon={Clock} 
           description="pedidos reservados, aguardando retirada" 
           isLoading={isLoadingMetrics}
+          tooltipContent="Número total de pedidos registrados no sistema desde o início da operação."
         />
         <DashboardCard 
           title="Clientes Únicos" 
@@ -139,6 +171,7 @@ const Index = () => {
           icon={Users} 
           description="total de clientes únicos registrados" 
           isLoading={isLoadingMetrics}
+          tooltipContent="Número de clientes únicos que realizaram pelo menos um pedido."
         />
       </div>
 
@@ -149,6 +182,7 @@ const Index = () => {
           dateKey="start_date"
           emptyMessage="Nenhuma retirada agendada para hoje."
           isLoading={isLoadingPickups}
+          tooltipContent="Clientes agendados para retirar equipamentos hoje. Prepare o material e mude o status para 'Retirado' após a entrega."
         />
 
         <TaskListCard
@@ -157,6 +191,7 @@ const Index = () => {
           dateKey="end_date"
           emptyMessage="Nenhuma devolução pendente para hoje."
           isLoading={isLoadingReturns}
+          tooltipContent="Clientes agendados para devolver equipamentos hoje. Confira o material e mude o status para 'Devolvido' após o recebimento."
         />
       </div>
     </div>
