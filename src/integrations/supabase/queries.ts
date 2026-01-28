@@ -20,11 +20,11 @@ export const fetchDashboardMetrics = async () => {
 
   if (ordersCountError) throw ordersCountError;
 
-  // 2. Active Rentals Count (status = 'picked_up')
+  // 2. Active Rentals Count (status = 'picked_up' OR 'reserved')
   const { count: activeRentalsCount, error: activeRentalsError } = await supabase
     .from('orders')
     .select('*', { count: 'exact', head: true })
-    .eq('status', 'picked_up');
+    .in('status', ['picked_up', 'reserved']); // Alterado para incluir 'reserved'
 
   if (activeRentalsError) throw activeRentalsError;
 
