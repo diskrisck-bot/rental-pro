@@ -123,3 +123,14 @@ export const fetchTimelineData = async () => {
 
   return { products, orderItems };
 };
+
+// Nova função para buscar dados da view inventory_analytics
+export const fetchInventoryAnalytics = async () => {
+  const { data, error } = await supabase
+    .from('inventory_analytics')
+    .select('*')
+    .order('name', { ascending: true });
+
+  if (error) throw error;
+  return data;
+};

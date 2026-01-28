@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Plus, Search, Filter, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,10 +31,23 @@ import {
 } from '@/components/ui/select';
 import { supabase } from '@/lib/supabase';
 import { showSuccess, showError } from '@/utils/toast';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchInventoryAnalytics } from '@/integrations/supabase/queries';
+import { cn } from '@/lib/utils';
+
+// Tipagem básica para os dados da view
+interface InventoryItem {
+  id: string;
+  name: string;
+  type: 'trackable' | 'bulk';
+  price: number;
+  total_quantity: number;
+  active_rentals: number;
+  available_quantity: number;
+}
 
 const Inventory = () => {
-  const [products, setProducts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newProduct, setNewProduct] = useState({
     name: '',
@@ -43,44 +56,58 @@ const Inventory = () => {
     price: 0
   });
 
-  const fetchProducts = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setProducts(data || []);
-    } catch (error: any) {
-      showError("Erro ao carregar produtos: " + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchProducts();
-  }, []);
+  const { data: products, isLoading, isError } = useQuery<InventoryItem[]>({
+    queryKey: ['inventoryAnalytics'],
+    queryFn: fetchInventoryAnalytics,
+  });
 
   const handleCreateProduct = async () => {
     try {
-      const { data, error } = await supabase
+      // A inserção deve ocorrer na tabela 'products'
+      const { error } = await supabase
         .from('products')
-        .insert([newProduct])
-        .select();
+        .insert([newProduct]);
 
       if (error) throw error;
 
       showSuccess("Produto criado com sucesso!");
       setIsAddModalOpen(false);
-      fetchProducts();
+      
+      // Invalida a query da view para forçar a atualização dos dados
+      queryClient.invalidateQueries({ queryKey: ['inventoryAnalytics'] });
+      
       setNewProduct({ name: '', type: 'trackable', total_quantity: 1, price: 0 });
     } catch (error: any) {
       showError("Erro ao criar produto: " + error.message);
     }
   };
+
+  const getAvailabilityStatus = (item: InventoryItem) => {
+    const available = item.available_quantity;
+    const total = item.total_quantity;
+    const percentage = total > 0 ? (available / total) : 0;
+
+    if (available <= 0) {
+      return { 
+        color: 'text-red-600 font-bold', 
+        badge: <Badge variant="destructive" className="ml-2 bg-red-100 text-red-800">Esgotado</Badge> 
+      };
+    }
+    if (percentage <= 0.2) { // 20% ou menos
+      return { 
+        color: 'text-orange-600 font-bold', 
+        badge: <Badge variant="secondary" className="ml-2 bg-orange-100 text-orange-800">Baixo Estoque</Badge> 
+      };
+    }
+    return { 
+      color: 'text-green-600 font-bold', 
+      badge: null 
+    };
+  };
+
+  if (isError) {
+    return <div className="p-8 text-center text-red-500">Erro ao carregar dados do inventário.</div>;
+  }
 
   return (
     <div className="p-8 space-y-6">
@@ -115,7 +142,7 @@ const Inventory = () => {
                   <Label>Tipo</Label>
                   <Select 
                     value={newProduct.type} 
-                    onValueChange={(val) => setNewProduct({...newProduct, type: val})}
+                    onValueChange={(val) => setNewProduct({...newProduct, type: val as 'trackable' | 'bulk'})}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -131,8 +158,9 @@ const Inventory = () => {
                   <Input 
                     id="quantity" 
                     type="number"
+                    min="1"
                     value={newProduct.total_quantity} 
-                    onChange={(e) => setNewProduct({...newProduct, total_quantity: parseInt(e.target.value)})}
+                    onChange={(e) => setNewProduct({...newProduct, total_quantity: parseInt(e.target.value) || 1})}
                   />
                 </div>
               </div>
@@ -141,8 +169,9 @@ const Inventory = () => {
                 <Input 
                   id="price" 
                   type="number"
+                  step="0.01"
                   value={newProduct.price} 
-                  onChange={(e) => setNewProduct({...newProduct, price: parseFloat(e.target.value)})}
+                  onChange={(e) => setNewProduct({...newProduct, price: parseFloat(e.target.value) || 0})}
                 />
               </div>
             </div>
@@ -164,46 +193,60 @@ const Inventory = () => {
         </Button>
       </div>
 
-      <div className="border rounded-xl bg-white overflow-hidden">
+      <div className="border rounded-xl bg-white overflow-hidden shadow-sm">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Nome</TableHead>
               <TableHead>Tipo</TableHead>
-              <TableHead>Estoque Total</TableHead>
+              <TableHead className="text-center">Estoque Total</TableHead>
+              <TableHead className="text-center">Alugados Agora</TableHead>
+              <TableHead className="text-center">Disponível Hoje</TableHead>
               <TableHead>Preço (Diária)</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading ? (
+            {isLoading ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center">
                   <Loader2 className="h-6 w-6 animate-spin mx-auto text-blue-600" />
                 </TableCell>
               </TableRow>
-            ) : products.length === 0 ? (
+            ) : products?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                   Nenhum produto cadastrado.
                 </TableCell>
               </TableRow>
             ) : (
-              products.map((product) => (
-                <TableRow key={product.id}>
-                  <TableCell className="font-medium">{product.name}</TableCell>
-                  <TableCell>
-                    <Badge variant={product.type === 'trackable' ? 'default' : 'secondary'} className="capitalize">
-                      {product.type === 'trackable' ? 'Rastreável' : 'Granel'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{product.total_quantity}</TableCell>
-                  <TableCell>R$ {Number(product.price).toFixed(2)}</TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="sm">Editar</Button>
-                  </TableCell>
-                </TableRow>
-              ))
+              products?.map((product) => {
+                const status = getAvailabilityStatus(product);
+                return (
+                  <TableRow key={product.id}>
+                    <TableCell className="font-medium">{product.name}</TableCell>
+                    <TableCell>
+                      <Badge variant={product.type === 'trackable' ? 'default' : 'secondary'} className="capitalize">
+                        {product.type === 'trackable' ? 'Rastreável' : 'Granel'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-center text-gray-500">{product.total_quantity}</TableCell>
+                    <TableCell className="text-center text-blue-600 font-medium">{product.active_rentals}</TableCell>
+                    <TableCell className="text-center">
+                      <div className="flex items-center justify-center">
+                        <span className={cn("font-bold", status.color)}>
+                          {product.available_quantity}
+                        </span>
+                        {status.badge}
+                      </div>
+                    </TableCell>
+                    <TableCell>R$ {Number(product.price).toFixed(2)}</TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="sm">Editar</Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
