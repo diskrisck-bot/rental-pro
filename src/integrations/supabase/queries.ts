@@ -1,12 +1,17 @@
 import { supabase } from "@/lib/supabase";
-import { startOfDay, endOfDay, formatISO } from 'date-fns';
+import { startOfDay, endOfDay, formatISO, format } from 'date-fns';
 
 // Helper para definir o intervalo de busca para 'Hoje'
 const getTodayRange = () => {
+  // Obtém a data de hoje no formato YYYY-MM-DD (sem tempo ou fuso)
+  const todayDateString = format(new Date(), 'yyyy-MM-dd');
+  
+  // Para consultas de intervalo (que são mais seguras para timestamp with time zone)
   const start = startOfDay(new Date());
   const end = endOfDay(new Date());
-  // Usamos formatISO para garantir que o Supabase compare corretamente os timestamps
+  
   return {
+    todayDateString,
     start: formatISO(start),
     end: formatISO(end),
   };
@@ -67,6 +72,8 @@ export const fetchDashboardMetrics = async () => {
 export const fetchPendingPickups = async () => {
   const { start, end } = getTodayRange();
   
+  // Filtra pedidos reservados onde a data de início está dentro do intervalo de hoje.
+  // Isso garante que pegamos todos os registros do dia, independentemente da hora.
   const { data, error } = await supabase
     .from('orders')
     .select('id, customer_name, start_date')
@@ -82,6 +89,7 @@ export const fetchPendingPickups = async () => {
 export const fetchPendingReturns = async () => {
   const { start, end } = getTodayRange();
 
+  // Filtra pedidos retirados onde a data de fim está dentro do intervalo de hoje.
   const { data, error } = await supabase
     .from('orders')
     .select('id, customer_name, end_date')
