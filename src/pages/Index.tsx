@@ -131,8 +131,7 @@ const Index = () => {
           title="Novos Clientes" 
           value={metrics?.newClients.toLocaleString('pt-BR') || '0'} 
           icon={Users} 
-          description="desde a última semana" 
-          trend="5"
+          description="total de clientes únicos" 
           isLoading={isLoadingMetrics}
         />
         <DashboardCard 

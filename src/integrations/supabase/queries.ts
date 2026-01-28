@@ -24,7 +24,7 @@ export const fetchDashboardMetrics = async () => {
   const { count: activeRentalsCount, error: activeRentalsError } = await supabase
     .from('orders')
     .select('*', { count: 'exact', head: true })
-    .in('status', ['picked_up', 'reserved']); // Alterado para incluir 'reserved'
+    .in('status', ['picked_up', 'reserved']);
 
   if (activeRentalsError) throw activeRentalsError;
 
@@ -38,13 +38,20 @@ export const fetchDashboardMetrics = async () => {
   // Soma todos os total_amount (garantindo que sejam tratados como números)
   const totalRevenue = revenueData.reduce((sum, order) => sum + (Number(order.total_amount) || 0), 0);
 
-  // 4. New Clients (Mantendo o valor estático do mock por enquanto, conforme solicitado)
+  // 4. New Clients (Contagem de nomes de clientes únicos)
+  const { data: clientData, error: clientError } = await supabase
+    .from('orders')
+    .select('customer_name');
+
+  if (clientError) throw clientError;
+
+  const uniqueClients = new Set(clientData.map(order => order.customer_name)).size;
   
   return {
     totalOrders: totalOrdersCount || 0,
     activeRentals: activeRentalsCount || 0,
     totalRevenue: totalRevenue,
-    newClients: 15, 
+    newClients: uniqueClients, 
   };
 };
 
