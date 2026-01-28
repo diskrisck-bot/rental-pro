@@ -1,0 +1,79 @@
+import { supabase } from "@/lib/supabase";
+import { startOfDay, endOfDay, formatISO } from 'date-fns';
+
+// Helper para definir o intervalo de busca para 'Hoje'
+const getTodayRange = () => {
+  const start = startOfDay(new Date());
+  const end = endOfDay(new Date());
+  // Usamos formatISO para garantir que o Supabase compare corretamente os timestamps
+  return {
+    start: formatISO(start),
+    end: formatISO(end),
+  };
+};
+
+export const fetchDashboardMetrics = async () => {
+  // 1. Total Orders Count
+  const { count: totalOrdersCount, error: ordersCountError } = await supabase
+    .from('orders')
+    .select('*', { count: 'exact', head: true });
+
+  if (ordersCountError) throw ordersCountError;
+
+  // 2. Active Rentals Count (status = 'picked_up')
+  const { count: activeRentalsCount, error: activeRentalsError } = await supabase
+    .from('orders')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'picked_up');
+
+  if (activeRentalsError) throw activeRentalsError;
+
+  // 3. Total Revenue Sum
+  const { data: revenueData, error: revenueError } = await supabase
+    .from('orders')
+    .select('total_amount');
+    
+  if (revenueError) throw revenueError;
+  
+  // Soma todos os total_amount (garantindo que sejam tratados como números)
+  const totalRevenue = revenueData.reduce((sum, order) => sum + (Number(order.total_amount) || 0), 0);
+
+  // 4. New Clients (Mantendo o valor estático do mock por enquanto, conforme solicitado)
+  
+  return {
+    totalOrders: totalOrdersCount || 0,
+    activeRentals: activeRentalsCount || 0,
+    totalRevenue: totalRevenue,
+    newClients: 15, 
+  };
+};
+
+export const fetchPendingPickups = async () => {
+  const { start, end } = getTodayRange();
+  
+  const { data, error } = await supabase
+    .from('orders')
+    .select('id, customer_name, start_date')
+    .eq('status', 'reserved')
+    .gte('start_date', start)
+    .lte('start_date', end)
+    .order('start_date', { ascending: true });
+
+  if (error) throw error;
+  return data;
+};
+
+export const fetchPendingReturns = async () => {
+  const { start, end } = getTodayRange();
+
+  const { data, error } = await supabase
+    .from('orders')
+    .select('id, customer_name, end_date')
+    .eq('status', 'picked_up')
+    .gte('end_date', start)
+    .lte('end_date', end)
+    .order('end_date', { ascending: true });
+
+  if (error) throw error;
+  return data;
+};
