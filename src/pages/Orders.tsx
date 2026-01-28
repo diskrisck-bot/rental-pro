@@ -107,7 +107,7 @@ const Orders = () => {
               <TableHead>Cliente</TableHead>
               <TableHead>Período</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Itens</TableHead>
+              <TableHead>Total</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
@@ -126,7 +126,7 @@ const Orders = () => {
               </TableRow>
             ) : (
               filteredOrders.map((order) => (
-                <TableRow key={order.id}>
+                <TableRow key={order.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => handleViewDetails(order.id)}>
                   <TableCell className="font-mono text-[10px] text-gray-400">
                     #{order.id.split('-')[0]}
                   </TableCell>
@@ -135,11 +135,14 @@ const Orders = () => {
                     {format(new Date(order.start_date), 'dd/MM')} - {format(new Date(order.end_date), 'dd/MM')}
                   </TableCell>
                   <TableCell>{getStatusBadge(order.status)}</TableCell>
-                  <TableCell className="text-sm">
-                    {order.order_items?.length || 0} itens
+                  <TableCell className="font-semibold text-blue-600">
+                    R$ {Number(order.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm" onClick={() => handleViewDetails(order.id)}>
+                    <Button variant="ghost" size="sm" onClick={(e) => {
+                      e.stopPropagation();
+                      handleViewDetails(order.id);
+                    }}>
                       Ver Detalhes
                     </Button>
                   </TableCell>

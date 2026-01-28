@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Loader2, Calendar as CalendarIcon } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Plus, Trash2, Loader2, Calendar as CalendarIcon, Wallet } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { 
   Dialog, 
@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/select';
 import { supabase } from '@/lib/supabase';
 import { showSuccess, showError } from '@/utils/toast';
-import { format } from 'date-fns';
+import { format, differenceInDays, parseISO } from 'date-fns';
 
 interface CreateOrderDialogProps {
   onOrderCreated: () => void;
@@ -34,6 +34,7 @@ interface OrderItem {
   product_id: string;
   product_name: string;
   quantity: number;
+  daily_price: number;
 }
 
 const CreateOrderDialog = ({ onOrderCreated, children }: CreateOrderDialogProps) => {
@@ -42,17 +43,32 @@ const CreateOrderDialog = ({ onOrderCreated, children }: CreateOrderDialogProps)
   const [products, setProducts] = useState<any[]>([]);
   const [selectedItems, setSelectedItems] = useState<OrderItem[]>([]);
   
-  // Estados para o item atual que está sendo adicionado
   const [currentProductId, setCurrentProductId] = useState("");
   const [currentQuantity, setCurrentQuantity] = useState(1);
 
-  const { register, handleSubmit, reset, watch, setValue } = useForm({
+  const { register, handleSubmit, reset, watch } = useForm({
     defaultValues: {
       customer_name: '',
       start_date: format(new Date(), 'yyyy-MM-dd'),
       end_date: format(new Date(Date.now() + 86400000), 'yyyy-MM-dd'),
     }
   });
+
+  const watchDates = watch(['start_date', 'end_date']);
+
+  const durationInDays = useMemo(() => {
+    if (!watchDates[0] || !watchDates[1]) return 1;
+    const start = parseISO(watchDates[0]);
+    const end = parseISO(watchDates[1]);
+    const diff = differenceInDays(end, start);
+    return Math.max(1, diff + 1); // Garante pelo menos 1 diária
+  }, [watchDates]);
+
+  const financialSummary = useMemo(() => {
+    const subtotalDaily = selectedItems.reduce((acc, item) => acc + (item.daily_price * item.quantity), 0);
+    const totalAmount = subtotalDaily * durationInDays;
+    return { subtotalDaily, totalAmount };
+  }, [selectedItems, durationInDays]);
 
   useEffect(() => {
     if (open) {
@@ -75,7 +91,8 @@ const CreateOrderDialog = ({ onOrderCreated, children }: CreateOrderDialogProps)
     const newItem: OrderItem = {
       product_id: currentProductId,
       product_name: product.name,
-      quantity: currentQuantity
+      quantity: currentQuantity,
+      daily_price: Number(product.price)
     };
 
     setSelectedItems([...selectedItems, newItem]);
@@ -96,21 +113,20 @@ const CreateOrderDialog = ({ onOrderCreated, children }: CreateOrderDialogProps)
     try {
       setLoading(true);
 
-      // 1. Inserir o pedido
       const { data: orderData, error: orderError } = await supabase
         .from('orders')
         .insert([{
           customer_name: values.customer_name,
           start_date: new Date(values.start_date).toISOString(),
           end_date: new Date(values.end_date).toISOString(),
-          status: 'reserved'
+          status: 'reserved',
+          total_amount: financialSummary.totalAmount
         }])
         .select()
         .single();
 
       if (orderError) throw orderError;
 
-      // 2. Inserir itens do pedido
       const itemsToInsert = selectedItems.map(item => ({
         order_id: orderData.id,
         product_id: item.product_id,
@@ -187,7 +203,9 @@ const CreateOrderDialog = ({ onOrderCreated, children }: CreateOrderDialogProps)
                   </SelectTrigger>
                   <SelectContent>
                     {products.map(p => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name} (R$ {Number(p.price).toFixed(2)}/dia)
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -211,13 +229,16 @@ const CreateOrderDialog = ({ onOrderCreated, children }: CreateOrderDialogProps)
                 <div className="rounded-lg border bg-gray-50 p-4 space-y-2">
                   {selectedItems.map((item, index) => (
                     <div key={index} className="flex justify-between items-center bg-white p-2 rounded border shadow-sm">
-                      <span className="text-sm font-medium">{item.product_name} x {item.quantity}</span>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium">{item.product_name} x {item.quantity}</span>
+                        <span className="text-[10px] text-muted-foreground">R$ {item.daily_price.toFixed(2)} por unidade/dia</span>
+                      </div>
                       <Button 
                         type="button" 
                         variant="ghost" 
                         size="sm" 
                         onClick={() => removeItem(index)}
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                        className="text-red-500 hover:text-red-700"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -232,9 +253,28 @@ const CreateOrderDialog = ({ onOrderCreated, children }: CreateOrderDialogProps)
             </div>
           </div>
 
+          <div className="bg-blue-50 border border-blue-100 rounded-xl p-6 space-y-3">
+            <div className="flex items-center gap-2 text-blue-800 font-semibold mb-2">
+              <Wallet className="h-5 w-5" />
+              Resumo Financeiro
+            </div>
+            <div className="flex justify-between text-sm text-blue-700">
+              <span>Duração:</span>
+              <span className="font-bold">{durationInDays} {durationInDays === 1 ? 'dia' : 'dias'}</span>
+            </div>
+            <div className="flex justify-between text-sm text-blue-700">
+              <span>Subtotal Diário:</span>
+              <span className="font-bold">R$ {financialSummary.subtotalDaily.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="border-t border-blue-200 pt-2 flex justify-between text-lg font-bold text-blue-900">
+              <span>Valor Total:</span>
+              <span>R$ {financialSummary.totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+            </div>
+          </div>
+
           <DialogFooter>
             <Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button type="submit" className="bg-blue-600 hover:bg-blue-700" disabled={loading}>
+            <Button type="submit" className="bg-blue-600 hover:bg-blue-700 h-12 px-8" disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Salvar Pedido
             </Button>

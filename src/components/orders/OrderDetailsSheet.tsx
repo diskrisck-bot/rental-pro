@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Loader2, Calendar, Package, ClipboardCheck, ArrowRightLeft } from 'lucide-react';
+import { Loader2, Calendar, Package, ClipboardCheck, ArrowRightLeft, Wallet } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -44,7 +44,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
           *,
           order_items (
             quantity,
-            products (name),
+            products (name, price),
             assets (serial_number)
           )
         `)
@@ -115,6 +115,12 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto py-6 space-y-8">
+          {/* Valor Total de Destaque */}
+          <div className="bg-blue-600 rounded-xl p-6 text-white shadow-lg shadow-blue-100">
+            <p className="text-xs uppercase font-bold opacity-80 mb-1">Valor Total da Locação</p>
+            <p className="text-3xl font-bold">R$ {Number(order?.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+          </div>
+
           {/* Datas */}
           <div className="space-y-3">
             <h3 className="text-sm font-semibold flex items-center gap-2">
@@ -123,11 +129,11 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
             <div className="bg-gray-50 rounded-lg p-4 grid grid-cols-2 gap-4">
               <div>
                 <p className="text-[10px] uppercase text-gray-500 font-bold">Início</p>
-                <p className="font-medium">{order && format(new Date(order.start_date), "dd 'de' MMMM, yyyy", { locale: ptBR })}</p>
+                <p className="font-medium text-sm">{order && format(new Date(order.start_date), "dd 'de' MMMM, yyyy", { locale: ptBR })}</p>
               </div>
               <div>
                 <p className="text-[10px] uppercase text-gray-500 font-bold">Fim</p>
-                <p className="font-medium">{order && format(new Date(order.end_date), "dd 'de' MMMM, yyyy", { locale: ptBR })}</p>
+                <p className="font-medium text-sm">{order && format(new Date(order.end_date), "dd 'de' MMMM, yyyy", { locale: ptBR })}</p>
               </div>
             </div>
           </div>
@@ -143,7 +149,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
                   <div className="space-y-1">
                     <p className="font-medium text-sm">{item.products?.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      Serial: <span className="font-mono">{item.assets?.serial_number || '-'}</span>
+                      Unitário: R$ {Number(item.products?.price || 0).toFixed(2)}/dia
                     </p>
                   </div>
                   <div className="text-right">
@@ -153,9 +159,6 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
                   </div>
                 </div>
               ))}
-              {order?.order_items.length === 0 && (
-                <p className="p-4 text-center text-sm text-muted-foreground">Nenhum item vinculado.</p>
-              )}
             </div>
           </div>
         </div>
