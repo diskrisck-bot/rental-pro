@@ -27,6 +27,8 @@ import { format, parseISO } from 'date-fns';
 import { calculateOrderTotal } from '@/utils/financial';
 import MaskedInput from 'react-text-mask';
 import { Phone, User } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { fetchAllProducts } from '@/integrations/supabase/queries';
 
 interface CreateOrderDialogProps {
   orderId?: string; // Se presente, entra em modo de edição
@@ -49,11 +51,19 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [fetchingData, setFetchingData] = useState(false);
-  const [products, setProducts] = useState<any[]>([]);
   const [selectedItems, setSelectedItems] = useState<OrderItem[]>([]);
   
   const [currentProductId, setCurrentProductId] = useState("");
   const [currentQuantity, setCurrentQuantity] = useState(1);
+
+  // Fetch products using useQuery
+  const { data: products, isLoading: isProductsLoading, isError: isProductsError } = useQuery({
+    queryKey: ['allProducts'],
+    queryFn: fetchAllProducts,
+    enabled: open, // Only fetch when dialog is open
+  });
+  
+  const productList = products || [];
 
   const { register, handleSubmit, reset, watch, setValue } = useForm({
     defaultValues: {
@@ -71,13 +81,23 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
     return calculateOrderTotal(watchDates[0], watchDates[1], selectedItems);
   }, [selectedItems, watchDates]);
 
-  // Carrega produtos e dados do pedido (se for edição)
+  // Exibe erro se o carregamento de produtos falhar
+  useEffect(() => {
+    if (isProductsError) {
+      showError("Erro ao carregar a lista de produtos.");
+    }
+  }, [isProductsError]);
+
+  // Carrega dados do pedido (se for edição) e inicializa o formulário
   useEffect(() => {
     if (open) {
       const init = async () => {
+        // Se estiver em modo de edição, esperamos os produtos carregarem para mapear os itens existentes
+        if (orderId && isProductsLoading) {
+            return; 
+        }
+
         setFetchingData(true);
-        const { data: productsData } = await supabase.from('products').select('id, name, price, type').order('name');
-        setProducts(productsData || []);
 
         if (orderId) {
           const { data: orderData, error } = await supabase
@@ -114,13 +134,17 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         }
         setFetchingData(false);
       };
-      init();
+      
+      // Só executa a inicialização se não estiver carregando produtos OU se não for modo de edição
+      if (!orderId || !isProductsLoading) {
+        init();
+      }
     }
-  }, [open, orderId, setValue, reset]);
+  }, [open, orderId, setValue, reset, isProductsLoading]);
 
   const addItem = () => {
     if (!currentProductId || currentQuantity < 1) return;
-    const product = products.find(p => p.id === currentProductId);
+    const product = productList.find(p => p.id === currentProductId);
     if (!product) return;
 
     const newItem: OrderItem = {
@@ -153,7 +177,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
       const newEnd = new Date(values.end_date);
 
       for (const item of selectedItems) {
-        const product = products.find(p => p.id === item.product_id);
+        const product = productList.find(p => p.id === item.product_id);
         
         // Apenas verifica conflito para itens rastreáveis
         if (product && product.type === 'trackable') {
@@ -249,6 +273,8 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
     }
   };
 
+  const isDataLoading = fetchingData || isProductsLoading;
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -259,7 +285,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
           <DialogTitle>{orderId ? 'Editar Locação' : 'Nova Locação'}</DialogTitle>
         </DialogHeader>
         
-        {fetchingData ? (
+        {isDataLoading ? (
           <div className="flex flex-col items-center justify-center py-12 gap-2">
             <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
             <p className="text-sm text-muted-foreground">Carregando dados do pedido...</p>
@@ -329,12 +355,19 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
               <div className="flex gap-4 mt-2 items-end">
                 <div className="flex-1 space-y-2">
                   <Label className="text-xs text-muted-foreground">Produto</Label>
-                  <Select value={currentProductId} onValueChange={setCurrentProductId}>
+                  <Select 
+                    value={currentProductId} 
+                    onValueChange={setCurrentProductId}
+                    disabled={isProductsLoading || isProductsError}
+                  >
                     <SelectTrigger>
-                      <SelectValue placeholder="Adicionar novo produto" />
+                      <SelectValue placeholder={isProductsLoading ? "Carregando produtos..." : "Adicionar novo produto"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {products.map(p => (
+                      {isProductsError && (
+                        <SelectItem value="error" disabled>Erro ao carregar produtos</SelectItem>
+                      )}
+                      {productList.map(p => (
                         <SelectItem key={p.id} value={p.id}>
                           {p.name} (R$ {Number(p.price).toFixed(2)}/dia)
                         </SelectItem>
@@ -351,7 +384,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
                     onChange={(e) => setCurrentQuantity(parseInt(e.target.value) || 1)}
                   />
                 </div>
-                <Button type="button" onClick={addItem} variant="secondary">
+                <Button type="button" onClick={addItem} variant="secondary" disabled={isProductsLoading || isProductsError}>
                   <Plus className="h-4 w-4 mr-2" /> Incluir
                 </Button>
               </div>

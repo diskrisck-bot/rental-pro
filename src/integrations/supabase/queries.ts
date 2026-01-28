@@ -154,3 +154,14 @@ export const fetchProductAssets = async (productId: string) => {
   if (error) throw error;
   return data;
 };
+
+// Função para buscar todos os produtos (usada no formulário de pedido)
+export const fetchAllProducts = async () => {
+  const { data, error } = await supabase
+    .from('products')
+    .select('id, name, price, type')
+    .order('name', { ascending: true });
+
+  if (error) throw error;
+  return data;
+};
