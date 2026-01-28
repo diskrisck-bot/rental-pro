@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Loader2, Wallet, Edit, Phone, User } from 'lucide-react';
+import { Plus, Trash2, Loader2, Wallet, Edit } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { 
   Dialog, 
@@ -25,7 +25,8 @@ import { supabase } from '@/lib/supabase';
 import { showSuccess, showError } from '@/utils/toast';
 import { format, parseISO } from 'date-fns';
 import { calculateOrderTotal } from '@/utils/financial';
-import InputMask from 'react-input-mask';
+import MaskedInput from 'react-text-mask';
+import { Phone, User } from 'lucide-react';
 
 interface CreateOrderDialogProps {
   orderId?: string; // Se presente, entra em modo de edição
@@ -39,6 +40,10 @@ interface OrderItem {
   quantity: number;
   daily_price: number;
 }
+
+// Máscaras
+const phoneMask = ['(', /[1-9]/, /\d/, ')', ' ', /\d/, /\d/, /\d/, /\d/, /\d/, '-', /\d/, /\d/, /\d/, /\d/];
+const cpfMask = [/\d/, /\d/, /\d/, '.', /\d/, /\d/, /\d/, '.', /\d/, /\d/, /\d/, '-', /\d/, /\d/];
 
 const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDialogProps) => {
   const [open, setOpen] = useState(false);
@@ -274,40 +279,28 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="customer_phone">Telefone/WhatsApp</Label>
-                  <InputMask
-                    mask="(99) 99999-9999"
-                    maskChar="_"
+                  <MaskedInput
+                    mask={phoneMask}
+                    placeholder="(XX) XXXXX-XXXX"
+                    id="customer_phone"
+                    type="tel"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     value={watch('customer_phone')}
                     onChange={(e) => setValue('customer_phone', e.target.value, { shouldValidate: true })}
-                  >
-                    {(inputProps: any) => (
-                      <Input 
-                        {...inputProps} 
-                        id="customer_phone" 
-                        placeholder="(XX) XXXXX-XXXX" 
-                        type="tel"
-                        required
-                      />
-                    )}
-                  </InputMask>
+                    required
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="customer_cpf">CPF</Label>
-                  <InputMask
-                    mask="999.999.999-99"
-                    maskChar="_"
+                  <MaskedInput
+                    mask={cpfMask}
+                    placeholder="XXX.XXX.XXX-XX"
+                    id="customer_cpf"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     value={watch('customer_cpf')}
                     onChange={(e) => setValue('customer_cpf', e.target.value, { shouldValidate: true })}
-                  >
-                    {(inputProps: any) => (
-                      <Input 
-                        {...inputProps} 
-                        id="customer_cpf" 
-                        placeholder="XXX.XXX.XXX-XX" 
-                        required
-                      />
-                    )}
-                  </InputMask>
+                    required
+                  />
                 </div>
               </div>
 

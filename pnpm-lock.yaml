@@ -143,6 +143,9 @@ importers:
       react-router-dom:
         specifier: ^6.26.2
         version: 6.30.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      react-text-mask:
+        specifier: ^5.5.0
+        version: 5.5.0(react@19.2.3)
       recharts:
         specifier: ^2.12.7
         version: 2.15.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -2246,6 +2249,11 @@ packages:
     peerDependenciesMeta:
       '@types/react':
         optional: true
+
+  react-text-mask@5.5.0:
+    resolution: {integrity: sha512-SLJlJQxa0uonMXsnXRpv5abIepGmHz77ylQcra0GNd7Jtk4Wj2Mtp85uGQHv1avba2uI8ZvRpIEQPpJKsqRGYw==}
+    peerDependencies:
+      react: ^0.14.0 || ^15.0.0 || ^16.0.0 || ^17.0.0 || ^18.0.0
 
   react-transition-group@4.4.5:
     resolution: {integrity: sha512-pZcd1MCJoiKiBR2NRxeCRg13uCXbydPnmB4EOeRrY7480qNWO8IIgQG6zlDkm6uRMsURXPuKq0GWtiM59a5Q6g==}
@@ -4469,6 +4477,11 @@ snapshots:
       tslib: 2.8.1
     optionalDependencies:
       '@types/react': 19.2.8
+
+  react-text-mask@5.5.0(react@19.2.3):
+    dependencies:
+      prop-types: 15.8.1
+      react: 19.2.3
 
   react-transition-group@4.4.5(react-dom@19.2.3(react@19.2.3))(react@19.2.3):
     dependencies:
