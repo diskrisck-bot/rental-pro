@@ -119,7 +119,7 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
     try {
       setSaving(true);
       
-      // 3. Lógica de Salvamento (Update na tabela 'products')
+      // CORREÇÃO: Atualiza a tabela 'products', não a view
       const { error } = await supabase
         .from('products')
         .update({
