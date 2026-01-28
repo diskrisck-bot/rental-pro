@@ -10,13 +10,14 @@ import {
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Calendar, Package, ClipboardCheck, ArrowRightLeft, Edit, CheckCircle, Phone, User } from 'lucide-react';
+import { Loader2, Calendar, Package, ClipboardCheck, ArrowRightLeft, Edit, CheckCircle, Phone, User, History, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { format } from 'date-fns';
+import { format, isAfter, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { showSuccess, showError } from '@/utils/toast';
 import CreateOrderDialog from './CreateOrderDialog';
 import { useQueryClient } from '@tanstack/react-query';
+import { cn } from '@/lib/utils';
 
 interface OrderDetailsSheetProps {
   orderId: string | null;
@@ -67,9 +68,20 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     if (!orderId) return;
     try {
       setUpdating(true);
+      
+      const updatePayload: any = { status: newStatus };
+      
+      // Lógica de Auditoria: Grava horários reais
+      const now = new Date().toISOString();
+      if (newStatus === 'picked_up') {
+        updatePayload.picked_up_at = now;
+      } else if (newStatus === 'returned') {
+        updatePayload.returned_at = now;
+      }
+
       const { error } = await supabase
         .from('orders')
-        .update({ status: newStatus })
+        .update(updatePayload)
         .eq('id', orderId);
 
       if (error) throw error;
@@ -81,16 +93,14 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
 
       showSuccess(successMessage);
       
-      // Invalida queries para atualizar Dashboard e lista de Pedidos
       queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] });
       queryClient.invalidateQueries({ queryKey: ['pendingPickups'] });
       queryClient.invalidateQueries({ queryKey: ['pendingReturns'] });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
-      queryClient.invalidateQueries({ queryKey: ['timelineData'] }); // Adicionado para Timeline
+      queryClient.invalidateQueries({ queryKey: ['timelineData'] });
       
-      // Atualiza o estado local e fecha o sheet
-      fetchOrderDetails(); // Busca os novos detalhes para refletir o status
-      onStatusUpdate(); // Atualiza a lista de pedidos principal
+      fetchOrderDetails();
+      onStatusUpdate();
       
     } catch (error: any) {
       showError("Erro ao atualizar status: " + error.message);
@@ -120,6 +130,9 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
   }
 
   const statusConfig = order ? getStatusConfig(order.status) : { label: '', color: '' };
+  
+  // Verifica atraso na devolução
+  const isOverdue = order?.returned_at && order?.end_date && isAfter(parseISO(order.returned_at), parseISO(order.end_date));
 
   const renderActionButton = () => {
     if (!order) return null;
@@ -157,7 +170,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
         };
         break;
       case 'returned':
-        return null; // Não há mais ações após a devolução
+        return null;
       default:
         return null;
     }
@@ -219,19 +232,56 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
 
           <div className="space-y-3">
             <h3 className="text-sm font-semibold flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-blue-600" /> Período da Locação
+              <Calendar className="h-4 w-4 text-blue-600" /> Período Agendado
             </h3>
             <div className="bg-gray-50 rounded-lg p-4 grid grid-cols-2 gap-4">
               <div>
                 <p className="text-[10px] uppercase text-gray-500 font-bold">Início</p>
-                <p className="font-medium text-sm">{order && format(new Date(order.start_date), "dd 'de' MMMM, yyyy", { locale: ptBR })}</p>
+                <p className="font-medium text-sm">{order && format(new Date(order.start_date), "dd/MM/yyyy", { locale: ptBR })}</p>
               </div>
               <div>
                 <p className="text-[10px] uppercase text-gray-500 font-bold">Fim</p>
-                <p className="font-medium text-sm">{order && format(new Date(order.end_date), "dd 'de' MMMM, yyyy", { locale: ptBR })}</p>
+                <p className="font-medium text-sm">{order && format(new Date(order.end_date), "dd/MM/yyyy", { locale: ptBR })}</p>
               </div>
             </div>
           </div>
+
+          {/* Seção de Histórico Real (Auditoria) */}
+          {(order?.picked_up_at || order?.returned_at) && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <History className="h-4 w-4 text-blue-600" /> Histórico Real
+              </h3>
+              <div className="bg-white border rounded-lg p-4 space-y-3 shadow-sm">
+                {order.picked_up_at && (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[10px] uppercase text-gray-400 font-bold">Check-out (Retirada)</p>
+                      <p className="text-sm font-medium">
+                        {format(parseISO(order.picked_up_at), "dd/MM 'às' HH:mm", { locale: ptBR })}
+                      </p>
+                    </div>
+                    <ClipboardCheck className="h-5 w-5 text-blue-500" />
+                  </div>
+                )}
+                {order.returned_at && (
+                  <div className="flex items-center justify-between pt-2 border-t">
+                    <div>
+                      <p className="text-[10px] uppercase text-gray-400 font-bold">Check-in (Devolução)</p>
+                      <p className={cn(
+                        "text-sm font-medium flex items-center gap-2",
+                        isOverdue ? "text-red-600" : "text-green-600"
+                      )}>
+                        {format(parseISO(order.returned_at), "dd/MM 'às' HH:mm", { locale: ptBR })}
+                        {isOverdue && <AlertCircle className="h-3 w-3" title="Devolução em atraso" />}
+                      </p>
+                    </div>
+                    <ArrowRightLeft className={cn("h-5 w-5", isOverdue ? "text-red-500" : "text-green-500")} />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="space-y-3">
             <h3 className="text-sm font-semibold flex items-center gap-2">
