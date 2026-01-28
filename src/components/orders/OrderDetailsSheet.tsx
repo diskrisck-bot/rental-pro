@@ -11,11 +11,12 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Loader2, Calendar, Package, ClipboardCheck, ArrowRightLeft, Wallet } from 'lucide-react';
+import { Loader2, Calendar, Package, ClipboardCheck, ArrowRightLeft, Wallet, Edit } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { showSuccess, showError } from '@/utils/toast';
+import CreateOrderDialog from './CreateOrderDialog';
 
 interface OrderDetailsSheetProps {
   orderId: string | null;
@@ -107,7 +108,14 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
         <SheetHeader className="space-y-4">
           <div className="flex justify-between items-start">
             <div>
-              <SheetTitle className="text-2xl">{order?.customer_name}</SheetTitle>
+              <div className="flex items-center gap-2">
+                <SheetTitle className="text-2xl">{order?.customer_name}</SheetTitle>
+                <CreateOrderDialog orderId={orderId || undefined} onOrderCreated={() => { fetchOrderDetails(); onStatusUpdate(); }}>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50">
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                </CreateOrderDialog>
+              </div>
               <p className="text-xs font-mono text-muted-foreground">ID: #{order?.id.split('-')[0]}</p>
             </div>
             <Badge className={statusConfig.color}>{statusConfig.label}</Badge>
@@ -115,13 +123,11 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto py-6 space-y-8">
-          {/* Valor Total de Destaque */}
           <div className="bg-blue-600 rounded-xl p-6 text-white shadow-lg shadow-blue-100">
             <p className="text-xs uppercase font-bold opacity-80 mb-1">Valor Total da Locação</p>
             <p className="text-3xl font-bold">R$ {Number(order?.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
           </div>
 
-          {/* Datas */}
           <div className="space-y-3">
             <h3 className="text-sm font-semibold flex items-center gap-2">
               <Calendar className="h-4 w-4 text-blue-600" /> Período da Locação
@@ -138,7 +144,6 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
             </div>
           </div>
 
-          {/* Itens */}
           <div className="space-y-3">
             <h3 className="text-sm font-semibold flex items-center gap-2">
               <Package className="h-4 w-4 text-blue-600" /> Itens do Pedido
