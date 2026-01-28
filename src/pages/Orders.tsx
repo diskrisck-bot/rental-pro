@@ -17,6 +17,7 @@ import { supabase } from '@/lib/supabase';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import CreateOrderDialog from '@/components/orders/CreateOrderDialog';
+import OrderDetailsSheet from '@/components/orders/OrderDetailsSheet';
 import { showError } from '@/utils/toast';
 
 const getStatusBadge = (status: string) => {
@@ -33,6 +34,8 @@ const Orders = () => {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
 
   const fetchOrders = async () => {
     try {
@@ -60,6 +63,11 @@ const Orders = () => {
   useEffect(() => {
     fetchOrders();
   }, []);
+
+  const handleViewDetails = (id: string) => {
+    setSelectedOrderId(id);
+    setIsSheetOpen(true);
+  };
 
   const filteredOrders = orders.filter(order => 
     order.customer_name.toLowerCase().includes(search.toLowerCase()) ||
@@ -131,7 +139,9 @@ const Orders = () => {
                     {order.order_items?.length || 0} itens
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm">Ver Detalhes</Button>
+                    <Button variant="ghost" size="sm" onClick={() => handleViewDetails(order.id)}>
+                      Ver Detalhes
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))
@@ -139,6 +149,13 @@ const Orders = () => {
           </TableBody>
         </Table>
       </div>
+
+      <OrderDetailsSheet 
+        orderId={selectedOrderId}
+        open={isSheetOpen}
+        onOpenChange={setIsSheetOpen}
+        onStatusUpdate={fetchOrders}
+      />
     </div>
   );
 };
