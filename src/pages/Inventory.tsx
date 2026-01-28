@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Plus, Search, Filter, Loader2 } from 'lucide-react';
+import { Plus, Search, Filter, Loader2, Edit } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
@@ -34,6 +34,7 @@ import { showSuccess, showError } from '@/utils/toast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchInventoryAnalytics } from '@/integrations/supabase/queries';
 import { cn } from '@/lib/utils';
+import EditProductSheet from '@/components/inventory/EditProductSheet';
 
 // Tipagem básica para os dados da view
 interface InventoryItem {
@@ -49,6 +50,9 @@ interface InventoryItem {
 const Inventory = () => {
   const queryClient = useQueryClient();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  
   const [newProduct, setNewProduct] = useState({
     name: '',
     type: 'trackable',
@@ -80,6 +84,11 @@ const Inventory = () => {
     } catch (error: any) {
       showError("Erro ao criar produto: " + error.message);
     }
+  };
+
+  const handleEditProduct = (productId: string) => {
+    setSelectedProductId(productId);
+    setIsEditSheetOpen(true);
   };
 
   const getAvailabilityStatus = (item: InventoryItem) => {
@@ -242,7 +251,9 @@ const Inventory = () => {
                     </TableCell>
                     <TableCell>R$ {Number(product.price).toFixed(2)}</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm">Editar</Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleEditProduct(product.id)}>
+                        <Edit className="h-4 w-4 mr-1" /> Editar
+                      </Button>
                     </TableCell>
                   </TableRow>
                 );
@@ -251,6 +262,12 @@ const Inventory = () => {
           </TableBody>
         </Table>
       </div>
+
+      <EditProductSheet
+        productId={selectedProductId}
+        open={isEditSheetOpen}
+        onOpenChange={setIsEditSheetOpen}
+      />
     </div>
   );
 };
