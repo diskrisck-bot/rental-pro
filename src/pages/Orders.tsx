@@ -69,10 +69,15 @@ const Orders = () => {
     setIsSheetOpen(true);
   };
 
-  const filteredOrders = orders.filter(order => 
-    order.customer_name.toLowerCase().includes(search.toLowerCase()) ||
-    order.id.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredOrders = orders.filter(order => {
+    const searchTerm = search.toLowerCase();
+    return (
+      order.customer_name?.toLowerCase().includes(searchTerm) ||
+      order.id?.toLowerCase().includes(searchTerm) ||
+      order.customer_cpf?.includes(searchTerm) ||
+      order.customer_phone?.includes(searchTerm)
+    );
+  });
 
   return (
     <div className="p-8 space-y-6">
@@ -92,7 +97,7 @@ const Orders = () => {
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
         <Input 
-          placeholder="Buscar por cliente ou ID..." 
+          placeholder="Buscar por cliente, ID, CPF ou Telefone..." 
           className="pl-10" 
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -105,6 +110,7 @@ const Orders = () => {
             <TableRow>
               <TableHead>ID</TableHead>
               <TableHead>Cliente</TableHead>
+              <TableHead>Telefone</TableHead>
               <TableHead>Período</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Total</TableHead>
@@ -114,13 +120,13 @@ const Orders = () => {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center">
                   <Loader2 className="h-6 w-6 animate-spin mx-auto text-blue-600" />
                 </TableCell>
               </TableRow>
             ) : filteredOrders.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                   Nenhum pedido encontrado.
                 </TableCell>
               </TableRow>
@@ -131,6 +137,7 @@ const Orders = () => {
                     #{order.id.split('-')[0]}
                   </TableCell>
                   <TableCell className="font-medium">{order.customer_name}</TableCell>
+                  <TableCell className="text-sm text-gray-500">{order.customer_phone}</TableCell>
                   <TableCell className="text-sm">
                     {format(new Date(order.start_date), 'dd/MM')} - {format(new Date(order.end_date), 'dd/MM')}
                   </TableCell>

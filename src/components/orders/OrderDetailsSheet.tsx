@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Calendar, Package, ClipboardCheck, ArrowRightLeft, Edit, CheckCircle } from 'lucide-react';
+import { Loader2, Calendar, Package, ClipboardCheck, ArrowRightLeft, Edit, CheckCircle, Phone, User } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -189,6 +189,23 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
                 </CreateOrderDialog>
               </div>
               <p className="text-xs font-mono text-muted-foreground">ID: #{order?.id.split('-')[0]}</p>
+              
+              <div className="mt-2 space-y-1 text-sm">
+                {order?.customer_phone && (
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <Phone className="h-4 w-4 text-blue-500" />
+                    <a href={`tel:${order.customer_phone.replace(/\D/g, '')}`} className="hover:underline">
+                      {order.customer_phone}
+                    </a>
+                  </div>
+                )}
+                {order?.customer_cpf && (
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <User className="h-4 w-4 text-blue-500" />
+                    <span>{order.customer_cpf}</span>
+                  </div>
+                )}
+              </div>
             </div>
             <Badge className={statusConfig.color}>{statusConfig.label}</Badge>
           </div>

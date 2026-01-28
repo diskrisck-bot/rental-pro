@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Loader2, Calendar as CalendarIcon, Wallet, Edit } from 'lucide-react';
+import { Plus, Trash2, Loader2, Wallet, Edit, Phone, User } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { 
   Dialog, 
@@ -25,6 +25,7 @@ import { supabase } from '@/lib/supabase';
 import { showSuccess, showError } from '@/utils/toast';
 import { format, parseISO } from 'date-fns';
 import { calculateOrderTotal } from '@/utils/financial';
+import InputMask from 'react-input-mask';
 
 interface CreateOrderDialogProps {
   orderId?: string; // Se presente, entra em modo de edição
@@ -52,6 +53,8 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
   const { register, handleSubmit, reset, watch, setValue } = useForm({
     defaultValues: {
       customer_name: '',
+      customer_phone: '',
+      customer_cpf: '',
       start_date: format(new Date(), 'yyyy-MM-dd'),
       end_date: format(new Date(Date.now() + 86400000), 'yyyy-MM-dd'),
     }
@@ -80,6 +83,8 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
 
           if (orderData) {
             setValue('customer_name', orderData.customer_name);
+            setValue('customer_phone', orderData.customer_phone || '');
+            setValue('customer_cpf', orderData.customer_cpf || '');
             setValue('start_date', format(parseISO(orderData.start_date), 'yyyy-MM-dd'));
             setValue('end_date', format(parseISO(orderData.end_date), 'yyyy-MM-dd'));
             
@@ -95,6 +100,8 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
           // Reset form only on creation mode
           reset({
             customer_name: '',
+            customer_phone: '',
+            customer_cpf: '',
             start_date: format(new Date(), 'yyyy-MM-dd'),
             end_date: format(new Date(Date.now() + 86400000), 'yyyy-MM-dd'),
           });
@@ -174,6 +181,8 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
 
       const orderPayload = {
         customer_name: values.customer_name,
+        customer_phone: values.customer_phone,
+        customer_cpf: values.customer_cpf,
         start_date: newStart.toISOString(),
         end_date: newEnd.toISOString(),
         // --- 1. MÓDULO FINANCEIRO (CÁLCULO OBRIGATÓRIO) ---
@@ -260,6 +269,46 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
                   placeholder="Ex: João Silva" 
                   {...register('customer_name', { required: true })}
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="customer_phone">Telefone/WhatsApp</Label>
+                  <InputMask
+                    mask="(99) 99999-9999"
+                    maskChar="_"
+                    value={watch('customer_phone')}
+                    onChange={(e) => setValue('customer_phone', e.target.value, { shouldValidate: true })}
+                  >
+                    {(inputProps: any) => (
+                      <Input 
+                        {...inputProps} 
+                        id="customer_phone" 
+                        placeholder="(XX) XXXXX-XXXX" 
+                        type="tel"
+                        required
+                      />
+                    )}
+                  </InputMask>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="customer_cpf">CPF</Label>
+                  <InputMask
+                    mask="999.999.999-99"
+                    maskChar="_"
+                    value={watch('customer_cpf')}
+                    onChange={(e) => setValue('customer_cpf', e.target.value, { shouldValidate: true })}
+                  >
+                    {(inputProps: any) => (
+                      <Input 
+                        {...inputProps} 
+                        id="customer_cpf" 
+                        placeholder="XXX.XXX.XXX-XX" 
+                        required
+                      />
+                    )}
+                  </InputMask>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
