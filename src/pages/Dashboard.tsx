@@ -3,10 +3,10 @@
 import React from 'react';
 import { 
   Users, 
-  Package, 
-  TrendingUp,
+  Box, // Changed from Package
+  DollarSign, // Changed from TrendingUp
+  FileText, // Changed from Clock
   Loader2,
-  Clock,
   Info
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,6 +23,7 @@ import {
   TooltipContent, 
   TooltipTrigger 
 } from '@/components/ui/tooltip';
+import RevenueChart from '@/components/dashboard/RevenueChart';
 
 // Componente de Card de Métrica
 const DashboardCard = ({ title, value, icon: Icon, description, isLoading, tooltipContent }: any) => (
@@ -114,7 +115,7 @@ const TaskListCard = ({ title, data, dateKey, emptyMessage, isLoading, tooltipCo
 );
 
 
-const Index = () => {
+const Dashboard = () => {
   const { data: metrics, isLoading: isLoadingMetrics } = useQuery({
     queryKey: ['dashboardMetrics'],
     queryFn: fetchDashboardMetrics,
@@ -142,9 +143,9 @@ const Index = () => {
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <DashboardCard 
-          title="Receita Total" 
+          title="Faturamento Total" 
           value={formatCurrency(metrics?.totalRevenue || 0)} 
-          icon={TrendingUp} 
+          icon={DollarSign} 
           description="valor total de todos os pedidos" 
           isLoading={isLoadingMetrics}
           tooltipContent="Soma do valor financeiro de todos os pedidos registrados (Faturamento Bruto)."
@@ -152,18 +153,18 @@ const Index = () => {
         <DashboardCard 
           title="Itens na Rua (Ativos)" 
           value={metrics?.activeRentals.toLocaleString('pt-BR') || '0'} 
-          icon={Package} 
+          icon={Box} 
           description="pedidos atualmente com clientes" 
           isLoading={isLoadingMetrics}
           tooltipContent="Quantidade de pedidos que estão atualmente com o status 'Retirado' (na mão do cliente)."
         />
         <DashboardCard 
-          title="Reservas Futuras" 
+          title="Contratos Ativos" 
           value={metrics?.futureReservations.toLocaleString('pt-BR') || '0'} 
-          icon={Clock} 
+          icon={FileText} 
           description="pedidos reservados, aguardando retirada" 
           isLoading={isLoadingMetrics}
-          tooltipContent="Número total de pedidos registrados no sistema desde o início da operação."
+          tooltipContent="Número total de pedidos registrados no sistema com status 'Reservado' ou 'Retirado'."
         />
         <DashboardCard 
           title="Clientes Únicos" 
@@ -174,8 +175,10 @@ const Index = () => {
           tooltipContent="Número de clientes únicos que realizaram pelo menos um pedido."
         />
       </div>
-
-      <div className="grid gap-6 md:grid-cols-2">
+      
+      <div className="grid gap-6 lg:grid-cols-3">
+        <RevenueChart />
+        
         <TaskListCard
           title="Retiradas Pendentes (Hoje)"
           data={pickups}
@@ -184,7 +187,9 @@ const Index = () => {
           isLoading={isLoadingPickups}
           tooltipContent="Clientes agendados para retirar equipamentos hoje. Prepare o material e mude o status para 'Retirado' após a entrega."
         />
+      </div>
 
+      <div className="grid gap-6 md:grid-cols-2">
         <TaskListCard
           title="Devoluções Pendentes (Hoje)"
           data={returns}
@@ -198,4 +203,4 @@ const Index = () => {
   );
 };
 
-export default Index;
+export default Dashboard;
