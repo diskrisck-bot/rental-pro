@@ -119,28 +119,32 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
     try {
       setSaving(true);
       
-      // CORREÇÃO: Atualiza a tabela 'products', não a view
+      // Lógica de UPDATE estrita na tabela 'products'
       const { error } = await supabase
         .from('products')
         .update({
           name: formData.name,
           type: formData.type,
-          total_quantity: newTotalQuantity,
-          price: formData.price,
+          total_quantity: Number(newTotalQuantity),
+          price: Number(formData.price),
         })
         .eq('id', productId);
 
-      if (error) throw error;
+      if (error) {
+        console.error("[EditProductSheet] Erro fatal no Supabase:", error);
+        throw error; 
+      }
 
       showSuccess("Produto atualizado com sucesso!");
       
       // Invalida as queries para forçar a atualização dos dados em todas as telas
       queryClient.invalidateQueries({ queryKey: ['inventoryAnalytics'] });
       queryClient.invalidateQueries({ queryKey: ['timelineData'] });
-      queryClient.invalidateQueries({ queryKey: ['allProducts'] }); // Invalida a lista de produtos para o formulário de pedido
+      queryClient.invalidateQueries({ queryKey: ['allProducts'] });
       
       onOpenChange(false);
     } catch (error: any) {
+      // Tratamento de erro real
       showError("Erro ao salvar produto: " + error.message);
     } finally {
       setSaving(false);
