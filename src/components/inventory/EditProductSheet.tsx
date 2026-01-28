@@ -119,8 +119,8 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
     try {
       setSaving(true);
       
-      // Lógica de UPDATE estrita na tabela 'products'
-      const { error } = await supabase
+      // Lógica de UPDATE estrita na tabela 'products' com validação de retorno
+      const { data, error } = await supabase
         .from('products')
         .update({
           name: formData.name,
@@ -128,11 +128,17 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
           total_quantity: Number(newTotalQuantity),
           price: Number(formData.price),
         })
-        .eq('id', productId);
+        .eq('id', productId)
+        .select(); // Adiciona .select() para obter o retorno
 
       if (error) {
         console.error("[EditProductSheet] Erro fatal no Supabase:", error);
         throw error; 
+      }
+      
+      // VALIDAÇÃO CRÍTICA: Verifica se alguma linha foi realmente atualizada
+      if (!data || data.length === 0) {
+        throw new Error("Erro: A atualização foi ignorada pelo banco. Verifique as permissões (RLS) ou se o ID do produto está correto.");
       }
 
       showSuccess("Produto atualizado com sucesso!");
