@@ -134,9 +134,10 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
 
       showSuccess("Produto atualizado com sucesso!");
       
-      // Invalida a query da view para forçar a atualização dos dados na tabela
+      // Invalida as queries para forçar a atualização dos dados em todas as telas
       queryClient.invalidateQueries({ queryKey: ['inventoryAnalytics'] });
       queryClient.invalidateQueries({ queryKey: ['timelineData'] });
+      queryClient.invalidateQueries({ queryKey: ['allProducts'] }); // Invalida a lista de produtos para o formulário de pedido
       
       onOpenChange(false);
     } catch (error: any) {
