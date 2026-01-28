@@ -1,4 +1,3 @@
-picked_up -> returned) e adicionando invalidação de cache do Tanstack Query.">
 "use client";
 
 import React, { useState, useEffect } from 'react';
