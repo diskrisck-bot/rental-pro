@@ -10,7 +10,21 @@ import {
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Calendar, Package, ClipboardCheck, ArrowRightLeft, Edit, CheckCircle, Phone, User, History, AlertCircle } from 'lucide-react';
+import { 
+  Loader2, 
+  Calendar, 
+  Package, 
+  ClipboardCheck, 
+  ArrowRightLeft, 
+  Edit, 
+  CheckCircle, 
+  Phone, 
+  User, 
+  History, 
+  AlertCircle,
+  Share2,
+  MessageCircle
+} from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { format, isAfter, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -18,6 +32,8 @@ import { showSuccess, showError } from '@/utils/toast';
 import CreateOrderDialog from './CreateOrderDialog';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface OrderDetailsSheetProps {
   orderId: string | null;
@@ -31,6 +47,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [isGeneratingContract, setIsGeneratingContract] = useState(false);
 
   useEffect(() => {
     if (open && orderId) {
@@ -64,6 +81,110 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     }
   };
 
+  const handleShareContract = async () => {
+    if (!order) return;
+    
+    try {
+      setIsGeneratingContract(true);
+      
+      // 1. Geração do PDF
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      
+      // Cabeçalho
+      doc.setFontSize(20);
+      doc.setTextColor(30, 58, 138); // Blue-900
+      doc.text("CONTRATO DE LOCAÇÃO - RENTAL PRO", pageWidth / 2, 20, { align: 'center' });
+      
+      // Dados do Cliente
+      doc.setFontSize(12);
+      doc.setTextColor(0, 0, 0);
+      doc.text(`Pedido: #${order.id.split('-')[0]}`, 14, 35);
+      doc.text(`Cliente: ${order.customer_name}`, 14, 42);
+      doc.text(`CPF: ${order.customer_cpf || 'Não informado'}`, 14, 49);
+      doc.text(`Telefone: ${order.customer_phone || 'Não informado'}`, 14, 56);
+      
+      // Datas
+      doc.text(`Data de Retirada: ${format(parseISO(order.start_date), "dd/MM/yyyy")}`, 14, 66);
+      doc.text(`Data de Devolução: ${format(parseISO(order.end_date), "dd/MM/yyyy")}`, 14, 73);
+
+      // Tabela de Itens
+      const tableData = order.order_items.map((item: any) => [
+        item.products.name,
+        item.quantity,
+        item.assets?.serial_number || 'N/A',
+        `R$ ${Number(item.products.price).toFixed(2)}`
+      ]);
+
+      autoTable(doc, {
+        startY: 80,
+        head: [['Produto', 'Qtd', 'Serial', 'Preço/Dia']],
+        body: tableData,
+        headStyles: { fillStyle: 'F', fillColor: [37, 99, 235] }, // Blue-600
+      });
+
+      // Total
+      const finalY = (doc as any).lastAutoTable.finalY || 100;
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text(`VALOR TOTAL: R$ ${Number(order.total_amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, pageWidth - 14, finalY + 15, { align: 'right' });
+
+      // Rodapé / Assinatura
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text("__________________________________________", 14, finalY + 40);
+      doc.text("Assinatura do Cliente", 14, finalY + 45);
+      
+      doc.text("__________________________________________", pageWidth - 80, finalY + 40);
+      doc.text("Assinatura da Locadora", pageWidth - 80, finalY + 45);
+
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150);
+      doc.text("Gerado via RentalPRO - Gestão Inteligente para Locadoras", pageWidth / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
+
+      // 2. Upload para Supabase Storage
+      const pdfBlob = doc.output('blob');
+      const fileName = `contrato-${order.id.split('-')[0]}-${Date.now()}.pdf`;
+      const filePath = `${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('contracts')
+        .upload(filePath, pdfBlob, {
+          contentType: 'application/pdf',
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (uploadError) throw uploadError;
+
+      // 3. Obter URL Pública
+      const { data: { publicUrl } } = supabase.storage
+        .from('contracts')
+        .getPublicUrl(filePath);
+
+      // 4. Disparo no WhatsApp
+      const cleanPhone = order.customer_phone.replace(/\D/g, '');
+      const message = `Olá ${order.customer_name}! 📦
+Aqui está o link do seu contrato de locação #${order.id.split('-')[0]}:
+${publicUrl}
+
+Por favor, confira e assine.
+
+---
+🔒 *Gerado via RentalPRO - Gestão Inteligente para Locadoras*`;
+
+      const encodedMessage = encodeURIComponent(message);
+      window.open(`https://wa.me/${cleanPhone}?text=${encodedMessage}`, '_blank');
+      
+      showSuccess("Contrato gerado e link enviado para o WhatsApp!");
+    } catch (error: any) {
+      console.error("Erro ao gerar contrato:", error);
+      showError("Erro ao processar contrato: " + (error.message || "Tente novamente."));
+    } finally {
+      setIsGeneratingContract(false);
+    }
+  };
+
   const updateStatus = async (newStatus: string) => {
     if (!orderId) return;
     try {
@@ -71,7 +192,6 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
       
       const updatePayload: any = { status: newStatus };
       
-      // Lógica de Auditoria: Grava horários reais
       const now = new Date().toISOString();
       if (newStatus === 'picked_up') {
         updatePayload.picked_up_at = now;
@@ -130,8 +250,6 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
   }
 
   const statusConfig = order ? getStatusConfig(order.status) : { label: '', color: '' };
-  
-  // Verifica atraso na devolução
   const isOverdue = order?.returned_at && order?.end_date && isAfter(parseISO(order.returned_at), parseISO(order.end_date));
 
   const renderActionButton = () => {
@@ -230,6 +348,27 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
             <p className="text-3xl font-bold">R$ {Number(order?.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
           </div>
 
+          {/* Botão de Enviar Contrato */}
+          <div className="space-y-3">
+             <Button 
+                onClick={handleShareContract} 
+                disabled={isGeneratingContract || loading}
+                className="w-full h-14 bg-green-600 hover:bg-green-700 text-white font-bold gap-3 rounded-xl shadow-lg transition-all active:scale-95"
+             >
+                {isGeneratingContract ? (
+                  <>
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                    Gerando link do contrato...
+                  </>
+                ) : (
+                  <>
+                    <MessageCircle className="h-6 w-6" />
+                    Enviar Contrato no WhatsApp
+                  </>
+                )}
+             </Button>
+          </div>
+
           <div className="space-y-3">
             <h3 className="text-sm font-semibold flex items-center gap-2">
               <Calendar className="h-4 w-4 text-blue-600" /> Período Agendado
@@ -246,7 +385,6 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
             </div>
           </div>
 
-          {/* Seção de Histórico Real (Auditoria) */}
           {(order?.picked_up_at || order?.returned_at) && (
             <div className="space-y-3">
               <h3 className="text-sm font-semibold flex items-center gap-2">
