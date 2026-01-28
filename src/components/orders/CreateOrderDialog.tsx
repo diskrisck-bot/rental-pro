@@ -23,7 +23,8 @@ import {
 } from '@/components/ui/select';
 import { supabase } from '@/lib/supabase';
 import { showSuccess, showError } from '@/utils/toast';
-import { format, differenceInDays, parseISO } from 'date-fns';
+import { format, parseISO } from 'date-fns';
+import { calculateOrderTotal } from '@/utils/financial';
 
 interface CreateOrderDialogProps {
   orderId?: string; // Se presente, entra em modo de edição
@@ -58,32 +59,22 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
 
   const watchDates = watch(['start_date', 'end_date']);
 
-  const durationInDays = useMemo(() => {
-    if (!watchDates[0] || !watchDates[1]) return 1;
-    const start = parseISO(watchDates[0]);
-    const end = parseISO(watchDates[1]);
-    const diff = differenceInDays(end, start);
-    return Math.max(1, diff + 1);
-  }, [watchDates]);
-
   const financialSummary = useMemo(() => {
-    const subtotalDaily = selectedItems.reduce((acc, item) => acc + (item.daily_price * item.quantity), 0);
-    const totalAmount = subtotalDaily * durationInDays;
-    return { subtotalDaily, totalAmount };
-  }, [selectedItems, durationInDays]);
+    return calculateOrderTotal(watchDates[0], watchDates[1], selectedItems);
+  }, [selectedItems, watchDates]);
 
   // Carrega produtos e dados do pedido (se for edição)
   useEffect(() => {
     if (open) {
       const init = async () => {
         setFetchingData(true);
-        const { data: productsData } = await supabase.from('products').select('*').order('name');
+        const { data: productsData } = await supabase.from('products').select('id, name, price, type').order('name');
         setProducts(productsData || []);
 
         if (orderId) {
           const { data: orderData, error } = await supabase
             .from('orders')
-            .select('*, order_items(*, products(*))')
+            .select('*, order_items(*, products(name, price))')
             .eq('id', orderId)
             .single();
 
@@ -100,15 +91,23 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             }));
             setSelectedItems(existingItems);
           }
+        } else {
+          // Reset form only on creation mode
+          reset({
+            customer_name: '',
+            start_date: format(new Date(), 'yyyy-MM-dd'),
+            end_date: format(new Date(Date.now() + 86400000), 'yyyy-MM-dd'),
+          });
+          setSelectedItems([]);
         }
         setFetchingData(false);
       };
       init();
     }
-  }, [open, orderId, setValue]);
+  }, [open, orderId, setValue, reset]);
 
   const addItem = () => {
-    if (!currentProductId) return;
+    if (!currentProductId || currentQuantity < 1) return;
     const product = products.find(p => p.id === currentProductId);
     if (!product) return;
 
@@ -137,12 +136,50 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
     try {
       setLoading(true);
 
+      // --- 3. MÓDULO DE ESTOQUE E CONFLITOS (ANTIDUPLICIDADE) ---
+      const newStart = new Date(values.start_date);
+      const newEnd = new Date(values.end_date);
+
+      for (const item of selectedItems) {
+        const product = products.find(p => p.id === item.product_id);
+        
+        // Apenas verifica conflito para itens rastreáveis
+        if (product && product.type === 'trackable') {
+          // Busca itens de pedidos ativos (reserved ou picked_up) que colidem com o período
+          const { data: conflictingItems, error: conflictError } = await supabase
+            .from('order_items')
+            .select('order_id, orders!inner(start_date, end_date, status)')
+            .eq('product_id', item.product_id)
+            .neq('order_id', orderId || '00000000-0000-0000-0000-000000000000') // Exclui o pedido atual se estiver editando
+            .in('orders.status', ['reserved', 'picked_up']); 
+
+          if (conflictError) throw conflictError;
+
+          const collision = conflictingItems.some((ci: any) => {
+            const existingStart = new Date(ci.orders.start_date);
+            const existingEnd = new Date(ci.orders.end_date);
+
+            // Colisão se [Novo Início <= Fim Existente] E [Início Existente <= Novo Fim]
+            return newStart <= existingEnd && existingStart <= newEnd;
+          });
+
+          if (collision) {
+            showError(`O item rastreável "${product.name}" já está reservado ou alugado no período selecionado.`);
+            setLoading(false);
+            return; // Bloqueia o salvamento
+          }
+        }
+      }
+      // --- FIM DA VERIFICAÇÃO DE CONFLITO ---
+
       const orderPayload = {
         customer_name: values.customer_name,
-        start_date: new Date(values.start_date).toISOString(),
-        end_date: new Date(values.end_date).toISOString(),
+        start_date: newStart.toISOString(),
+        end_date: newEnd.toISOString(),
+        // --- 1. MÓDULO FINANCEIRO (CÁLCULO OBRIGATÓRIO) ---
         total_amount: financialSummary.totalAmount,
-        status: orderId ? undefined : 'reserved' // Não altera status na edição a menos que necessário
+        // --- FIM DO CÁLCULO ---
+        status: orderId ? undefined : 'reserved' // Novo pedido começa como 'reserved'
       };
 
       let currentOrderId = orderId;
@@ -190,8 +227,6 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
 
       showSuccess(orderId ? "Pedido atualizado com sucesso!" : "Pedido criado com sucesso!");
       setOpen(false);
-      reset();
-      setSelectedItems([]);
       onOrderCreated();
     } catch (error: any) {
       showError("Erro ao processar pedido: " + error.message);
@@ -315,7 +350,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
               </div>
               <div className="flex justify-between text-sm text-blue-700">
                 <span>Duração Atualizada:</span>
-                <span className="font-bold">{durationInDays} {durationInDays === 1 ? 'dia' : 'dias'}</span>
+                <span className="font-bold">{financialSummary.durationInDays} {financialSummary.durationInDays === 1 ? 'dia' : 'dias'}</span>
               </div>
               <div className="flex justify-between text-sm text-blue-700">
                 <span>Subtotal Diário:</span>

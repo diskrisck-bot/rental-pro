@@ -6,7 +6,8 @@ import {
   Package, 
   Calendar, 
   TrendingUp,
-  Loader2
+  Loader2,
+  Clock
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useQuery } from '@tanstack/react-query';
@@ -19,7 +20,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 // Componente de Card de Métrica
-const DashboardCard = ({ title, value, icon: Icon, description, trend, isLoading }: any) => (
+const DashboardCard = ({ title, value, icon: Icon, description, isLoading }: any) => (
   <Card className="rounded-xl shadow-sm hover:shadow-md transition-shadow">
     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
       <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
@@ -34,7 +35,7 @@ const DashboardCard = ({ title, value, icon: Icon, description, trend, isLoading
         <div className="text-2xl font-bold">{value}</div>
       )}
       <p className="text-xs text-muted-foreground mt-1">
-        {trend && <span className="text-green-500 font-medium">+{trend}%</span>} {description}
+        {description}
       </p>
     </CardContent>
   </Card>
@@ -112,34 +113,31 @@ const Index = () => {
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <DashboardCard 
-          title="Total de Aluguéis" 
-          value={metrics?.totalOrders.toLocaleString('pt-BR') || '0'} 
-          icon={Calendar} 
-          description="total de pedidos registrados" 
-          trend="12"
-          isLoading={isLoadingMetrics}
-        />
-        <DashboardCard 
-          title="Itens Alugados" 
-          value={metrics?.activeRentals.toLocaleString('pt-BR') || '0'} 
-          icon={Package} 
-          description="pedidos ativos no momento" 
-          trend="8"
-          isLoading={isLoadingMetrics}
-        />
-        <DashboardCard 
-          title="Novos Clientes" 
-          value={metrics?.newClients.toLocaleString('pt-BR') || '0'} 
-          icon={Users} 
-          description="total de clientes únicos" 
-          isLoading={isLoadingMetrics}
-        />
-        <DashboardCard 
           title="Receita Total" 
           value={formatCurrency(metrics?.totalRevenue || 0)} 
           icon={TrendingUp} 
           description="valor total de todos os pedidos" 
-          trend="18"
+          isLoading={isLoadingMetrics}
+        />
+        <DashboardCard 
+          title="Itens na Rua (Ativos)" 
+          value={metrics?.activeRentals.toLocaleString('pt-BR') || '0'} 
+          icon={Package} 
+          description="pedidos atualmente com clientes" 
+          isLoading={isLoadingMetrics}
+        />
+        <DashboardCard 
+          title="Reservas Futuras" 
+          value={metrics?.futureReservations.toLocaleString('pt-BR') || '0'} 
+          icon={Clock} 
+          description="pedidos reservados, aguardando retirada" 
+          isLoading={isLoadingMetrics}
+        />
+        <DashboardCard 
+          title="Clientes Únicos" 
+          value={metrics?.newClients.toLocaleString('pt-BR') || '0'} 
+          icon={Users} 
+          description="total de clientes únicos registrados" 
           isLoading={isLoadingMetrics}
         />
       </div>

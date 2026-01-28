@@ -20,15 +20,23 @@ export const fetchDashboardMetrics = async () => {
 
   if (ordersCountError) throw ordersCountError;
 
-  // 2. Active Rentals Count (status = 'picked_up' OR 'reserved')
+  // 2. Itens na Rua (Ativos): status = 'picked_up'
   const { count: activeRentalsCount, error: activeRentalsError } = await supabase
     .from('orders')
     .select('*', { count: 'exact', head: true })
-    .in('status', ['picked_up', 'reserved']);
+    .eq('status', 'picked_up');
 
   if (activeRentalsError) throw activeRentalsError;
 
-  // 3. Total Revenue Sum
+  // 3. Reservas Futuras: status = 'reserved'
+  const { count: futureReservationsCount, error: futureReservationsError } = await supabase
+    .from('orders')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'reserved');
+
+  if (futureReservationsError) throw futureReservationsError;
+
+  // 4. Total Revenue Sum
   const { data: revenueData, error: revenueError } = await supabase
     .from('orders')
     .select('total_amount');
@@ -38,7 +46,7 @@ export const fetchDashboardMetrics = async () => {
   // Soma todos os total_amount (garantindo que sejam tratados como números)
   const totalRevenue = revenueData.reduce((sum, order) => sum + (Number(order.total_amount) || 0), 0);
 
-  // 4. New Clients (Contagem de nomes de clientes únicos)
+  // 5. Clientes (Contagem de nomes de clientes únicos)
   const { data: clientData, error: clientError } = await supabase
     .from('orders')
     .select('customer_name');
@@ -50,6 +58,7 @@ export const fetchDashboardMetrics = async () => {
   return {
     totalOrders: totalOrdersCount || 0,
     activeRentals: activeRentalsCount || 0,
+    futureReservations: futureReservationsCount || 0,
     totalRevenue: totalRevenue,
     newClients: uniqueClients, 
   };
@@ -83,4 +92,34 @@ export const fetchPendingReturns = async () => {
 
   if (error) throw error;
   return data;
+};
+
+export const fetchTimelineData = async () => {
+  // 1. Fetch all products (resources)
+  const { data: products, error: productsError } = await supabase
+    .from('products')
+    .select('id, name, type, total_quantity, price')
+    .order('name', { ascending: true });
+
+  if (productsError) throw productsError;
+
+  // 2. Fetch all active order items with order details (allocations)
+  const { data: orderItems, error: itemsError } = await supabase
+    .from('order_items')
+    .select(`
+      product_id,
+      quantity,
+      orders!inner (
+        id,
+        customer_name,
+        start_date,
+        end_date,
+        status
+      )
+    `)
+    .in('orders.status', ['reserved', 'picked_up']); // Apenas pedidos ativos ou reservados
+
+  if (itemsError) throw itemsError;
+
+  return { products, orderItems };
 };

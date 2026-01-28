@@ -1,3 +1,4 @@
+picked_up -> returned) e adicionando invalidação de cache do Tanstack Query.">
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -10,13 +11,13 @@ import {
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { Loader2, Calendar, Package, ClipboardCheck, ArrowRightLeft, Wallet, Edit } from 'lucide-react';
+import { Loader2, Calendar, Package, ClipboardCheck, ArrowRightLeft, Edit, CheckCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { showSuccess, showError } from '@/utils/toast';
 import CreateOrderDialog from './CreateOrderDialog';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface OrderDetailsSheetProps {
   orderId: string | null;
@@ -26,6 +27,7 @@ interface OrderDetailsSheetProps {
 }
 
 const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: OrderDetailsSheetProps) => {
+  const queryClient = useQueryClient();
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
@@ -37,6 +39,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
   }, [open, orderId]);
 
   const fetchOrderDetails = async () => {
+    if (!orderId) return;
     try {
       setLoading(true);
       const { data, error } = await supabase
@@ -45,7 +48,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
           *,
           order_items (
             quantity,
-            products (name, price),
+            products (name, price, type),
             assets (serial_number)
           )
         `)
@@ -62,6 +65,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
   };
 
   const updateStatus = async (newStatus: string) => {
+    if (!orderId) return;
     try {
       setUpdating(true);
       const { error } = await supabase
@@ -71,9 +75,24 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
 
       if (error) throw error;
 
-      showSuccess(`Status atualizado para ${newStatus === 'picked_up' ? 'Retirado' : 'Devolvido'}`);
-      onStatusUpdate();
-      onOpenChange(false);
+      let successMessage = '';
+      if (newStatus === 'reserved') successMessage = 'Reserva confirmada com sucesso!';
+      if (newStatus === 'picked_up') successMessage = 'Retirada registrada com sucesso!';
+      if (newStatus === 'returned') successMessage = 'Devolução registrada com sucesso!';
+
+      showSuccess(successMessage);
+      
+      // Invalida queries para atualizar Dashboard e lista de Pedidos
+      queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] });
+      queryClient.invalidateQueries({ queryKey: ['pendingPickups'] });
+      queryClient.invalidateQueries({ queryKey: ['pendingReturns'] });
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['timelineData'] }); // Adicionado para Timeline
+      
+      // Atualiza o estado local e fecha o sheet
+      fetchOrderDetails(); // Busca os novos detalhes para refletir o status
+      onStatusUpdate(); // Atualiza a lista de pedidos principal
+      
     } catch (error: any) {
       showError("Erro ao atualizar status: " + error.message);
     } finally {
@@ -83,6 +102,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
 
   const getStatusConfig = (status: string) => {
     switch (status) {
+      case 'draft': return { label: 'Rascunho', color: 'bg-gray-100 text-gray-800 border-gray-200' };
       case 'reserved': return { label: 'Reservado', color: 'bg-yellow-100 text-yellow-800 border-yellow-200' };
       case 'picked_up': return { label: 'Retirado', color: 'bg-blue-100 text-blue-800 border-blue-200' };
       case 'returned': return { label: 'Devolvido', color: 'bg-green-100 text-green-800 border-green-200' };
@@ -101,6 +121,59 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
   }
 
   const statusConfig = order ? getStatusConfig(order.status) : { label: '', color: '' };
+
+  const renderActionButton = () => {
+    if (!order) return null;
+
+    let buttonProps = {
+      label: '',
+      status: '',
+      icon: null,
+      color: 'bg-blue-600 hover:bg-blue-700',
+    };
+
+    switch (order.status) {
+      case 'draft':
+        buttonProps = {
+          label: 'Confirmar Reserva',
+          status: 'reserved',
+          icon: <CheckCircle className="mr-2 h-5 w-5" />,
+          color: 'bg-green-600 hover:bg-green-700',
+        };
+        break;
+      case 'reserved':
+        buttonProps = {
+          label: 'Registrar Retirada/Check-out',
+          status: 'picked_up',
+          icon: <ClipboardCheck className="mr-2 h-5 w-5" />,
+          color: 'bg-blue-600 hover:bg-blue-700',
+        };
+        break;
+      case 'picked_up':
+        buttonProps = {
+          label: 'Registrar Devolução/Check-in',
+          status: 'returned',
+          icon: <ArrowRightLeft className="mr-2 h-5 w-5" />,
+          color: 'bg-green-600 hover:bg-green-700',
+        };
+        break;
+      case 'returned':
+        return null; // Não há mais ações após a devolução
+      default:
+        return null;
+    }
+
+    return (
+      <Button 
+        className={`w-full h-12 text-base ${buttonProps.color}`} 
+        onClick={() => updateStatus(buttonProps.status)}
+        disabled={updating}
+      >
+        {updating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : buttonProps.icon}
+        {buttonProps.label}
+      </Button>
+    );
+  };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -169,26 +242,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
         </div>
 
         <SheetFooter className="mt-auto pt-6 border-t sm:flex-col gap-2">
-          {order?.status === 'reserved' && (
-            <Button 
-              className="w-full bg-blue-600 hover:bg-blue-700 h-12 text-base" 
-              onClick={() => updateStatus('picked_up')}
-              disabled={updating}
-            >
-              {updating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ClipboardCheck className="mr-2 h-5 w-5" />}
-              Marcar como Retirado
-            </Button>
-          )}
-          {order?.status === 'picked_up' && (
-            <Button 
-              className="w-full bg-green-600 hover:bg-green-700 h-12 text-base" 
-              onClick={() => updateStatus('returned')}
-              disabled={updating}
-            >
-              {updating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRightLeft className="mr-2 h-5 w-5" />}
-              Marcar como Devolvido
-            </Button>
-          )}
+          {renderActionButton()}
           <Button variant="outline" className="w-full h-12" onClick={() => onOpenChange(false)}>
             Fechar Painel
           </Button>
