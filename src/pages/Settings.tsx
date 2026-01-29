@@ -18,7 +18,7 @@ interface Profile {
 }
 
 // Helper function to fetch the current user's profile
-const fetchProfile = async (): Promise<Profile> => {
+const fetchProfile = async (): Promise<Profile | null> => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Usuário não autenticado.");
 
@@ -28,7 +28,21 @@ const fetchProfile = async (): Promise<Profile> => {
     .eq('id', user.id)
     .single();
 
-  if (error) throw error;
+  // Se o erro for 'não encontrado' (código 406), retornamos null em vez de lançar erro.
+  if (error && error.code !== 'PGRST116') {
+    throw error;
+  }
+  
+  // Se data for null, significa que o perfil não existe, retornamos um objeto base.
+  if (!data) {
+    return {
+      id: user.id,
+      first_name: '',
+      last_name: '',
+      default_signature_image: null,
+    };
+  }
+  
   return data as Profile;
 };
 
@@ -53,10 +67,13 @@ const Settings = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Usuário não autenticado.");
 
+      // Usando upsert para garantir que o perfil seja criado se não existir
       const { error } = await supabase
         .from('profiles')
-        .update({ default_signature_image: base64Image })
-        .eq('id', user.id);
+        .upsert({ 
+          id: user.id, 
+          default_signature_image: base64Image 
+        }, { onConflict: 'id' });
 
       if (error) throw error;
     },
@@ -83,6 +100,7 @@ const Settings = () => {
   }
 
   if (isError || !profile) {
+    // Se isError for true (erro diferente de 406) ou profile for null (o que não deve acontecer após a correção), mostramos erro.
     return <div className="p-8 text-center text-red-500">Erro ao carregar configurações.</div>;
   }
 
