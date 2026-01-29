@@ -302,7 +302,8 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              {/* Ajuste de Grid: grid-cols-1 no mobile, grid-cols-2 no desktop */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="customer_phone">Telefone/WhatsApp</Label>
                   <MaskedInput
@@ -330,7 +331,8 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              {/* Ajuste de Grid: grid-cols-1 no mobile, grid-cols-2 no desktop */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="start_date">Data Início</Label>
                   <Input 
@@ -352,8 +354,9 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
 
             <div className="border-t pt-4">
               <Label className="text-base font-semibold">Itens da Locação</Label>
-              <div className="flex gap-4 mt-2 items-end">
-                <div className="flex-1 space-y-2">
+              {/* Ajuste de layout para mobile: flex-col no mobile, flex-row no desktop */}
+              <div className="flex flex-col md:flex-row gap-4 mt-2 items-end">
+                <div className="flex-1 space-y-2 w-full">
                   <Label className="text-xs text-muted-foreground">Produto</Label>
                   <Select 
                     value={currentProductId} 
@@ -375,7 +378,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="w-24 space-y-2">
+                <div className="w-full md:w-24 space-y-2">
                   <Label className="text-xs text-muted-foreground">Qtd</Label>
                   <Input 
                     type="number" 
@@ -384,7 +387,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
                     onChange={(e) => setCurrentQuantity(parseInt(e.target.value) || 1)}
                   />
                 </div>
-                <Button type="button" onClick={addItem} variant="secondary" disabled={isProductsLoading || isProductsError}>
+                <Button type="button" onClick={addItem} variant="secondary" disabled={isProductsLoading || isProductsError} className="w-full md:w-auto">
                   <Plus className="h-4 w-4 mr-2" /> Incluir
                 </Button>
               </div>

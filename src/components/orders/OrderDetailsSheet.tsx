@@ -174,7 +174,10 @@ Por favor, confira e assine.
 🔒 *Gerado via RentalPRO - Gestão Inteligente para Locadoras*`;
 
       const encodedMessage = encodeURIComponent(message);
-      window.open(`https://wa.me/${cleanPhone}?text=${encodedMessage}`, '_blank');
+      const whatsappLink = `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
+      
+      // CORREÇÃO: Usar window.location.href para evitar bloqueio de pop-up no mobile
+      window.location.href = whatsappLink;
       
       showSuccess("Contrato gerado e link enviado para o WhatsApp!");
     } catch (error: any) {

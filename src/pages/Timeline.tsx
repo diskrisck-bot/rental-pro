@@ -80,7 +80,8 @@ const Timeline = () => {
 
   return (
     <div className="p-4 md:p-8 space-y-6 h-screen flex flex-col">
-      <div className="flex justify-between items-center">
+      {/* Ajuste de Cabeçalho: flex-col no mobile, flex-row no desktop */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Timeline</h1>
           <p className="text-muted-foreground">Disponibilidade e agendamentos em tempo real.</p>

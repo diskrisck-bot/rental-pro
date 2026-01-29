@@ -199,7 +199,8 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
                     />
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-4">
+                  {/* Ajuste de Grid: grid-cols-1 no mobile, grid-cols-2 no desktop */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Tipo</Label>
                       <Select 

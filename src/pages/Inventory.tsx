@@ -120,7 +120,8 @@ const Inventory = () => {
 
   return (
     <div className="p-4 md:p-8 space-y-6">
-      <div className="flex justify-between items-center">
+      {/* Ajuste de Cabeçalho: flex-col no mobile, flex-row no desktop */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Inventário</h1>
           <p className="text-muted-foreground">Gerencie seus ativos e estoque aqui.</p>
@@ -128,7 +129,7 @@ const Inventory = () => {
         
         <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-blue-600 hover:bg-blue-700">
+            <Button className="bg-blue-600 hover:bg-blue-700 w-full md:w-auto">
               <Plus className="mr-2 h-4 w-4" /> Novo Produto
             </Button>
           </DialogTrigger>
@@ -146,7 +147,8 @@ const Inventory = () => {
                   placeholder="Ex: Câmera Sony A7III" 
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              {/* Ajuste de Grid: grid-cols-1 no mobile, grid-cols-2 no desktop */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Tipo</Label>
                   <Select 
@@ -203,7 +205,7 @@ const Inventory = () => {
       </div>
 
       <div className="border rounded-xl bg-white overflow-hidden shadow-sm">
-        <div className="overflow-x-auto"> {/* Adicionado overflow-x-auto */}
+        <div className="overflow-x-auto"> {/* Garantido overflow-x-auto */}
           <Table>
             <TableHeader>
               <TableRow>
