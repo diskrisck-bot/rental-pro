@@ -23,7 +23,8 @@ import {
   History, 
   AlertCircle,
   Share2,
-  MessageCircle
+  MessageCircle,
+  Download
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { format, isAfter, parseISO } from 'date-fns';
@@ -48,6 +49,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [isGeneratingContract, setIsGeneratingContract] = useState(false);
+  const [ownerSignature, setOwnerSignature] = useState<string | null>(null);
 
   useEffect(() => {
     if (open && orderId) {
@@ -59,6 +61,8 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     if (!orderId) return;
     try {
       setLoading(true);
+      
+      // 1. Fetch Order Data
       const { data, error } = await supabase
         .from('orders')
         .select(`
@@ -74,11 +78,143 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
 
       if (error) throw error;
       setOrder(data);
+      
+      // 2. Fetch Owner Signature (assuming owner is the creator of the order)
+      if (data.created_by) {
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('default_signature_image')
+          .eq('id', data.created_by)
+          .single();
+          
+        if (profileError) {
+          console.warn("Could not fetch owner signature:", profileError.message);
+        } else {
+          setOwnerSignature(profileData?.default_signature_image || null);
+        }
+      }
+
     } catch (error: any) {
       showError("Erro ao carregar detalhes: " + error.message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const generatePDF = async (order: any, ownerSignature: string | null, customerSignature: string | null, isFinal: boolean) => {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    
+    // --- 1. Conteúdo do Contrato (Página 1) ---
+    
+    // Cabeçalho
+    doc.setFontSize(20);
+    doc.setTextColor(30, 58, 138); // Blue-900
+    doc.text("CONTRATO DE LOCAÇÃO - RENTAL PRO", pageWidth / 2, 20, { align: 'center' });
+    
+    // Dados do Cliente
+    doc.setFontSize(12);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Pedido: #${order.id.split('-')[0]}`, 14, 35);
+    doc.text(`Cliente: ${order.customer_name}`, 14, 42);
+    doc.text(`CPF: ${order.customer_cpf || 'Não informado'}`, 14, 49);
+    doc.text(`Telefone: ${order.customer_phone || 'Não informado'}`, 14, 56);
+    
+    // Datas
+    doc.text(`Data de Retirada: ${format(parseISO(order.start_date), "dd/MM/yyyy")}`, 14, 66);
+    doc.text(`Data de Devolução: ${format(parseISO(order.end_date), "dd/MM/yyyy")}`, 14, 73);
+
+    // Tabela de Itens
+    const tableData = order.order_items.map((item: any) => [
+      item.products.name,
+      item.quantity,
+      item.assets?.serial_number || 'N/A',
+      `R$ ${Number(item.products.price).toFixed(2)}`
+    ]);
+
+    autoTable(doc, {
+      startY: 80,
+      head: [['Produto', 'Qtd', 'Serial', 'Preço/Dia']],
+      body: tableData,
+      headStyles: { fillStyle: 'F', fillColor: [37, 99, 235] }, // Blue-600
+    });
+
+    // Total
+    const finalY = (doc as any).lastAutoTable.finalY || 100;
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text(`VALOR TOTAL: R$ ${Number(order.total_amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, pageWidth - 14, finalY + 15, { align: 'right' });
+
+    // Assinaturas (Locador e Locatário)
+    let currentY = finalY + 40;
+    
+    // Assinatura do Locador (Dono)
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text("__________________________________________", pageWidth - 80, currentY);
+    doc.text("Assinatura do Locador (RentalPro)", pageWidth - 80, currentY + 5);
+    
+    if (ownerSignature) {
+      // Desenha a assinatura do Locador
+      doc.addImage(ownerSignature, 'PNG', pageWidth - 80, currentY - 25, 60, 25);
+    } else {
+      // Placeholder se não houver assinatura padrão
+      doc.setFontSize(12);
+      doc.setFont("times", "italic");
+      doc.text("Assinatura Padrão Não Configurada", pageWidth - 80, currentY - 10);
+      doc.setFont("helvetica", "normal");
+    }
+
+    // Assinatura do Locatário (Cliente)
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text("__________________________________________", 14, currentY);
+    doc.text("Assinatura do Locatário (Cliente)", 14, currentY + 5);
+    
+    if (customerSignature) {
+      // Desenha a assinatura do Locatário
+      doc.addImage(customerSignature, 'PNG', 14, currentY - 25, 60, 25);
+    } else {
+      doc.setFontSize(12);
+      doc.setFont("times", "italic");
+      doc.text("Aguardando Assinatura", 14, currentY - 10);
+      doc.setFont("helvetica", "normal");
+    }
+    
+    // --- 2. Certificado de Assinatura (Página 2, se assinado) ---
+    if (isFinal && order.signed_at) {
+      doc.addPage();
+      
+      doc.setFontSize(18);
+      doc.setTextColor(30, 58, 138);
+      doc.text("CERTIFICADO DE ASSINATURA ELETRÔNICA", pageWidth / 2, 20, { align: 'center' });
+      
+      doc.setFontSize(12);
+      doc.setTextColor(0, 0, 0);
+      
+      const auditY = 40;
+      
+      doc.text("Este documento foi assinado digitalmente pelo Locatário, conferindo validade jurídica conforme a Medida Provisória nº 2.200-2/2001.", 14, auditY);
+      
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text("Detalhes da Assinatura:", 14, auditY + 15);
+      
+      doc.setFont("helvetica", "normal");
+      doc.text(`ID do Documento (Hash): ${order.id}`, 14, auditY + 25);
+      doc.text(`Assinado por: ${order.customer_name} (Locatário)`, 14, auditY + 35);
+      doc.text(`Data/Hora da Assinatura: ${format(parseISO(order.signed_at), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })}`, 14, auditY + 45);
+      doc.text(`IP de Origem: ${order.signer_ip || 'N/A'}`, 14, auditY + 55);
+      doc.text(`Dispositivo (User Agent): ${order.signer_user_agent || 'N/A'}`, 14, auditY + 65, { maxWidth: pageWidth - 28 });
+    }
+
+    // Rodapé
+    doc.setFontSize(8);
+    doc.setTextColor(150, 150, 150);
+    doc.text("Gerado via RentalPRO - Gestão Inteligente para Locadoras", pageWidth / 2, pageHeight - 10, { align: 'center' });
+
+    return doc;
   };
 
   const handleShareContract = async () => {
@@ -87,61 +223,9 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     try {
       setIsGeneratingContract(true);
       
-      // 1. Geração do PDF
-      const doc = new jsPDF();
-      const pageWidth = doc.internal.pageSize.getWidth();
+      // 1. Geração do PDF (Não final, sem certificado de auditoria)
+      const doc = await generatePDF(order, ownerSignature, order.signature_image, false);
       
-      // Cabeçalho
-      doc.setFontSize(20);
-      doc.setTextColor(30, 58, 138); // Blue-900
-      doc.text("CONTRATO DE LOCAÇÃO - RENTAL PRO", pageWidth / 2, 20, { align: 'center' });
-      
-      // Dados do Cliente
-      doc.setFontSize(12);
-      doc.setTextColor(0, 0, 0);
-      doc.text(`Pedido: #${order.id.split('-')[0]}`, 14, 35);
-      doc.text(`Cliente: ${order.customer_name}`, 14, 42);
-      doc.text(`CPF: ${order.customer_cpf || 'Não informado'}`, 14, 49);
-      doc.text(`Telefone: ${order.customer_phone || 'Não informado'}`, 14, 56);
-      
-      // Datas
-      doc.text(`Data de Retirada: ${format(parseISO(order.start_date), "dd/MM/yyyy")}`, 14, 66);
-      doc.text(`Data de Devolução: ${format(parseISO(order.end_date), "dd/MM/yyyy")}`, 14, 73);
-
-      // Tabela de Itens
-      const tableData = order.order_items.map((item: any) => [
-        item.products.name,
-        item.quantity,
-        item.assets?.serial_number || 'N/A',
-        `R$ ${Number(item.products.price).toFixed(2)}`
-      ]);
-
-      autoTable(doc, {
-        startY: 80,
-        head: [['Produto', 'Qtd', 'Serial', 'Preço/Dia']],
-        body: tableData,
-        headStyles: { fillStyle: 'F', fillColor: [37, 99, 235] }, // Blue-600
-      });
-
-      // Total
-      const finalY = (doc as any).lastAutoTable.finalY || 100;
-      doc.setFontSize(14);
-      doc.setFont("helvetica", "bold");
-      doc.text(`VALOR TOTAL: R$ ${Number(order.total_amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, pageWidth - 14, finalY + 15, { align: 'right' });
-
-      // Rodapé / Assinatura
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-      doc.text("__________________________________________", 14, finalY + 40);
-      doc.text("Assinatura do Cliente", 14, finalY + 45);
-      
-      doc.text("__________________________________________", pageWidth - 80, finalY + 40);
-      doc.text("Assinatura da Locadora", pageWidth - 80, finalY + 45);
-
-      doc.setFontSize(8);
-      doc.setTextColor(150, 150, 150);
-      doc.text("Gerado via RentalPRO - Gestão Inteligente para Locadoras", pageWidth / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
-
       // 2. Upload para Supabase Storage
       const pdfBlob = doc.output('blob');
       const fileName = `contrato-${order.id.split('-')[0]}-${Date.now()}.pdf`;
@@ -162,39 +246,48 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
         .from('contracts')
         .getPublicUrl(filePath);
 
-      // 4. Disparo no WhatsApp (Lógica de Blindagem)
+      // 4. Montar Link de Assinatura Pública
+      const signLink = `${window.location.origin}/sign/${order.id}`;
+
+      // 5. Disparo no WhatsApp (Lógica de Blindagem)
       
-      // 1. Garante que o número tem apenas dígitos
       let phone = order.customer_phone.replace(/\D/g, '');
-      
-      // 2. Se não tiver DDI (menos de 12 dígitos), adiciona o Brasil (55)
       if (phone.length <= 11) {
         phone = `55${phone}`;
       }
 
-      // 3. Prepara a mensagem
       const messageText = `Olá ${order.customer_name}! 📦
-Aqui está o link do seu contrato de locação #${order.id.split('-')[0]}:
-${publicUrl}
+Aqui está o link para visualizar e assinar seu contrato de locação #${order.id.split('-')[0]}:
+${signLink}
 
-Por favor, confira e assine.
+Por favor, acesse e assine digitalmente.
 
 ---
 🔒 *Gerado via RentalPRO - Gestão Inteligente para Locadoras*`;
 
-      // 4. O SEGREDO: Encode URI Component para garantir que o link do PDF não quebre a URL do Zap
       const encodedMessage = encodeURIComponent(messageText);
-
-      // 5. Monta a URL final usando a API universal
       const whatsappLink = `https://api.whatsapp.com/send?phone=${phone}&text=${encodedMessage}`;
       
-      // 6. Força a navegação na mesma janela
       window.location.href = whatsappLink;
       
-      showSuccess("Contrato gerado e link enviado para o WhatsApp!");
+      showSuccess("Link de assinatura gerado e enviado para o WhatsApp!");
     } catch (error: any) {
       console.error("Erro ao gerar contrato:", error);
       showError("Erro ao processar contrato: " + (error.message || "Tente novamente."));
+    } finally {
+      setIsGeneratingContract(false);
+    }
+  };
+
+  const handleDownloadFinalPDF = async () => {
+    if (!order) return;
+    try {
+      setIsGeneratingContract(true);
+      const doc = await generatePDF(order, ownerSignature, order.signature_image, true);
+      doc.save(`contrato-assinado-${order.id.split('-')[0]}.pdf`);
+      showSuccess("Download do contrato finalizado iniciado.");
+    } catch (error: any) {
+      showError("Erro ao gerar PDF final: " + error.message);
     } finally {
       setIsGeneratingContract(false);
     }
@@ -266,6 +359,7 @@ Por favor, confira e assine.
 
   const statusConfig = order ? getStatusConfig(order.status) : { label: '', color: '' };
   const isOverdue = order?.returned_at && order?.end_date && isAfter(parseISO(order.returned_at), parseISO(order.end_date));
+  const isSigned = !!order?.signed_at;
 
   const renderActionButton = () => {
     if (!order) return null;
@@ -373,15 +467,27 @@ Por favor, confira e assine.
                 {isGeneratingContract ? (
                   <>
                     <Loader2 className="h-6 w-6 animate-spin" />
-                    Gerando link do contrato...
+                    Gerando link de assinatura...
                   </>
                 ) : (
                   <>
                     <MessageCircle className="h-6 w-6" />
-                    Enviar Contrato no WhatsApp
+                    Enviar Link de Assinatura
                   </>
                 )}
              </Button>
+             
+             {isSigned && (
+                <Button 
+                  onClick={handleDownloadFinalPDF} 
+                  disabled={isGeneratingContract || loading}
+                  variant="outline"
+                  className="w-full h-12 border-green-500 text-green-600 hover:bg-green-50"
+                >
+                  <Download className="h-5 w-5 mr-2" />
+                  Baixar Contrato Assinado
+                </Button>
+             )}
           </div>
 
           <div className="space-y-3">

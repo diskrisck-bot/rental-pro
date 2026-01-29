@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import MainLayout from "./components/layout/MainLayout";
 import Login from "./pages/Login";
+import SignContract from "./pages/SignContract"; // Import SignContract
 
 const queryClient = new QueryClient();
 
@@ -16,8 +17,9 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          {/* Rota Pública */}
+          {/* Rotas Públicas */}
           <Route path="/login" element={<Login />} />
+          <Route path="/sign/:orderId" element={<SignContract />} />
           
           {/* Rotas Protegidas */}
           <Route path="/*" element={<ProtectedRoute> <MainLayout /> </ProtectedRoute>} />

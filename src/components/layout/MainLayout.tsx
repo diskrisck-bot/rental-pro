@@ -8,6 +8,7 @@ import Dashboard from "@/pages/Dashboard";
 import Inventory from "@/pages/Inventory";
 import Orders from "@/pages/Orders";
 import Timeline from "@/pages/Timeline";
+import Settings from "@/pages/Settings"; // Import Settings
 import NotFound from "@/pages/NotFound";
 import { Package } from 'lucide-react';
 
@@ -38,6 +39,7 @@ const MainLayout = () => (
           <Route path="/inventory" element={<Inventory />} />
           <Route path="/orders" element={<Orders />} />
           <Route path="/timeline" element={<Timeline />} />
+          <Route path="/settings" element={<Settings />} /> {/* Nova Rota */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
