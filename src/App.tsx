@@ -4,12 +4,13 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Sidebar from "./components/layout/Sidebar";
-import MobileMenuTrigger from "./components/layout/MobileMenuTrigger"; // Renamed import
+import MobileMenuTrigger from "./components/layout/MobileMenuTrigger";
 import Dashboard from "./pages/Dashboard";
 import Inventory from "./pages/Inventory";
 import Orders from "./pages/Orders";
 import Timeline from "./pages/Timeline";
 import NotFound from "./pages/NotFound";
+import { Package } from 'lucide-react';
 
 const queryClient = new QueryClient();
 
