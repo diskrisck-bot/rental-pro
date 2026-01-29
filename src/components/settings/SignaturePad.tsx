@@ -2,22 +2,23 @@
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { RotateCcw, Save } from 'lucide-react';
+import { RotateCcw, Save, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface SignaturePadProps {
   onSave: (base64Image: string) => void;
   initialSignature?: string | null;
   disabled?: boolean;
+  isSaving?: boolean; // Adicionado para refletir o estado de salvamento do pai
 }
 
-const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, initialSignature, disabled = false }) => {
+const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, initialSignature, disabled = false, isSaving = false }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [isEmpty, setIsEmpty] = useState(true);
 
   const startDrawing = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    if (disabled) return;
+    if (disabled || isSaving) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     
@@ -31,16 +32,16 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, initialSignature, d
     ctx.lineJoin = 'round';
 
     const rect = canvas.getBoundingClientRect();
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.touches[0].clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.touches[0].clientY;
     
     ctx.moveTo(clientX - rect.left, clientY - rect.top);
     setIsDrawing(true);
     setIsEmpty(false);
-  }, [disabled]);
+  }, [disabled, isSaving]);
 
   const draw = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDrawing || disabled) return;
+    if (!isDrawing || disabled || isSaving) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     
@@ -53,7 +54,7 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, initialSignature, d
 
     ctx.lineTo(clientX - rect.left, clientY - rect.top);
     ctx.stroke();
-  }, [isDrawing, disabled]);
+  }, [isDrawing, disabled, isSaving]);
 
   const stopDrawing = useCallback(() => {
     setIsDrawing(false);
@@ -148,7 +149,7 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, initialSignature, d
     <div className="space-y-3">
       <div className={cn(
         "border-2 border-dashed rounded-xl bg-white relative",
-        disabled ? "opacity-60 cursor-not-allowed" : "hover:border-blue-400 transition-colors"
+        disabled || isSaving ? "opacity-60 cursor-not-allowed" : "hover:border-blue-400 transition-colors"
       )}>
         <canvas 
           ref={canvasRef} 
@@ -156,7 +157,7 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, initialSignature, d
         />
         {isEmpty && (
           <div className="absolute inset-0 flex items-center justify-center text-muted-foreground pointer-events-none">
-            {disabled ? "Assinatura desabilitada" : "Desenhe sua assinatura aqui"}
+            {disabled || isSaving ? "Assinatura desabilitada" : "Desenhe sua assinatura aqui"}
           </div>
         )}
       </div>
@@ -165,7 +166,7 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, initialSignature, d
           type="button" 
           variant="outline" 
           onClick={clearCanvas} 
-          disabled={isEmpty || disabled}
+          disabled={isEmpty || disabled || isSaving}
           className="text-red-500 hover:bg-red-50"
         >
           <RotateCcw className="h-4 w-4 mr-2" /> Limpar
@@ -173,10 +174,10 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, initialSignature, d
         <Button 
           type="button" 
           onClick={saveSignature} 
-          disabled={isEmpty || disabled || updateSignatureMutation.isPending}
+          disabled={isEmpty || disabled || isSaving}
           className="bg-green-600 hover:bg-green-700"
         >
-          {updateSignatureMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+          {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
           Salvar Assinatura
         </Button>
       </div>

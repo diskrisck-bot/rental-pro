@@ -126,6 +126,7 @@ const Settings = () => {
           <SignaturePad 
             onSave={handleSaveSignature}
             initialSignature={currentSignature}
+            isSaving={updateSignatureMutation.isPending}
           />
           
           {updateSignatureMutation.isPending && (
