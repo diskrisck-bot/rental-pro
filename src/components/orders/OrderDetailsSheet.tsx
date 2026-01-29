@@ -162,9 +162,10 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
         .from('contracts')
         .getPublicUrl(filePath);
 
-      // 4. Disparo no WhatsApp
+      // 4. Disparo no WhatsApp (CORREÇÃO DE CODIFICAÇÃO E URL)
       const cleanPhone = order.customer_phone.replace(/\D/g, '');
-      const message = `Olá ${order.customer_name}! 📦
+      
+      const messageText = `Olá ${order.customer_name}! 📦
 Aqui está o link do seu contrato de locação #${order.id.split('-')[0]}:
 ${publicUrl}
 
@@ -173,10 +174,11 @@ Por favor, confira e assine.
 ---
 🔒 *Gerado via RentalPRO - Gestão Inteligente para Locadoras*`;
 
-      const encodedMessage = encodeURIComponent(message);
-      const whatsappLink = `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
+      const encodedMessage = encodeURIComponent(messageText);
       
-      // CORREÇÃO: Usar window.location.href para evitar bloqueio de pop-up no mobile
+      // Usando a URL de API completa para maior robustez
+      const whatsappLink = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodedMessage}`;
+      
       window.location.href = whatsappLink;
       
       showSuccess("Contrato gerado e link enviado para o WhatsApp!");
