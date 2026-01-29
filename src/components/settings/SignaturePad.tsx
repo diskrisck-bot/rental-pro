@@ -160,6 +160,7 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, initialSignature, d
         <canvas 
           ref={canvasRef} 
           className="w-full h-[150px]"
+          style={{ touchAction: 'none' }} // CORREÇÃO APLICADA AQUI
         />
         {isEmpty && (
           <div className="absolute inset-0 flex items-center justify-center text-muted-foreground pointer-events-none">
