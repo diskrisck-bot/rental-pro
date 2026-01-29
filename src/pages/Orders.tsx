@@ -19,6 +19,7 @@ import { ptBR } from 'date-fns/locale';
 import CreateOrderDialog from '@/components/orders/CreateOrderDialog';
 import OrderDetailsSheet from '@/components/orders/OrderDetailsSheet';
 import { showError } from '@/utils/toast';
+import { useSearchParams } from 'react-router-dom'; // Import useSearchParams
 
 const getStatusBadge = (status: string) => {
   switch (status) {
@@ -71,6 +72,8 @@ const Orders = () => {
   const [search, setSearch] = useState("");
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  
+  const [searchParams, setSearchParams] = useSearchParams(); // Hook para ler URL params
 
   const fetchOrders = async () => {
     try {
@@ -98,19 +101,23 @@ const Orders = () => {
   useEffect(() => {
     fetchOrders();
   }, []);
+  
+  // Efeito para lidar com a abertura do sheet via URL (fix 1)
+  useEffect(() => {
+    const idFromUrl = searchParams.get('id');
+    if (idFromUrl) {
+      setSelectedOrderId(idFromUrl);
+      setIsSheetOpen(true);
+      // Limpa o parâmetro da URL para evitar reabertura
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const handleViewDetails = (id: string) => {
     setSelectedOrderId(id);
     setIsSheetOpen(true);
   };
   
-  // Função para forçar o download do PDF (usando a lógica já existente no OrderDetailsSheet)
-  // Nota: Não podemos chamar generatePDF diretamente aqui, pois ele depende de dados do perfil do dono.
-  // A melhor abordagem é forçar a abertura do painel de detalhes e, se o usuário quiser o download, 
-  // ele clica no botão lá dentro. Para a UX da tabela, vamos focar em ações rápidas de comunicação.
-  // No entanto, para cumprir o requisito de "Baixar Contrato" na tabela, vamos criar um placeholder
-  // que abre o painel de detalhes.
-
   const filteredOrders = orders.filter(order => {
     const searchTerm = search.toLowerCase();
     return (

@@ -1,12 +1,16 @@
 "use client";
 
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { format, addDays, startOfToday, eachDayOfInterval, isSameDay, isBefore, isAfter, parseISO } from 'date-fns';
+import { format, addDays, startOfToday, eachDayOfInterval, isSameDay, isBefore, isAfter, parseISO, startOfMonth, endOfMonth, isWithinInterval, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useQuery } from '@tanstack/react-query';
 import { fetchTimelineData } from '@/integrations/supabase/queries';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { cn } from '@/lib/utils';
+import { Link } from 'react-router-dom';
 
 // Define a largura de cada coluna de dia em pixels (deve corresponder ao CSS min-w-[120px])
 const DAY_WIDTH_PX = 120;
@@ -21,8 +25,8 @@ const getBlockPosition = (startDateStr: string, endDateStr: string, days: Date[]
   let endIndex = days.findIndex(d => isSameDay(d, endDate));
 
   // Ajusta se a alocação começa antes ou termina depois do range visível
-  const startsBefore = isBefore(startDate, days[0]);
-  const endsAfter = isAfter(endDate, days[days.length - 1]);
+  const startsBefore = isBefore(startDate, startOfDay(days[0]));
+  const endsAfter = isAfter(endDate, startOfDay(days[days.length - 1]));
 
   if (startIndex === -1 && startsBefore) {
     startIndex = 0;
@@ -47,12 +51,16 @@ const getBlockPosition = (startDateStr: string, endDateStr: string, days: Date[]
 };
 
 const Timeline = () => {
-  // Configuração de datas (15 dias a partir de hoje)
-  const today = startOfToday();
-  const days = eachDayOfInterval({
-    start: today,
-    end: addDays(today, 14),
-  });
+  const [viewStartDay, setViewStartDay] = useState(startOfToday());
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(startOfToday());
+
+  // Calcula o intervalo de 15 dias visíveis com base no viewStartDay
+  const days = useMemo(() => {
+    return eachDayOfInterval({
+      start: viewStartDay,
+      end: addDays(viewStartDay, 14),
+    });
+  }, [viewStartDay]);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['timelineData'],
@@ -61,6 +69,35 @@ const Timeline = () => {
 
   const products = data?.products || [];
   const orderItems = data?.orderItems || [];
+
+  // Calcula os dias que têm eventos para destacar no calendário
+  const daysWithEvents = useMemo(() => {
+    const dates = new Set<string>();
+    orderItems.forEach(item => {
+      const start = parseISO(item.orders.start_date);
+      const end = parseISO(item.orders.end_date);
+      
+      eachDayOfInterval({ start, end }).forEach(day => {
+        dates.add(format(day, 'yyyy-MM-dd'));
+      });
+    });
+    return dates;
+  }, [orderItems]);
+
+  const handleDateSelect = (date: Date | undefined) => {
+    if (date) {
+      setSelectedDate(date);
+      setViewStartDay(startOfDay(date)); // Centraliza a visualização no dia selecionado
+    }
+  };
+
+  const handlePrev = () => {
+    setViewStartDay(prev => addDays(prev, -15));
+  };
+
+  const handleNext = () => {
+    setViewStartDay(prev => addDays(prev, 15));
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -86,10 +123,44 @@ const Timeline = () => {
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Timeline</h1>
           <p className="text-muted-foreground">Disponibilidade e agendamentos em tempo real.</p>
         </div>
-        <div className="flex items-center gap-2 bg-white border rounded-lg p-1">
-          <Button variant="ghost" size="icon"><ChevronLeft className="h-4 w-4" /></Button>
-          <span className="px-4 font-medium text-sm md:text-base">{format(today, 'MMMM yyyy', { locale: ptBR })}</span>
-          <Button variant="ghost" size="icon"><ChevronRight className="h-4 w-4" /></Button>
+        
+        <div className="flex items-center gap-2 bg-white border rounded-xl p-1 shadow-sm">
+          <Button variant="ghost" size="icon" onClick={handlePrev}><ChevronLeft className="h-4 w-4" /></Button>
+          
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant={"outline"}
+                className={cn(
+                  "w-[180px] justify-start text-left font-medium text-sm md:text-base",
+                  !selectedDate && "text-muted-foreground"
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {selectedDate ? format(selectedDate, "MMMM yyyy", { locale: ptBR }) : <span>Selecione uma data</span>}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar
+                mode="single"
+                selected={selectedDate}
+                onSelect={handleDateSelect}
+                initialFocus
+                locale={ptBR}
+                modifiers={{
+                  event: (day) => daysWithEvents.has(format(day, 'yyyy-MM-dd')),
+                }}
+                modifiersStyles={{
+                  event: { 
+                    border: '2px solid hsl(221 83% 53%)', // Cor azul para destaque
+                    borderRadius: '50%',
+                  },
+                }}
+              />
+            </PopoverContent>
+          </Popover>
+          
+          <Button variant="ghost" size="icon" onClick={handleNext}><ChevronRight className="h-4 w-4" /></Button>
         </div>
       </div>
 
@@ -141,14 +212,18 @@ const Timeline = () => {
                         const colorConfig = getStatusColor(order.status);
 
                         return (
-                          <div 
+                          <Link 
                             key={order.id + index}
-                            className={`absolute top-2 h-12 rounded-md border shadow-sm flex items-center px-3 text-xs font-bold overflow-hidden whitespace-nowrap z-10 transition-all ${colorConfig.bg} ${colorConfig.border} ${colorConfig.text}`}
+                            to={`/orders?id=${order.id}`} // Link para detalhes do pedido (Fix 1)
+                            className={cn(
+                              `absolute top-2 h-12 rounded-md border shadow-sm flex items-center px-3 text-xs font-bold overflow-hidden whitespace-nowrap z-10 transition-all cursor-pointer hover:shadow-lg`,
+                              colorConfig.bg, colorConfig.border, colorConfig.text
+                            )}
                             style={{ left: `${position.left}px`, width: `${position.width}px` }}
                             title={`${product.name} alugado por ${order.customer_name} de ${format(parseISO(order.start_date), 'dd/MM')} a ${format(parseISO(order.end_date), 'dd/MM')}`}
                           >
                             {colorConfig.label}: {order.customer_name} (x{item.quantity})
-                          </div>
+                          </Link>
                         );
                       })}
                     </div>

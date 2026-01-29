@@ -76,6 +76,8 @@ const TaskListCard = ({ title, data, dateKey, emptyMessage, isLoading, tooltipCo
   const isMobile = useIsMobile();
 
   const handleItemClick = (id: string) => {
+    if (!id) return; // Segurança
+    // Navega para /orders e passa o ID como search param
     navigate(`/orders?id=${id}`);
   };
 
