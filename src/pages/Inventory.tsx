@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Plus, Search, Filter, Loader2, Edit } from 'lucide-react';
+import { Plus, Search, Filter, Loader2, Edit, Package, AlertTriangle, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
@@ -35,6 +35,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchInventoryAnalytics } from '@/integrations/supabase/queries';
 import { cn } from '@/lib/utils';
 import EditProductSheet from '@/components/inventory/EditProductSheet';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 // Tipagem básica para os dados da view
 interface InventoryItem {
@@ -47,8 +48,85 @@ interface InventoryItem {
   available_quantity: number;
 }
 
+const getAvailabilityStatus = (item: InventoryItem) => {
+  const available = item.available_quantity;
+  const total = item.total_quantity;
+  const percentage = total > 0 ? (available / total) : 0;
+
+  if (available <= 0) {
+    return { 
+      color: 'text-red-600 font-bold', 
+      badge: <Badge variant="destructive" className="ml-2 bg-red-100 text-red-800">Esgotado</Badge>,
+      icon: <AlertTriangle className="h-4 w-4 text-red-500" />
+    };
+  }
+  if (percentage <= 0.2) { // 20% ou menos
+    return { 
+      color: 'text-orange-600 font-bold', 
+      badge: <Badge variant="secondary" className="ml-2 bg-orange-100 text-orange-800">Baixo Estoque</Badge>,
+      icon: <AlertTriangle className="h-4 w-4 text-orange-500" />
+    };
+  }
+  return { 
+    color: 'text-green-600 font-bold', 
+    badge: null,
+    icon: <CheckCircle className="h-4 w-4 text-green-500" />
+  };
+};
+
+// Novo componente para o Card Mobile
+const ProductCardMobile = ({ product, handleEditProduct }: { product: InventoryItem, handleEditProduct: (id: string) => void }) => {
+  const status = getAvailabilityStatus(product);
+  
+  return (
+    <div className="bg-white border rounded-xl p-4 shadow-sm space-y-3">
+      <div className="flex justify-between items-start">
+        <div className="flex items-center gap-3">
+          <Package className="h-6 w-6 text-blue-600" />
+          <div>
+            <h3 className="font-bold text-lg">{product.name}</h3>
+            <Badge variant={product.type === 'trackable' ? 'default' : 'secondary'} className="capitalize text-xs">
+              {product.type === 'trackable' ? 'Rastreável' : 'Granel'}
+            </Badge>
+          </div>
+        </div>
+        <Button variant="ghost" size="icon" onClick={() => handleEditProduct(product.id)}>
+          <Edit className="h-4 w-4 text-gray-500" />
+        </Button>
+      </div>
+      
+      <div className="grid grid-cols-3 gap-4 text-center border-t pt-3">
+        <div>
+          <p className="text-xs text-muted-foreground">Total</p>
+          <p className="font-semibold">{product.total_quantity}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">Alugados</p>
+          <p className="font-semibold text-blue-600">{product.active_rentals}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">Diária</p>
+          <p className="font-semibold">R$ {Number(product.price).toFixed(2)}</p>
+        </div>
+      </div>
+      
+      <div className="flex items-center justify-between border-t pt-3">
+        <p className="text-sm font-semibold text-gray-700">Disponível Hoje:</p>
+        <div className="flex items-center gap-2">
+          <span className={cn("text-lg", status.color)}>
+            {product.available_quantity}
+          </span>
+          {status.icon}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
 const Inventory = () => {
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
@@ -89,29 +167,6 @@ const Inventory = () => {
   const handleEditProduct = (productId: string) => {
     setSelectedProductId(productId);
     setIsEditSheetOpen(true);
-  };
-
-  const getAvailabilityStatus = (item: InventoryItem) => {
-    const available = item.available_quantity;
-    const total = item.total_quantity;
-    const percentage = total > 0 ? (available / total) : 0;
-
-    if (available <= 0) {
-      return { 
-        color: 'text-red-600 font-bold', 
-        badge: <Badge variant="destructive" className="ml-2 bg-red-100 text-red-800">Esgotado</Badge> 
-      };
-    }
-    if (percentage <= 0.2) { // 20% ou menos
-      return { 
-        color: 'text-orange-600 font-bold', 
-        badge: <Badge variant="secondary" className="ml-2 bg-orange-100 text-orange-800">Baixo Estoque</Badge> 
-      };
-    }
-    return { 
-      color: 'text-green-600 font-bold', 
-      badge: null 
-    };
   };
 
   if (isError) {
@@ -204,68 +259,94 @@ const Inventory = () => {
         </Button>
       </div>
 
-      <div className="border rounded-xl bg-white overflow-hidden shadow-sm">
-        <div className="overflow-x-auto"> {/* Garantido overflow-x-auto */}
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead className="text-center">Estoque Total</TableHead>
-                <TableHead className="text-center">Alugados Agora</TableHead>
-                <TableHead className="text-center">Disponível Hoje</TableHead>
-                <TableHead>Preço (Diária)</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
+      {/* Visualização Desktop (Tabela) */}
+      {!isMobile && (
+        <div className="border rounded-xl bg-white overflow-hidden shadow-sm">
+          <div className="overflow-x-auto"> {/* Garantido overflow-x-auto */}
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center">
-                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-blue-600" />
-                  </TableCell>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead className="text-center">Estoque Total</TableHead>
+                  <TableHead className="text-center">Alugados Agora</TableHead>
+                  <TableHead className="text-center">Disponível Hoje</TableHead>
+                  <TableHead>Preço (Diária)</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
-              ) : products?.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                    Nenhum produto cadastrado.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                products?.map((product) => {
-                  const status = getAvailabilityStatus(product);
-                  return (
-                    <TableRow key={product.id}>
-                      <TableCell className="font-medium">{product.name}</TableCell>
-                      <TableCell>
-                        <Badge variant={product.type === 'trackable' ? 'default' : 'secondary'} className="capitalize">
-                          {product.type === 'trackable' ? 'Rastreável' : 'Granel'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center text-gray-500">{product.total_quantity}</TableCell>
-                      <TableCell className="text-center text-blue-600 font-medium">{product.active_rentals}</TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex items-center justify-center">
-                          <span className={cn("font-bold", status.color)}>
-                            {product.available_quantity}
-                          </span>
-                          {status.badge}
-                        </div>
-                      </TableCell>
-                      <TableCell>R$ {Number(product.price).toFixed(2)}</TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" onClick={() => handleEditProduct(product.id)}>
-                          <Edit className="h-4 w-4 mr-1" /> Editar
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="h-24 text-center">
+                      <Loader2 className="h-6 w-6 animate-spin mx-auto text-blue-600" />
+                    </TableCell>
+                  </TableRow>
+                ) : products?.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                      Nenhum produto cadastrado.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  products?.map((product) => {
+                    const status = getAvailabilityStatus(product);
+                    return (
+                      <TableRow key={product.id}>
+                        <TableCell className="font-medium">{product.name}</TableCell>
+                        <TableCell>
+                          <Badge variant={product.type === 'trackable' ? 'default' : 'secondary'} className="capitalize">
+                            {product.type === 'trackable' ? 'Rastreável' : 'Granel'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center text-gray-500">{product.total_quantity}</TableCell>
+                        <TableCell className="text-center text-blue-600 font-medium">{product.active_rentals}</TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center">
+                            <span className={cn("font-bold", status.color)}>
+                              {product.available_quantity}
+                            </span>
+                            {status.badge}
+                          </div>
+                        </TableCell>
+                        <TableCell>R$ {Number(product.price).toFixed(2)}</TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="sm" onClick={() => handleEditProduct(product.id)}>
+                            <Edit className="h-4 w-4 mr-1" /> Editar
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </div>
-      </div>
+      )}
+      
+      {/* Visualização Mobile (Cards) */}
+      {isMobile && (
+        <div className="space-y-4">
+          {isLoading ? (
+            <div className="h-24 text-center flex items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin mx-auto text-blue-600" />
+            </div>
+          ) : products?.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8 border-2 border-dashed rounded-xl">
+              Nenhum produto cadastrado.
+            </p>
+          ) : (
+            products?.map((product) => (
+              <ProductCardMobile 
+                key={product.id} 
+                product={product} 
+                handleEditProduct={handleEditProduct} 
+              />
+            ))
+          )}
+        </div>
+      )}
 
       <EditProductSheet
         productId={selectedProductId}
