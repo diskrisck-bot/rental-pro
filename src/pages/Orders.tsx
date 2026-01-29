@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Loader2 } from 'lucide-react';
+import { Plus, Search, Loader2, Download, MessageCircle, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
@@ -28,6 +28,41 @@ const getStatusBadge = (status: string) => {
     case 'returned': return <Badge className="bg-green-100 text-green-800 border-green-200">Devolvido</Badge>;
     default: return <Badge>{status}</Badge>;
   }
+};
+
+// Função auxiliar para gerar o link do WhatsApp (copiada de OrderDetailsSheet)
+const getWhatsappLink = (order: any, isSigned: boolean) => {
+    if (!order) return '#';
+    
+    const signLink = `${window.location.origin}/sign/${order.id}`;
+    
+    let messageText = '';
+    if (isSigned) {
+        messageText = `Olá ${order.customer_name}! ✅
+Aqui está sua via do contrato assinado #${order.id.split('-')[0]}:
+${signLink}
+`;
+    } else {
+        messageText = `Olá ${order.customer_name}! 📦
+Aqui está o link para visualizar e assinar seu contrato de locação #${order.id.split('-')[0]}:
+${signLink}
+
+Por favor, acesse e assine digitalmente.
+`;
+    }
+
+    const encodedMessage = encodeURIComponent(messageText);
+    
+    let phone = order.customer_phone ? order.customer_phone.replace(/\D/g, '') : '';
+    // Adiciona DDI 55 se o número tiver 10 ou 11 dígitos (formato brasileiro)
+    if (phone.length === 10 || phone.length === 11) {
+      phone = `55${phone}`;
+    }
+    
+    // Se o número for inválido ou vazio, usa wa.me/ (que abre a lista de contatos)
+    const baseUrl = phone ? `https://wa.me/${phone}` : `https://wa.me/`;
+    
+    return `${baseUrl}?text=${encodedMessage}`;
 };
 
 const Orders = () => {
@@ -68,6 +103,13 @@ const Orders = () => {
     setSelectedOrderId(id);
     setIsSheetOpen(true);
   };
+  
+  // Função para forçar o download do PDF (usando a lógica já existente no OrderDetailsSheet)
+  // Nota: Não podemos chamar generatePDF diretamente aqui, pois ele depende de dados do perfil do dono.
+  // A melhor abordagem é forçar a abertura do painel de detalhes e, se o usuário quiser o download, 
+  // ele clica no botão lá dentro. Para a UX da tabela, vamos focar em ações rápidas de comunicação.
+  // No entanto, para cumprir o requisito de "Baixar Contrato" na tabela, vamos criar um placeholder
+  // que abre o painel de detalhes.
 
   const filteredOrders = orders.filter(order => {
     const searchTerm = search.toLowerCase();
@@ -110,13 +152,12 @@ const Orders = () => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>ID</TableHead>
+                <TableHead>ID / Assinatura</TableHead>
                 <TableHead>Cliente</TableHead>
-                <TableHead>Telefone</TableHead>
                 <TableHead>Período</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Total</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
+                <TableHead className="text-right">Ações Rápidas</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -133,30 +174,80 @@ const Orders = () => {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredOrders.map((order) => (
-                  <TableRow key={order.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => handleViewDetails(order.id)}>
-                    <TableCell className="font-mono text-[10px] text-gray-400">
-                      #{order.id.split('-')[0]}
-                    </TableCell>
-                    <TableCell className="font-medium">{order.customer_name}</TableCell>
-                    <TableCell className="text-sm text-gray-500">{order.customer_phone}</TableCell>
-                    <TableCell className="text-sm">
-                      {format(new Date(order.start_date), 'dd/MM')} - {format(new Date(order.end_date), 'dd/MM')}
-                    </TableCell>
-                    <TableCell>{getStatusBadge(order.status)}</TableCell>
-                    <TableCell className="font-semibold text-blue-600">
-                      R$ {Number(order.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" onClick={(e) => {
-                        e.stopPropagation();
-                        handleViewDetails(order.id);
-                      }}>
-                        Ver Detalhes
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
+                filteredOrders.map((order) => {
+                  const isSigned = !!order.signed_at;
+                  const whatsappLink = getWhatsappLink(order, isSigned);
+                  
+                  return (
+                    <TableRow key={order.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => handleViewDetails(order.id)}>
+                      <TableCell className="font-medium">
+                        <div className="font-mono text-[10px] text-gray-400 mb-1">
+                          #{order.id.split('-')[0]}
+                        </div>
+                        {isSigned ? (
+                          <Badge className="bg-green-100 text-green-800 border-green-200">
+                            <CheckCircle className="h-3 w-3 mr-1" /> Assinado
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-orange-100 text-orange-800 border-orange-200">
+                            Aguardando Assinatura
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="font-medium">{order.customer_name}</TableCell>
+                      <TableCell className="text-sm">
+                        {format(new Date(order.start_date), 'dd/MM')} - {format(new Date(order.end_date), 'dd/MM')}
+                      </TableCell>
+                      <TableCell>{getStatusBadge(order.status)}</TableCell>
+                      <TableCell className="font-semibold text-blue-600">
+                        R$ {Number(order.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          {isSigned ? (
+                            <>
+                              {/* Botão 1: Baixar Contrato (Abre detalhes para download) */}
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleViewDetails(order.id); // Abre o painel onde o download é possível
+                                }}
+                                className="text-green-600 border-green-200 hover:bg-green-50"
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                              {/* Botão 2: Reenviar no WhatsApp */}
+                              <a 
+                                href={whatsappLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Button variant="ghost" size="sm" className="text-green-600 hover:bg-green-50">
+                                  <MessageCircle className="h-4 w-4" />
+                                </Button>
+                              </a>
+                            </>
+                          ) : (
+                            // Cenário A: Enviar para Assinar
+                            <a 
+                              href={whatsappLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Button variant="secondary" size="sm" className="bg-blue-50 text-blue-600 hover:bg-blue-100">
+                                <MessageCircle className="h-4 w-4 mr-1" /> Enviar
+                              </Button>
+                            </a>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>

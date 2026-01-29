@@ -91,6 +91,9 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
           <LogOut className="w-5 h-5 text-red-400" />
           Sair
         </button>
+        <div className="text-xs text-gray-400 pt-2 text-center">
+          v1.0.5
+        </div>
       </div>
     </div>
   );
