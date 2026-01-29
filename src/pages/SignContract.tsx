@@ -142,6 +142,23 @@ const SignContract = () => {
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       
+      // Função para adicionar rodapé com marca d'água
+      const addWatermark = (doc: jsPDF, pageNumber: number) => {
+        doc.setPage(pageNumber);
+        doc.setFontSize(8);
+        doc.setTextColor(150, 150, 150); // Cinza claro
+        const watermarkText = "Gerado e Assinado digitalmente via RentalPro (rentalpro.com.br)";
+        const textWidth = doc.getStringUnitWidth(watermarkText) * doc.getFontSize() / doc.internal.scaleFactor;
+        const x = (pageWidth - textWidth) / 2;
+        const y = pageHeight - 10;
+        
+        doc.text(watermarkText, pageWidth / 2, y, { align: 'center' });
+        
+        // Adicionar link clicável (URL: https://www.dyad.sh/ - usando dyad como placeholder)
+        const linkUrl = "https://www.dyad.sh/"; 
+        doc.link(x, y - 3, textWidth, 5, { url: linkUrl });
+      };
+      
       // --- 1. Conteúdo do Contrato (Página 1) ---
       
       // Cabeçalho
@@ -209,7 +226,7 @@ const SignContract = () => {
         // Placeholder se não houver assinatura padrão
         doc.setFontSize(12);
         doc.setFont("times", "italic");
-        doc.text("Assinatura Padrão Não Configurada", pageWidth - 80, currentY - 10);
+        doc.text(contractData.owner_name || 'Locador', pageWidth - 80, currentY - 10);
         doc.setFont("helvetica", "normal");
       }
 
@@ -256,10 +273,11 @@ const SignContract = () => {
         doc.text(`Dispositivo (User Agent): ${contractData.signer_user_agent || 'N/A'}`, 14, auditY + 65, { maxWidth: pageWidth - 28 });
       }
 
-      // Rodapé
-      doc.setFontSize(8);
-      doc.setTextColor(150, 150, 150);
-      doc.text("Gerado via RentalPRO - Gestão Inteligente para Locadoras", pageWidth / 2, pageHeight - 10, { align: 'center' });
+      // Adicionar marca d'água em todas as páginas
+      const totalPages = doc.internal.pages.length;
+      for (let i = 1; i <= totalPages; i++) {
+        addWatermark(doc, i);
+      }
 
       doc.save(`contrato-assinado-${contractData.order_id.split('-')[0]}.pdf`);
       showSuccess("Download do contrato finalizado iniciado.");
@@ -372,7 +390,7 @@ const SignContract = () => {
                   className="max-h-full max-w-full object-contain"
                 />
               ) : (
-                <p className="text-sm text-muted-foreground italic">Assinatura Padrão Não Configurada</p>
+                <p className="text-sm text-muted-foreground italic">{data.owner_name || 'Assinatura Padrão Não Configurada'}</p>
               )}
             </div>
           </div>
@@ -422,7 +440,7 @@ const SignContract = () => {
                 className="w-full h-12 bg-blue-600 hover:bg-blue-700"
               >
                 {signing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-5 w-5" />}
-                Assinar Digitalmente
+                {signing ? 'Salvando...' : 'Assinar Digitalmente'}
               </Button>
             </>
           ) : (

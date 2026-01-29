@@ -89,14 +89,16 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
       setOrder(data);
       
       // 2. Fetch Owner Profile (including signature and business details)
-      if (data.created_by) {
+      // Usamos o ID do usuário logado para buscar o perfil, pois o contrato é gerado por ele.
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('business_name, business_cnpj, business_address, business_phone, signature_url')
-          .eq('id', data.created_by)
+          .eq('id', user.id) // Busca o perfil do usuário logado
           .single();
           
-        if (profileError) {
+        if (profileError && profileError.code !== 'PGRST116') {
           console.warn("Could not fetch owner profile details:", profileError.message);
         } else {
           setOwnerProfile(profileData as OwnerProfile);
@@ -145,6 +147,23 @@ Por favor, acesse e assine digitalmente.
     const pageHeight = doc.internal.pageSize.getHeight();
     
     const profile = ownerProfile || {};
+    
+    // Função para adicionar rodapé com marca d'água
+    const addWatermark = (doc: jsPDF, pageNumber: number) => {
+      doc.setPage(pageNumber);
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150); // Cinza claro
+      const watermarkText = "Gerado e Assinado digitalmente via RentalPro (rentalpro.com.br)";
+      const textWidth = doc.getStringUnitWidth(watermarkText) * doc.getFontSize() / doc.internal.scaleFactor;
+      const x = (pageWidth - textWidth) / 2;
+      const y = pageHeight - 10;
+      
+      doc.text(watermarkText, pageWidth / 2, y, { align: 'center' });
+      
+      // Adicionar link clicável (URL: https://www.dyad.sh/ - usando dyad como placeholder)
+      const linkUrl = "https://www.dyad.sh/"; 
+      doc.link(x, y - 3, textWidth, 5, { url: linkUrl });
+    };
     
     // --- 1. Conteúdo do Contrato (Página 1) ---
     
@@ -214,7 +233,7 @@ Por favor, acesse e assine digitalmente.
       // Placeholder se não houver assinatura padrão
       doc.setFontSize(12);
       doc.setFont("times", "italic");
-      doc.text("Assinatura Padrão Não Configurada", pageWidth - 80, currentY - 10);
+      doc.text(profile.business_name || 'Locador', pageWidth - 80, currentY - 10);
       doc.setFont("helvetica", "normal");
     }
 
@@ -261,27 +280,21 @@ Por favor, acesse e assine digitalmente.
       doc.text(`Dispositivo (User Agent): ${order.signer_user_agent || 'N/A'}`, 14, auditY + 65, { maxWidth: pageWidth - 28 });
     }
 
-    // Rodapé
-    doc.setFontSize(8);
-    doc.setTextColor(150, 150, 150);
-    doc.text("Gerado via RentalPRO - Gestão Inteligente para Locadoras", pageWidth / 2, pageHeight - 10, { align: 'center' });
+    // Adicionar marca d'água em todas as páginas
+    const totalPages = doc.internal.pages.length;
+    for (let i = 1; i <= totalPages; i++) {
+      addWatermark(doc, i);
+    }
 
     return doc;
   };
 
-  // Removendo a lógica assíncrona de upload e navegação direta do handleShareContract
-  // O link agora será tratado pelo <a> tag.
-  const handleShareContract = () => {
-    if (!order) return;
-    // Apenas para fins de feedback visual, se necessário, mas a navegação é feita pelo <a>
-    showSuccess("Abrindo WhatsApp para envio do link de assinatura...");
-  };
-
   const handleDownloadFinalPDF = async () => {
-    if (!order || !ownerProfile) return;
+    if (!order) return;
     try {
       setIsGeneratingContract(true);
-      const doc = await generatePDF(order, ownerProfile, true);
+      // Passa o ownerProfile para a função de geração
+      const doc = await generatePDF(order, ownerProfile, true); 
       doc.save(`contrato-assinado-${order.id.split('-')[0]}.pdf`);
       showSuccess("Download do contrato finalizado iniciado.");
     } catch (error: any) {
@@ -480,7 +493,7 @@ Por favor, acesse e assine digitalmente.
                   variant="outline"
                   className="w-full h-12 border-green-500 text-green-600 hover:bg-green-50"
                 >
-                  <Download className="h-5 w-5 mr-2" />
+                  {isGeneratingContract ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <Download className="h-5 w-5 mr-2" />}
                   Baixar Contrato Assinado
                 </Button>
              )}
