@@ -247,9 +247,10 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
       setIsGeneratingContract(true);
       
       // 1. Geração do PDF (Não final, sem certificado de auditoria)
+      // NOTE: A geração do PDF aqui é apenas para fins de upload, mas o link de assinatura é o foco.
       const doc = await generatePDF(order, ownerProfile, false);
       
-      // 2. Upload para Supabase Storage
+      // 2. Upload para Supabase Storage (Opcional, mas mantido para histórico)
       const pdfBlob = doc.output('blob');
       const fileName = `contrato-${order.id.split('-')[0]}-${Date.now()}.pdf`;
       const filePath = `${fileName}`;
@@ -262,23 +263,23 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
           upsert: false
         });
 
-      if (uploadError) throw uploadError;
-
-      // 3. Obter URL Pública
-      const { data: { publicUrl } } = supabase.storage
-        .from('contracts')
-        .getPublicUrl(filePath);
-
-      // 4. Montar Link de Assinatura Pública
-      const signLink = `${window.location.origin}/sign/${order.id}`;
-
-      // 5. Disparo no WhatsApp (Lógica de Blindagem)
-      
-      let phone = order.customer_phone.replace(/\D/g, '');
-      if (phone.length <= 11) {
-        phone = `55${phone}`;
+      if (uploadError) {
+        console.warn("Warning: Could not upload contract PDF to storage:", uploadError.message);
+        // Não lançamos erro aqui, pois o objetivo principal é o link de assinatura
       }
 
+      // 3. Montar Link de Assinatura Pública
+      const signLink = `${window.location.origin}/sign/${order.id}`;
+
+      // 4. Disparo no WhatsApp (USANDO WA.ME)
+      
+      let phone = order.customer_phone.replace(/\D/g, '');
+      // Adiciona DDI 55 se o número tiver 10 ou 11 dígitos (formato brasileiro)
+      if (phone.length === 10 || phone.length === 11) {
+        phone = `55${phone}`;
+      }
+      // Se o número for inválido ou vazio, o wa.me ainda funciona, mas pede para o usuário escolher o contato.
+      
       const messageText = `Olá ${order.customer_name}! 📦
 Aqui está o link para visualizar e assinar seu contrato de locação #${order.id.split('-')[0]}:
 ${signLink}
@@ -289,8 +290,9 @@ Por favor, acesse e assine digitalmente.
 🔒 *Gerado via RentalPRO - Gestão Inteligente para Locadoras*`;
 
       const encodedMessage = encodeURIComponent(messageText);
-      const whatsappLink = `https://api.whatsapp.com/send?phone=${phone}&text=${encodedMessage}`;
+      const whatsappLink = `https://wa.me/${phone}?text=${encodedMessage}`;
       
+      // Dispara a navegação diretamente no evento de clique (após o processamento síncrono/assíncrono)
       window.location.href = whatsappLink;
       
       showSuccess("Link de assinatura gerado e enviado para o WhatsApp!");
@@ -552,7 +554,7 @@ Por favor, acesse e assine digitalmente.
                       <p className="text-[10px] uppercase text-gray-400 font-bold">Check-in (Devolução)</p>
                       <p className={cn(
                         "text-sm font-medium flex items-center gap-2",
-                        isOverdue ? "text-red-600" : "text-green-600"
+                        isOverdue ? "text-red-600" : "text-red-600"
                       )}>
                         {format(parseISO(order.returned_at), "dd/MM 'às' HH:mm", { locale: ptBR })}
                         {isOverdue && <AlertCircle className="h-3 w-3" title="Devolução em atraso" />}
