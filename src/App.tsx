@@ -19,23 +19,25 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <div className="flex min-h-screen bg-gray-50">
+        <div className="flex bg-gray-50 min-h-screen"> {/* Mantendo min-h-screen aqui para garantir que o fundo cubra a tela */}
           {/* Sidebar fixa para desktop */}
           <div className="hidden md:block">
             <Sidebar />
           </div>
           
-          <main className="flex-1 md:ml-64">
+          <main className="flex-1 md:ml-64 flex flex-col"> {/* Adicionando flex-col para garantir que MobileNav e Routes se empilhem corretamente */}
             {/* Navbar e Menu Hambúrguer para mobile */}
             <MobileNav />
             
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/inventory" element={<Inventory />} />
-              <Route path="/orders" element={<Orders />} />
-              <Route path="/timeline" element={<Timeline />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+            <div className="flex-1"> {/* Garantindo que o conteúdo das rotas ocupe o restante do espaço */}
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/inventory" element={<Inventory />} />
+                <Route path="/orders" element={<Orders />} />
+                <Route path="/timeline" element={<Timeline />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </div>
           </main>
         </div>
       </BrowserRouter>
