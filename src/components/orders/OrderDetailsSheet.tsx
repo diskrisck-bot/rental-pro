@@ -110,6 +110,35 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     }
   };
 
+  // Função auxiliar para gerar o link do WhatsApp
+  const getWhatsappLink = (order: any) => {
+    if (!order) return '#';
+    
+    const signLink = `${window.location.origin}/sign/${order.id}`;
+    
+    const messageText = `Olá ${order.customer_name}! 📦
+Aqui está o link para visualizar e assinar seu contrato de locação #${order.id.split('-')[0]}:
+${signLink}
+
+Por favor, acesse e assine digitalmente.
+
+---
+🔒 *Gerado via RentalPRO - Gestão Inteligente para Locadoras*`;
+
+    const encodedMessage = encodeURIComponent(messageText);
+    
+    let phone = order.customer_phone ? order.customer_phone.replace(/\D/g, '') : '';
+    // Adiciona DDI 55 se o número tiver 10 ou 11 dígitos (formato brasileiro)
+    if (phone.length === 10 || phone.length === 11) {
+      phone = `55${phone}`;
+    }
+    
+    // Se o número for inválido ou vazio, usa wa.me/ (que abre a lista de contatos)
+    const baseUrl = phone ? `https://wa.me/${phone}` : `https://wa.me/`;
+    
+    return `${baseUrl}?text=${encodedMessage}`;
+  };
+
   const generatePDF = async (order: any, ownerProfile: OwnerProfile | null, isFinal: boolean) => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -240,68 +269,12 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     return doc;
   };
 
-  const handleShareContract = async () => {
-    if (!order || !ownerProfile) return;
-    
-    try {
-      setIsGeneratingContract(true);
-      
-      // 1. Geração do PDF (Não final, sem certificado de auditoria)
-      // NOTE: A geração do PDF aqui é apenas para fins de upload, mas o link de assinatura é o foco.
-      const doc = await generatePDF(order, ownerProfile, false);
-      
-      // 2. Upload para Supabase Storage (Opcional, mas mantido para histórico)
-      const pdfBlob = doc.output('blob');
-      const fileName = `contrato-${order.id.split('-')[0]}-${Date.now()}.pdf`;
-      const filePath = `${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('contracts')
-        .upload(filePath, pdfBlob, {
-          contentType: 'application/pdf',
-          cacheControl: '3600',
-          upsert: false
-        });
-
-      if (uploadError) {
-        console.warn("Warning: Could not upload contract PDF to storage:", uploadError.message);
-        // Não lançamos erro aqui, pois o objetivo principal é o link de assinatura
-      }
-
-      // 3. Montar Link de Assinatura Pública
-      const signLink = `${window.location.origin}/sign/${order.id}`;
-
-      // 4. Disparo no WhatsApp (USANDO WA.ME)
-      
-      let phone = order.customer_phone.replace(/\D/g, '');
-      // Adiciona DDI 55 se o número tiver 10 ou 11 dígitos (formato brasileiro)
-      if (phone.length === 10 || phone.length === 11) {
-        phone = `55${phone}`;
-      }
-      // Se o número for inválido ou vazio, o wa.me ainda funciona, mas pede para o usuário escolher o contato.
-      
-      const messageText = `Olá ${order.customer_name}! 📦
-Aqui está o link para visualizar e assinar seu contrato de locação #${order.id.split('-')[0]}:
-${signLink}
-
-Por favor, acesse e assine digitalmente.
-
----
-🔒 *Gerado via RentalPRO - Gestão Inteligente para Locadoras*`;
-
-      const encodedMessage = encodeURIComponent(messageText);
-      const whatsappLink = `https://wa.me/${phone}?text=${encodedMessage}`;
-      
-      // Dispara a navegação diretamente no evento de clique (após o processamento síncrono/assíncrono)
-      window.location.href = whatsappLink;
-      
-      showSuccess("Link de assinatura gerado e enviado para o WhatsApp!");
-    } catch (error: any) {
-      console.error("Erro ao gerar contrato:", error);
-      showError("Erro ao processar contrato: " + (error.message || "Tente novamente."));
-    } finally {
-      setIsGeneratingContract(false);
-    }
+  // Removendo a lógica assíncrona de upload e navegação direta do handleShareContract
+  // O link agora será tratado pelo <a> tag.
+  const handleShareContract = () => {
+    if (!order) return;
+    // Apenas para fins de feedback visual, se necessário, mas a navegação é feita pelo <a>
+    showSuccess("Abrindo WhatsApp para envio do link de assinatura...");
   };
 
   const handleDownloadFinalPDF = async () => {
@@ -482,25 +455,23 @@ Por favor, acesse e assine digitalmente.
             <p className="text-3xl font-bold">R$ {Number(order?.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
           </div>
 
-          {/* Botão de Enviar Contrato */}
+          {/* Botão de Enviar Contrato (AGORA É UM LINK <a>) */}
           <div className="space-y-3">
-             <Button 
-                onClick={handleShareContract} 
-                disabled={isGeneratingContract || loading}
-                className="w-full h-14 bg-green-600 hover:bg-green-700 text-white font-bold gap-3 rounded-xl shadow-lg transition-all active:scale-95"
-             >
-                {isGeneratingContract ? (
-                  <>
-                    <Loader2 className="h-6 w-6 animate-spin" />
-                    Gerando link de assinatura...
-                  </>
-                ) : (
-                  <>
-                    <MessageCircle className="h-6 w-6" />
-                    Enviar Link de Assinatura
-                  </>
+             <a 
+                href={getWhatsappLink(order)}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={handleShareContract} // Mantém o feedback visual (toast)
+                className={cn(
+                  "w-full h-14 bg-green-600 hover:bg-green-700 text-white font-bold gap-3 rounded-xl shadow-lg transition-all active:scale-95",
+                  "inline-flex items-center justify-center text-base", // Estiliza como botão
+                  loading && "opacity-50 cursor-not-allowed"
                 )}
-             </Button>
+                aria-disabled={loading}
+             >
+                <MessageCircle className="h-6 w-6" />
+                Enviar Link de Assinatura
+             </a>
              
              {isSigned && (
                 <Button 
@@ -554,7 +525,7 @@ Por favor, acesse e assine digitalmente.
                       <p className="text-[10px] uppercase text-gray-400 font-bold">Check-in (Devolução)</p>
                       <p className={cn(
                         "text-sm font-medium flex items-center gap-2",
-                        isOverdue ? "text-red-600" : "text-red-600"
+                        isOverdue ? "text-red-600" : "text-green-600"
                       )}>
                         {format(parseISO(order.returned_at), "dd/MM 'às' HH:mm", { locale: ptBR })}
                         {isOverdue && <AlertCircle className="h-3 w-3" title="Devolução em atraso" />}
