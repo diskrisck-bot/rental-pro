@@ -25,8 +25,8 @@ interface OrderItem {
   products: ProductItem;
 }
 
-interface OrderData {
-  id: string;
+interface ContractData {
+  order_id: string;
   customer_name: string;
   customer_phone: string;
   customer_cpf: string;
@@ -35,27 +35,20 @@ interface OrderData {
   total_amount: number;
   signed_at: string | null;
   signature_image: string | null;
-  created_by: string;
   signer_ip: string | null;
   signer_user_agent: string | null;
-}
+  status: string;
+  
+  // Owner Profile Data (from RPC)
+  owner_name: string | null;
+  owner_cnpj: string | null;
+  owner_address: string | null;
+  owner_phone: string | null;
+  owner_signature: string | null;
 
-interface OwnerProfile {
-  business_name: string | null;
-  business_cnpj: string | null;
-  business_address: string | null;
-  business_phone: string | null;
-  signature_url: string | null;
-}
-
-interface ContractData {
-  order: OrderData;
+  // Items (JSONB from RPC)
   items: OrderItem[];
-  ownerProfile: OwnerProfile; // Updated structure
 }
-
-const SUPABASE_PROJECT_ID = "byseaafzlofytygpyrzx";
-const EDGE_FUNCTION_URL = `https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1/fetch-contract-data`;
 
 const SignContract = () => {
   const { orderId } = useParams<{ orderId: string }>();
@@ -73,24 +66,27 @@ const SignContract = () => {
     if (!orderId) return;
     setLoading(true);
     try {
-      const response = await fetch(EDGE_FUNCTION_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ orderId }),
+      // Usando RPC para buscar dados de forma segura, ignorando RLS
+      const { data: rpcData, error } = await supabase.rpc('get_contract_data', { 
+        p_order_id: orderId 
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Falha ao buscar dados do contrato.");
+      if (error) {
+        console.error('RPC Error:', error);
+        throw new Error(error.message || "Falha ao buscar dados do contrato via RPC.");
+      }
+      
+      if (!rpcData || rpcData.length === 0) {
+        throw new Error("Contrato não encontrado.");
       }
 
-      const result: ContractData = await response.json();
-      setData(result);
-      setCustomerSignature(result.order.signature_image);
+      const contractData: ContractData = rpcData[0];
+      
+      setData(contractData);
+      setCustomerSignature(contractData.signature_image);
     } catch (error: any) {
       showError(error.message);
+      setData(null); // Garante que o estado de erro seja exibido
     } finally {
       setLoading(false);
     }
@@ -139,7 +135,7 @@ const SignContract = () => {
     }
   };
 
-  const generateFinalPDF = async (order: OrderData, items: OrderItem[], ownerProfile: OwnerProfile, customerSignature: string | null) => {
+  const generateFinalPDF = async (contractData: ContractData) => {
     setIsDownloading(true);
     try {
       const doc = new jsPDF();
@@ -159,26 +155,26 @@ const SignContract = () => {
       doc.setFont("helvetica", "bold");
       doc.text("LOCADOR (EMPRESA)", 14, 35);
       doc.setFont("helvetica", "normal");
-      doc.text(`Nome: ${ownerProfile.business_name || 'N/A'}`, 14, 42);
-      doc.text(`CNPJ/CPF: ${ownerProfile.business_cnpj || 'N/A'}`, 14, 49);
-      doc.text(`Endereço: ${ownerProfile.business_address || 'N/A'}`, 14, 56);
-      doc.text(`Telefone: ${ownerProfile.business_phone || 'N/A'}`, 14, 63);
+      doc.text(`Nome: ${contractData.owner_name || 'N/A'}`, 14, 42);
+      doc.text(`CNPJ/CPF: ${contractData.owner_cnpj || 'N/A'}`, 14, 49);
+      doc.text(`Endereço: ${contractData.owner_address || 'N/A'}`, 14, 56);
+      doc.text(`Telefone: ${contractData.owner_phone || 'N/A'}`, 14, 63);
       
       // Dados do Locatário (Cliente)
       doc.setFont("helvetica", "bold");
       doc.text("LOCATÁRIO (CLIENTE)", pageWidth / 2 + 10, 35);
       doc.setFont("helvetica", "normal");
-      doc.text(`Nome: ${order.customer_name}`, pageWidth / 2 + 10, 42);
-      doc.text(`CPF: ${order.customer_cpf || 'N/A'}`, pageWidth / 2 + 10, 49);
-      doc.text(`Telefone: ${order.customer_phone || 'N/A'}`, pageWidth / 2 + 10, 56);
+      doc.text(`Nome: ${contractData.customer_name}`, pageWidth / 2 + 10, 42);
+      doc.text(`CPF: ${contractData.customer_cpf || 'N/A'}`, pageWidth / 2 + 10, 49);
+      doc.text(`Telefone: ${contractData.customer_phone || 'N/A'}`, pageWidth / 2 + 10, 56);
       
       // Período e Valor
       doc.setFontSize(12);
-      doc.text(`Pedido: #${order.id.split('-')[0]}`, 14, 75);
-      doc.text(`Período: ${format(parseISO(order.start_date), "dd/MM/yyyy")} a ${format(parseISO(order.end_date), "dd/MM/yyyy")}`, 14, 82);
+      doc.text(`Pedido: #${contractData.order_id.split('-')[0]}`, 14, 75);
+      doc.text(`Período: ${format(parseISO(contractData.start_date), "dd/MM/yyyy")} a ${format(parseISO(contractData.end_date), "dd/MM/yyyy")}`, 14, 82);
       
       // Tabela de Itens
-      const tableData = items.map((item: any) => [
+      const tableData = contractData.items.map((item: any) => [
         item.products.name,
         item.quantity,
         `R$ ${Number(item.products.price).toFixed(2)}`
@@ -195,7 +191,7 @@ const SignContract = () => {
       const finalY = (doc as any).lastAutoTable.finalY || 120;
       doc.setFontSize(14);
       doc.setFont("helvetica", "bold");
-      doc.text(`VALOR TOTAL: R$ ${Number(order.total_amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, pageWidth - 14, finalY + 15, { align: 'right' });
+      doc.text(`VALOR TOTAL: R$ ${Number(contractData.total_amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, pageWidth - 14, finalY + 15, { align: 'right' });
 
       // Assinaturas (Locador e Locatário)
       let currentY = finalY + 40;
@@ -206,9 +202,9 @@ const SignContract = () => {
       doc.text("__________________________________________", pageWidth - 80, currentY);
       doc.text("Assinatura do Locador (RentalPro)", pageWidth - 80, currentY + 5);
       
-      if (ownerProfile.signature_url) {
+      if (contractData.owner_signature) {
         // Desenha a assinatura do Locador
-        doc.addImage(ownerProfile.signature_url, 'PNG', pageWidth - 80, currentY - 25, 60, 25);
+        doc.addImage(contractData.owner_signature, 'PNG', pageWidth - 80, currentY - 25, 60, 25);
       } else {
         // Placeholder se não houver assinatura padrão
         doc.setFontSize(12);
@@ -223,9 +219,9 @@ const SignContract = () => {
       doc.text("__________________________________________", 14, currentY);
       doc.text("Assinatura do Locatário (Cliente)", 14, currentY + 5);
       
-      if (customerSignature) {
+      if (contractData.signature_image) {
         // Desenha a assinatura do Locatário
-        doc.addImage(customerSignature, 'PNG', 14, currentY - 25, 60, 25);
+        doc.addImage(contractData.signature_image, 'PNG', 14, currentY - 25, 60, 25);
       } else {
         doc.setFontSize(12);
         doc.setFont("times", "italic");
@@ -234,7 +230,7 @@ const SignContract = () => {
       }
       
       // --- 2. Certificado de Assinatura (Página 2, se assinado) ---
-      if (order.signed_at) {
+      if (contractData.signed_at) {
         doc.addPage();
         
         doc.setFontSize(18);
@@ -253,11 +249,11 @@ const SignContract = () => {
         doc.text("Detalhes da Assinatura:", 14, auditY + 15);
         
         doc.setFont("helvetica", "normal");
-        doc.text(`ID do Documento (Hash): ${order.id}`, 14, auditY + 25);
-        doc.text(`Assinado por: ${order.customer_name} (Locatário)`, 14, auditY + 35);
-        doc.text(`Data/Hora da Assinatura: ${format(parseISO(order.signed_at), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })}`, 14, auditY + 45);
-        doc.text(`IP de Origem: ${order.signer_ip || 'N/A'}`, 14, auditY + 55);
-        doc.text(`Dispositivo (User Agent): ${order.signer_user_agent || 'N/A'}`, 14, auditY + 65, { maxWidth: pageWidth - 28 });
+        doc.text(`ID do Documento (Hash): ${contractData.order_id}`, 14, auditY + 25);
+        doc.text(`Assinado por: ${contractData.customer_name} (Locatário)`, 14, auditY + 35);
+        doc.text(`Data/Hora da Assinatura: ${format(parseISO(contractData.signed_at), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })}`, 14, auditY + 45);
+        doc.text(`IP de Origem: ${contractData.signer_ip || 'N/A'}`, 14, auditY + 55);
+        doc.text(`Dispositivo (User Agent): ${contractData.signer_user_agent || 'N/A'}`, 14, auditY + 65, { maxWidth: pageWidth - 28 });
       }
 
       // Rodapé
@@ -265,7 +261,7 @@ const SignContract = () => {
       doc.setTextColor(150, 150, 150);
       doc.text("Gerado via RentalPRO - Gestão Inteligente para Locadoras", pageWidth / 2, pageHeight - 10, { align: 'center' });
 
-      doc.save(`contrato-assinado-${order.id.split('-')[0]}.pdf`);
+      doc.save(`contrato-assinado-${contractData.order_id.split('-')[0]}.pdf`);
       showSuccess("Download do contrato finalizado iniciado.");
     } catch (error: any) {
       console.error("Erro ao gerar PDF final:", error);
@@ -295,8 +291,7 @@ const SignContract = () => {
     );
   }
 
-  const { order, items, ownerProfile } = data;
-  const isSigned = !!order.signed_at;
+  const isSigned = !!data.signed_at;
 
   return (
     <div className="min-h-screen flex flex-col items-center p-4 md:p-8 bg-gray-100">
@@ -304,7 +299,7 @@ const SignContract = () => {
         
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-bold text-blue-600">Contrato de Locação</h1>
-          <p className="text-lg text-gray-700">Pedido #{order.id.split('-')[0]}</p>
+          <p className="text-lg text-gray-700">Pedido #{data.order_id.split('-')[0]}</p>
           {isSigned ? (
             <Badge className="bg-green-100 text-green-800 border-green-200 text-base py-1 px-3">
               <CheckCircle className="h-4 w-4 mr-2" /> ASSINADO DIGITALMENTE
@@ -319,28 +314,28 @@ const SignContract = () => {
         {/* Detalhes do Locador */}
         <div className="border rounded-xl p-4 bg-gray-50 space-y-2">
           <p className="text-sm font-bold text-gray-700 flex items-center gap-2"><Building className="h-4 w-4"/> Locador (Empresa)</p>
-          <p className="text-sm text-muted-foreground">{ownerProfile.business_name || 'Nome da Empresa não configurado.'}</p>
-          <p className="text-xs text-muted-foreground">CNPJ: {ownerProfile.business_cnpj || 'N/A'} | Tel: {ownerProfile.business_phone || 'N/A'}</p>
-          <p className="text-xs text-muted-foreground">Endereço: {ownerProfile.business_address || 'N/A'}</p>
+          <p className="text-sm text-muted-foreground">{data.owner_name || 'Nome da Empresa não configurado.'}</p>
+          <p className="text-xs text-muted-foreground">CNPJ: {data.owner_cnpj || 'N/A'} | Tel: {data.owner_phone || 'N/A'}</p>
+          <p className="text-xs text-muted-foreground">Endereço: {data.owner_address || 'N/A'}</p>
         </div>
 
         {/* Detalhes do Cliente e Período */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-b pb-4">
           <div className="space-y-1">
             <p className="text-sm font-semibold text-muted-foreground">Locatário (Cliente)</p>
-            <p className="text-lg font-medium">{order.customer_name}</p>
-            <p className="text-sm text-gray-500">CPF: {order.customer_cpf}</p>
-            <p className="text-sm text-gray-500">Tel: {order.customer_phone}</p>
+            <p className="text-lg font-medium">{data.customer_name}</p>
+            <p className="text-sm text-gray-500">CPF: {data.customer_cpf}</p>
+            <p className="text-sm text-gray-500">Tel: {data.customer_phone}</p>
           </div>
           <div className="space-y-1">
             <p className="text-sm font-semibold text-muted-foreground">Período</p>
             <p className="text-lg font-medium">
-              {format(parseISO(order.start_date), "dd/MM/yyyy", { locale: ptBR })}
+              {format(parseISO(data.start_date), "dd/MM/yyyy", { locale: ptBR })}
               <span className="mx-2 text-gray-400">→</span>
-              {format(parseISO(order.end_date), "dd/MM/yyyy", { locale: ptBR })}
+              {format(parseISO(data.end_date), "dd/MM/yyyy", { locale: ptBR })}
             </p>
             <p className="text-sm font-bold text-blue-600">
-              Total: R$ {Number(order.total_amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              Total: R$ {Number(data.total_amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </p>
           </div>
         </div>
@@ -349,7 +344,7 @@ const SignContract = () => {
         <div className="space-y-3">
           <h3 className="text-xl font-bold text-gray-700">Itens da Locação</h3>
           <div className="border rounded-lg divide-y bg-gray-50">
-            {items.map((item, idx) => (
+            {data.items.map((item, idx) => (
               <div key={idx} className="p-4 flex justify-between items-center">
                 <div className="space-y-1">
                   <p className="font-medium text-base">{item.products.name} x {item.quantity}</p>
@@ -370,9 +365,9 @@ const SignContract = () => {
           <div className="border rounded-xl p-4 bg-blue-50 border-blue-100">
             <p className="text-sm font-semibold text-blue-800 mb-2">Locador (RentalPro)</p>
             <div className="h-[60px] flex items-center justify-center">
-              {ownerProfile.signature_url ? (
+              {data.owner_signature ? (
                 <img 
-                  src={ownerProfile.signature_url} 
+                  src={data.owner_signature} 
                   alt="Assinatura do Locador" 
                   className="max-h-full max-w-full object-contain"
                 />
@@ -389,7 +384,7 @@ const SignContract = () => {
             {isSigned ? (
               <div className="h-[60px] flex items-center justify-center">
                 <img 
-                  src={order.signature_image || ''} 
+                  src={data.signature_image || ''} 
                   alt="Sua Assinatura" 
                   className="max-h-full max-w-full object-contain"
                 />
@@ -432,7 +427,7 @@ const SignContract = () => {
             </>
           ) : (
             <Button 
-              onClick={() => generateFinalPDF(order, items, ownerProfile, order.signature_image)} 
+              onClick={() => generateFinalPDF(data)} 
               disabled={isDownloading}
               className="w-full h-12 bg-green-600 hover:bg-green-700"
             >
