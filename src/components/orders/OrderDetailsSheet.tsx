@@ -162,9 +162,17 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
         .from('contracts')
         .getPublicUrl(filePath);
 
-      // 4. Disparo no WhatsApp (CORREÇÃO DE CODIFICAÇÃO E URL)
-      const cleanPhone = order.customer_phone.replace(/\D/g, '');
+      // 4. Disparo no WhatsApp (Lógica de Blindagem)
       
+      // 1. Garante que o número tem apenas dígitos
+      let phone = order.customer_phone.replace(/\D/g, '');
+      
+      // 2. Se não tiver DDI (menos de 12 dígitos), adiciona o Brasil (55)
+      if (phone.length <= 11) {
+        phone = `55${phone}`;
+      }
+
+      // 3. Prepara a mensagem
       const messageText = `Olá ${order.customer_name}! 📦
 Aqui está o link do seu contrato de locação #${order.id.split('-')[0]}:
 ${publicUrl}
@@ -174,11 +182,13 @@ Por favor, confira e assine.
 ---
 🔒 *Gerado via RentalPRO - Gestão Inteligente para Locadoras*`;
 
+      // 4. O SEGREDO: Encode URI Component para garantir que o link do PDF não quebre a URL do Zap
       const encodedMessage = encodeURIComponent(messageText);
+
+      // 5. Monta a URL final usando a API universal
+      const whatsappLink = `https://api.whatsapp.com/send?phone=${phone}&text=${encodedMessage}`;
       
-      // Usando a URL de API completa para maior robustez
-      const whatsappLink = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodedMessage}`;
-      
+      // 6. Força a navegação na mesma janela
       window.location.href = whatsappLink;
       
       showSuccess("Contrato gerado e link enviado para o WhatsApp!");
