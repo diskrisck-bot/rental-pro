@@ -32,8 +32,11 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, initialSignature, d
     ctx.lineJoin = 'round';
 
     const rect = canvas.getBoundingClientRect();
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.touches[0].clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.touches[0].clientY;
+    
+    // Correção: Determina clientX/Y corretamente
+    const isTouchEvent = 'touches' in e;
+    const clientX = isTouchEvent ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+    const clientY = isTouchEvent ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
     
     ctx.moveTo(clientX - rect.left, clientY - rect.top);
     setIsDrawing(true);
@@ -49,8 +52,11 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, initialSignature, d
     if (!ctx) return;
 
     const rect = canvas.getBoundingClientRect();
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    
+    // Correção: Determina clientX/Y corretamente
+    const isTouchEvent = 'touches' in e;
+    const clientX = isTouchEvent ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+    const clientY = isTouchEvent ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
 
     ctx.lineTo(clientX - rect.left, clientY - rect.top);
     ctx.stroke();
