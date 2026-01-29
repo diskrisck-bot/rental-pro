@@ -135,13 +135,14 @@ const Dashboard = () => {
     `R$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
 
   return (
-    <div className="p-8 space-y-8">
+    <div className="p-4 md:p-8 space-y-8"> {/* Ajuste de padding para mobile */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Bem-vindo, Admin</h1>
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Bem-vindo, Admin</h1>
         <p className="text-muted-foreground">Aqui está o que está acontecendo na sua locadora hoje.</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* Ajuste de Grid: 1 coluna no mobile, 2 no tablet, 4 no desktop */}
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
         <DashboardCard 
           title="Faturamento Total" 
           value={formatCurrency(metrics?.totalRevenue || 0)} 
@@ -176,6 +177,7 @@ const Dashboard = () => {
         />
       </div>
       
+      {/* Ajuste de Grid para Gráficos e Listas */}
       <div className="grid gap-6 lg:grid-cols-3">
         <RevenueChart />
         

@@ -11,6 +11,10 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+interface SidebarProps {
+  onLinkClick?: () => void;
+}
+
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
   { icon: CalendarIcon, label: 'Timeline', path: '/timeline' },
@@ -18,11 +22,11 @@ const navItems = [
   { icon: Package, label: 'Inventário', path: '/inventory' },
 ];
 
-const Sidebar = () => {
+const Sidebar = ({ onLinkClick }: SidebarProps) => {
   const location = useLocation();
 
   return (
-    <div className="w-64 bg-white border-r h-screen flex flex-col fixed left-0 top-0">
+    <div className="w-64 bg-white border-r h-screen flex flex-col md:fixed left-0 top-0">
       <div className="p-6">
         <h1 className="text-2xl font-bold text-blue-600 flex items-center gap-2">
           <Package className="w-8 h-8" />
@@ -37,6 +41,7 @@ const Sidebar = () => {
             <Link
               key={item.path}
               to={item.path}
+              onClick={onLinkClick}
               className={cn(
                 "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
                 isActive 

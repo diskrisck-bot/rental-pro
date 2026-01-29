@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Sidebar from "./components/layout/Sidebar";
+import MobileNav from "./components/layout/MobileNav";
 import Dashboard from "./pages/Dashboard";
 import Inventory from "./pages/Inventory";
 import Orders from "./pages/Orders";
@@ -19,8 +20,15 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <div className="flex min-h-screen bg-gray-50">
-          <Sidebar />
-          <main className="flex-1 ml-64">
+          {/* Sidebar fixa para desktop */}
+          <div className="hidden md:block">
+            <Sidebar />
+          </div>
+          
+          <main className="flex-1 md:ml-64">
+            {/* Navbar e Menu Hambúrguer para mobile */}
+            <MobileNav />
+            
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/inventory" element={<Inventory />} />

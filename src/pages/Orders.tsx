@@ -80,10 +80,10 @@ const Orders = () => {
   });
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Pedidos</h1>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Pedidos</h1>
           <p className="text-muted-foreground">Acompanhe e gerencie todos os aluguéis.</p>
         </div>
         
@@ -105,59 +105,61 @@ const Orders = () => {
       </div>
 
       <div className="border rounded-xl bg-white overflow-hidden shadow-sm">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>ID</TableHead>
-              <TableHead>Cliente</TableHead>
-              <TableHead>Telefone</TableHead>
-              <TableHead>Período</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Total</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
+        <div className="overflow-x-auto"> {/* Adicionado overflow-x-auto */}
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center">
-                  <Loader2 className="h-6 w-6 animate-spin mx-auto text-blue-600" />
-                </TableCell>
+                <TableHead>ID</TableHead>
+                <TableHead>Cliente</TableHead>
+                <TableHead>Telefone</TableHead>
+                <TableHead>Período</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Total</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
               </TableRow>
-            ) : filteredOrders.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                  Nenhum pedido encontrado.
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredOrders.map((order) => (
-                <TableRow key={order.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => handleViewDetails(order.id)}>
-                  <TableCell className="font-mono text-[10px] text-gray-400">
-                    #{order.id.split('-')[0]}
-                  </TableCell>
-                  <TableCell className="font-medium">{order.customer_name}</TableCell>
-                  <TableCell className="text-sm text-gray-500">{order.customer_phone}</TableCell>
-                  <TableCell className="text-sm">
-                    {format(new Date(order.start_date), 'dd/MM')} - {format(new Date(order.end_date), 'dd/MM')}
-                  </TableCell>
-                  <TableCell>{getStatusBadge(order.status)}</TableCell>
-                  <TableCell className="font-semibold text-blue-600">
-                    R$ {Number(order.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="sm" onClick={(e) => {
-                      e.stopPropagation();
-                      handleViewDetails(order.id);
-                    }}>
-                      Ver Detalhes
-                    </Button>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-24 text-center">
+                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-blue-600" />
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ) : filteredOrders.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                    Nenhum pedido encontrado.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredOrders.map((order) => (
+                  <TableRow key={order.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => handleViewDetails(order.id)}>
+                    <TableCell className="font-mono text-[10px] text-gray-400">
+                      #{order.id.split('-')[0]}
+                    </TableCell>
+                    <TableCell className="font-medium">{order.customer_name}</TableCell>
+                    <TableCell className="text-sm text-gray-500">{order.customer_phone}</TableCell>
+                    <TableCell className="text-sm">
+                      {format(new Date(order.start_date), 'dd/MM')} - {format(new Date(order.end_date), 'dd/MM')}
+                    </TableCell>
+                    <TableCell>{getStatusBadge(order.status)}</TableCell>
+                    <TableCell className="font-semibold text-blue-600">
+                      R$ {Number(order.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="sm" onClick={(e) => {
+                        e.stopPropagation();
+                        handleViewDetails(order.id);
+                      }}>
+                        Ver Detalhes
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
 
       <OrderDetailsSheet 

@@ -119,10 +119,10 @@ const Inventory = () => {
   }
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Inventário</h1>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Inventário</h1>
           <p className="text-muted-foreground">Gerencie seus ativos e estoque aqui.</p>
         </div>
         
@@ -203,64 +203,66 @@ const Inventory = () => {
       </div>
 
       <div className="border rounded-xl bg-white overflow-hidden shadow-sm">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nome</TableHead>
-              <TableHead>Tipo</TableHead>
-              <TableHead className="text-center">Estoque Total</TableHead>
-              <TableHead className="text-center">Alugados Agora</TableHead>
-              <TableHead className="text-center">Disponível Hoje</TableHead>
-              <TableHead>Preço (Diária)</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
+        <div className="overflow-x-auto"> {/* Adicionado overflow-x-auto */}
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center">
-                  <Loader2 className="h-6 w-6 animate-spin mx-auto text-blue-600" />
-                </TableCell>
+                <TableHead>Nome</TableHead>
+                <TableHead>Tipo</TableHead>
+                <TableHead className="text-center">Estoque Total</TableHead>
+                <TableHead className="text-center">Alugados Agora</TableHead>
+                <TableHead className="text-center">Disponível Hoje</TableHead>
+                <TableHead>Preço (Diária)</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
               </TableRow>
-            ) : products?.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                  Nenhum produto cadastrado.
-                </TableCell>
-              </TableRow>
-            ) : (
-              products?.map((product) => {
-                const status = getAvailabilityStatus(product);
-                return (
-                  <TableRow key={product.id}>
-                    <TableCell className="font-medium">{product.name}</TableCell>
-                    <TableCell>
-                      <Badge variant={product.type === 'trackable' ? 'default' : 'secondary'} className="capitalize">
-                        {product.type === 'trackable' ? 'Rastreável' : 'Granel'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-center text-gray-500">{product.total_quantity}</TableCell>
-                    <TableCell className="text-center text-blue-600 font-medium">{product.active_rentals}</TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex items-center justify-center">
-                        <span className={cn("font-bold", status.color)}>
-                          {product.available_quantity}
-                        </span>
-                        {status.badge}
-                      </div>
-                    </TableCell>
-                    <TableCell>R$ {Number(product.price).toFixed(2)}</TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" onClick={() => handleEditProduct(product.id)}>
-                        <Edit className="h-4 w-4 mr-1" /> Editar
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-24 text-center">
+                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-blue-600" />
+                  </TableCell>
+                </TableRow>
+              ) : products?.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                    Nenhum produto cadastrado.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                products?.map((product) => {
+                  const status = getAvailabilityStatus(product);
+                  return (
+                    <TableRow key={product.id}>
+                      <TableCell className="font-medium">{product.name}</TableCell>
+                      <TableCell>
+                        <Badge variant={product.type === 'trackable' ? 'default' : 'secondary'} className="capitalize">
+                          {product.type === 'trackable' ? 'Rastreável' : 'Granel'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center text-gray-500">{product.total_quantity}</TableCell>
+                      <TableCell className="text-center text-blue-600 font-medium">{product.active_rentals}</TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center">
+                          <span className={cn("font-bold", status.color)}>
+                            {product.available_quantity}
+                          </span>
+                          {status.badge}
+                        </div>
+                      </TableCell>
+                      <TableCell>R$ {Number(product.price).toFixed(2)}</TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="sm" onClick={() => handleEditProduct(product.id)}>
+                          <Edit className="h-4 w-4 mr-1" /> Editar
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
 
       <EditProductSheet
