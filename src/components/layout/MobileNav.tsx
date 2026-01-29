@@ -22,7 +22,7 @@ const MobileNav = () => {
             <Menu className="h-6 w-6" />
           </Button>
         </SheetTrigger>
-        <SheetContent side="left" className="p-0 w-64 sm:w-72">
+        <SheetContent side="right" className="p-0 w-64 sm:w-72">
           {/* Passa a função para fechar o sheet para a Sidebar */}
           <Sidebar onLinkClick={() => setIsOpen(false)} />
         </SheetContent>
