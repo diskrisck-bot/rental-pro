@@ -39,7 +39,9 @@ serve(async (req) => {
         total_amount, 
         signed_at,
         signature_image,
-        created_by
+        created_by,
+        signer_ip,
+        signer_user_agent
       `)
       .eq('id', orderId)
       .single();
@@ -52,19 +54,26 @@ serve(async (req) => {
       });
     }
     
-    // 2. Fetch Owner's Signature (assuming owner is the creator)
-    let ownerSignature = null;
+    // 2. Fetch Owner's Profile Data (including signature and business details)
+    let ownerProfile = {
+        business_name: null,
+        business_cnpj: null,
+        business_address: null,
+        business_phone: null,
+        signature_url: null,
+    };
+
     if (orderData.created_by) {
         const { data: profileData, error: profileError } = await supabase
             .from('profiles')
-            .select('default_signature_image')
+            .select('business_name, business_cnpj, business_address, business_phone, signature_url')
             .eq('id', orderData.created_by)
             .single();
 
         if (profileError) {
-            console.warn("[fetch-contract-data] Warning: Could not fetch owner profile signature:", profileError.message);
+            console.warn("[fetch-contract-data] Warning: Could not fetch owner profile details:", profileError.message);
         } else {
-            ownerSignature = profileData?.default_signature_image || null;
+            ownerProfile = profileData || ownerProfile;
         }
     }
 
@@ -85,7 +94,7 @@ serve(async (req) => {
     const responseData = {
       order: orderData,
       items: itemsData,
-      ownerSignature: ownerSignature,
+      ownerProfile: ownerProfile,
     };
 
     return new Response(JSON.stringify(responseData), {

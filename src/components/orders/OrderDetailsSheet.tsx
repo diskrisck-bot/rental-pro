@@ -24,7 +24,8 @@ import {
   AlertCircle,
   Share2,
   MessageCircle,
-  Download
+  Download,
+  Building
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { format, isAfter, parseISO } from 'date-fns';
@@ -43,13 +44,21 @@ interface OrderDetailsSheetProps {
   onStatusUpdate: () => void;
 }
 
+interface OwnerProfile {
+  business_name: string | null;
+  business_cnpj: string | null;
+  business_address: string | null;
+  business_phone: string | null;
+  signature_url: string | null;
+}
+
 const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: OrderDetailsSheetProps) => {
   const queryClient = useQueryClient();
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [isGeneratingContract, setIsGeneratingContract] = useState(false);
-  const [ownerSignature, setOwnerSignature] = useState<string | null>(null);
+  const [ownerProfile, setOwnerProfile] = useState<OwnerProfile | null>(null);
 
   useEffect(() => {
     if (open && orderId) {
@@ -79,18 +88,18 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
       if (error) throw error;
       setOrder(data);
       
-      // 2. Fetch Owner Signature (assuming owner is the creator of the order)
+      // 2. Fetch Owner Profile (including signature and business details)
       if (data.created_by) {
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
-          .select('default_signature_image')
+          .select('business_name, business_cnpj, business_address, business_phone, signature_url')
           .eq('id', data.created_by)
           .single();
           
         if (profileError) {
-          console.warn("Could not fetch owner signature:", profileError.message);
+          console.warn("Could not fetch owner profile details:", profileError.message);
         } else {
-          setOwnerSignature(profileData?.default_signature_image || null);
+          setOwnerProfile(profileData as OwnerProfile);
         }
       }
 
@@ -101,29 +110,43 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     }
   };
 
-  const generatePDF = async (order: any, ownerSignature: string | null, customerSignature: string | null, isFinal: boolean) => {
+  const generatePDF = async (order: any, ownerProfile: OwnerProfile | null, isFinal: boolean) => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
+    
+    const profile = ownerProfile || {};
     
     // --- 1. Conteúdo do Contrato (Página 1) ---
     
     // Cabeçalho
     doc.setFontSize(20);
     doc.setTextColor(30, 58, 138); // Blue-900
-    doc.text("CONTRATO DE LOCAÇÃO - RENTAL PRO", pageWidth / 2, 20, { align: 'center' });
+    doc.text("CONTRATO DE LOCAÇÃO", pageWidth / 2, 20, { align: 'center' });
     
-    // Dados do Cliente
+    // Dados do Locador (Empresa)
     doc.setFontSize(12);
     doc.setTextColor(0, 0, 0);
-    doc.text(`Pedido: #${order.id.split('-')[0]}`, 14, 35);
-    doc.text(`Cliente: ${order.customer_name}`, 14, 42);
-    doc.text(`CPF: ${order.customer_cpf || 'Não informado'}`, 14, 49);
-    doc.text(`Telefone: ${order.customer_phone || 'Não informado'}`, 14, 56);
+    doc.setFont("helvetica", "bold");
+    doc.text("LOCADOR (EMPRESA)", 14, 35);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Nome: ${profile.business_name || 'N/A'}`, 14, 42);
+    doc.text(`CNPJ/CPF: ${profile.business_cnpj || 'N/A'}`, 14, 49);
+    doc.text(`Endereço: ${profile.business_address || 'N/A'}`, 14, 56);
+    doc.text(`Telefone: ${profile.business_phone || 'N/A'}`, 14, 63);
     
-    // Datas
-    doc.text(`Data de Retirada: ${format(parseISO(order.start_date), "dd/MM/yyyy")}`, 14, 66);
-    doc.text(`Data de Devolução: ${format(parseISO(order.end_date), "dd/MM/yyyy")}`, 14, 73);
+    // Dados do Locatário (Cliente)
+    doc.setFont("helvetica", "bold");
+    doc.text("LOCATÁRIO (CLIENTE)", pageWidth / 2 + 10, 35);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Nome: ${order.customer_name}`, pageWidth / 2 + 10, 42);
+    doc.text(`CPF: ${order.customer_cpf || 'N/A'}`, pageWidth / 2 + 10, 49);
+    doc.text(`Telefone: ${order.customer_phone || 'N/A'}`, pageWidth / 2 + 10, 56);
+    
+    // Período e Valor
+    doc.setFontSize(12);
+    doc.text(`Pedido: #${order.id.split('-')[0]}`, 14, 75);
+    doc.text(`Período: ${format(parseISO(order.start_date), "dd/MM/yyyy")} a ${format(parseISO(order.end_date), "dd/MM/yyyy")}`, 14, 82);
 
     // Tabela de Itens
     const tableData = order.order_items.map((item: any) => [
@@ -134,14 +157,14 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     ]);
 
     autoTable(doc, {
-      startY: 80,
+      startY: 90,
       head: [['Produto', 'Qtd', 'Serial', 'Preço/Dia']],
       body: tableData,
       headStyles: { fillStyle: 'F', fillColor: [37, 99, 235] }, // Blue-600
     });
 
     // Total
-    const finalY = (doc as any).lastAutoTable.finalY || 100;
+    const finalY = (doc as any).lastAutoTable.finalY || 120;
     doc.setFontSize(14);
     doc.setFont("helvetica", "bold");
     doc.text(`VALOR TOTAL: R$ ${Number(order.total_amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, pageWidth - 14, finalY + 15, { align: 'right' });
@@ -155,9 +178,9 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     doc.text("__________________________________________", pageWidth - 80, currentY);
     doc.text("Assinatura do Locador (RentalPro)", pageWidth - 80, currentY + 5);
     
-    if (ownerSignature) {
+    if (profile.signature_url) {
       // Desenha a assinatura do Locador
-      doc.addImage(ownerSignature, 'PNG', pageWidth - 80, currentY - 25, 60, 25);
+      doc.addImage(profile.signature_url, 'PNG', pageWidth - 80, currentY - 25, 60, 25);
     } else {
       // Placeholder se não houver assinatura padrão
       doc.setFontSize(12);
@@ -172,9 +195,9 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     doc.text("__________________________________________", 14, currentY);
     doc.text("Assinatura do Locatário (Cliente)", 14, currentY + 5);
     
-    if (customerSignature) {
+    if (order.signature_image) {
       // Desenha a assinatura do Locatário
-      doc.addImage(customerSignature, 'PNG', 14, currentY - 25, 60, 25);
+      doc.addImage(order.signature_image, 'PNG', 14, currentY - 25, 60, 25);
     } else {
       doc.setFontSize(12);
       doc.setFont("times", "italic");
@@ -218,13 +241,13 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
   };
 
   const handleShareContract = async () => {
-    if (!order) return;
+    if (!order || !ownerProfile) return;
     
     try {
       setIsGeneratingContract(true);
       
       // 1. Geração do PDF (Não final, sem certificado de auditoria)
-      const doc = await generatePDF(order, ownerSignature, order.signature_image, false);
+      const doc = await generatePDF(order, ownerProfile, false);
       
       // 2. Upload para Supabase Storage
       const pdfBlob = doc.output('blob');
@@ -280,10 +303,10 @@ Por favor, acesse e assine digitalmente.
   };
 
   const handleDownloadFinalPDF = async () => {
-    if (!order) return;
+    if (!order || !ownerProfile) return;
     try {
       setIsGeneratingContract(true);
-      const doc = await generatePDF(order, ownerSignature, order.signature_image, true);
+      const doc = await generatePDF(order, ownerProfile, true);
       doc.save(`contrato-assinado-${order.id.split('-')[0]}.pdf`);
       showSuccess("Download do contrato finalizado iniciado.");
     } catch (error: any) {
