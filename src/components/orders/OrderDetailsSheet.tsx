@@ -140,6 +140,12 @@ Por favor, acesse e assine digitalmente.
     
     return `${baseUrl}?text=${encodedMessage}`;
   };
+  
+  // FIX: Definindo a função handleShareContract
+  const handleShareContract = (e: React.MouseEvent) => {
+    // A tag handles the navigation, we just provide feedback
+    showSuccess("Link de assinatura copiado e WhatsApp aberto!");
+  };
 
   const generatePDF = async (order: any, ownerProfile: OwnerProfile | null, isFinal: boolean) => {
     const doc = new jsPDF();
@@ -474,7 +480,7 @@ Por favor, acesse e assine digitalmente.
                 href={getWhatsappLink(order)}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={handleShareContract} // Mantém o feedback visual (toast)
+                onClick={handleShareContract} // Agora definido
                 className={cn(
                   "w-full h-14 bg-green-600 hover:bg-green-700 text-white font-bold gap-3 rounded-xl shadow-lg transition-all active:scale-95",
                   "inline-flex items-center justify-center text-base", // Estiliza como botão
