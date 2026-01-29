@@ -4,7 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Sidebar from "./components/layout/Sidebar";
-import MobileNav from "./components/layout/MobileNav";
+import MobileMenuTrigger from "./components/layout/MobileMenuTrigger"; // Renamed import
 import Dashboard from "./pages/Dashboard";
 import Inventory from "./pages/Inventory";
 import Orders from "./pages/Orders";
@@ -19,17 +19,27 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <div className="flex bg-gray-50 min-h-screen"> {/* Mantendo min-h-screen aqui para garantir que o fundo cubra a tela */}
-          {/* Sidebar fixa para desktop */}
-          <div className="hidden md:block">
-            <Sidebar />
-          </div>
+        <div className="flex min-h-screen w-full bg-gray-50">
           
-          <main className="flex-1 md:ml-64 flex flex-col"> {/* Adicionando flex-col para garantir que MobileNav e Routes se empilhem corretamente */}
-            {/* Navbar e Menu Hambúrguer para mobile */}
-            <MobileNav />
+          {/* 1. SIDEBAR (Só aparece no Desktop) */}
+          <aside className="hidden md:flex w-64 flex-col fixed inset-y-0 z-50">
+            <Sidebar /> 
+          </aside>
+
+          {/* 2. CONTEÚDO PRINCIPAL (Sempre visível, com margem no desktop) */}
+          <div className="flex-1 flex flex-col md:pl-64 transition-all duration-300">
             
-            <div className="flex-1"> {/* Garantindo que o conteúdo das rotas ocupe o restante do espaço */}
+            {/* 2.1 HEADER MOBILE (Só aparece no Mobile) */}
+            <header className="md:hidden flex h-16 items-center justify-between px-4 border-b bg-white sticky top-0 z-40 shadow-sm">
+              <div className="flex items-center gap-2">
+                <Package className="w-6 h-6 text-blue-600" />
+                <span className="text-xl font-bold text-blue-600">RentalPro</span>
+              </div>
+              <MobileMenuTrigger /> 
+            </header>
+
+            {/* 2.2 O LUGAR ONDE AS PÁGINAS CARREGAM (Routes) */}
+            <main className="flex-1 overflow-x-hidden">
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/inventory" element={<Inventory />} />
@@ -37,8 +47,8 @@ const App = () => (
                 <Route path="/timeline" element={<Timeline />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
-            </div>
-          </main>
+            </main>
+          </div>
         </div>
       </BrowserRouter>
     </TooltipProvider>
