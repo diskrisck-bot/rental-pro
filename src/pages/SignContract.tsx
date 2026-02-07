@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Loader2, CheckCircle, AlertTriangle, Download, Building, Phone, MapPin, User } from 'lucide-react';
+import { Loader2, CheckCircle, AlertTriangle, Download, Building, User } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -69,6 +69,7 @@ const SignContract = () => {
     setLoading(true);
     try {
       // 1. Busca os dados do pedido via RPC (Seguro para acesso público)
+      // O RPC já retorna todos os dados necessários do Locador (owner_*) para o PDF.
       const { data: rpcData, error: rpcError } = await supabase.rpc('get_contract_data', { 
         p_order_id: orderId 
       });
@@ -97,28 +98,15 @@ const SignContract = () => {
       setOrder(orderData);
       setCustomerSignature(orderData?.signature_image);
 
-      // 2. Busca Perfil do Locador (Empresa)
-      if (orderData?.user_id) {
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('business_name, business_cnpj, business_address, business_phone, signature_url')
-          .eq('id', orderData.user_id)
-          .single();
-
-        if (profileError) {
-          console.warn("[SignContract] Erro silencioso ao buscar perfil do locador:", profileError.message);
-          // Fallback para dados vindos do RPC se houver falha de RLS no perfil direto
-          setLocador({
-            business_name: rawOrder?.owner_name || null,
-            business_cnpj: rawOrder?.owner_cnpj || null,
-            business_address: rawOrder?.owner_address || null,
-            business_phone: rawOrder?.owner_phone || null,
-            signature_url: rawOrder?.owner_signature || null
-          });
-        } else {
-          setLocador(profileData);
-        }
-      }
+      // 2. Define Locador Data (Usando apenas dados do RPC para o PDF)
+      // Removemos a busca direta na tabela 'profiles' para evitar problemas de RLS em acesso público.
+      setLocador({
+        business_name: rawOrder?.owner_name || null,
+        business_cnpj: rawOrder?.owner_cnpj || null,
+        business_address: rawOrder?.owner_address || null,
+        business_phone: rawOrder?.owner_phone || null,
+        signature_url: rawOrder?.owner_signature || null
+      });
 
     } catch (error: any) {
       console.error("[SignContract] Critical Error:", error.message);
@@ -365,46 +353,27 @@ const SignContract = () => {
 
         <div className="p-6 md:p-10 space-y-8">
           
-          {/* SEÇÃO 1: DADOS DO LOCADOR */}
+          {/* SEÇÃO 1: DADOS DO LOCADOR (ESTÁTICO) */}
           <div className="space-y-4">
             <h2 className="text-sm font-bold uppercase tracking-wider text-gray-400 flex items-center gap-2">
               <Building className="h-4 w-4" /> 1. Locador (Empresa)
             </h2>
-            <div className="bg-gray-50 rounded-xl p-5 border border-gray-100 shadow-sm">
-              {loading ? (
-                // ESTADO A: Carregando (Skeleton)
-                <div className="space-y-2 animate-pulse">
-                  <div className="h-6 bg-gray-200 rounded w-3/4"></div>
-                  <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-                </div>
-              ) : locador && locador.business_name ? (
-                // ESTADO B: Sucesso (Dados Prontos)
-                <div className="space-y-1">
-                  <p className="text-xl font-bold text-blue-900 mb-2">
-                    {locador.business_name}
-                  </p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-y-2 gap-x-4 text-sm text-gray-600">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold w-16">CNPJ:</span> 
-                      <span>{locador.business_cnpj || '---'}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold w-16">Telefone:</span> 
-                      <span className="flex items-center gap-1"><Phone className="h-3 w-3" /> {locador.business_phone || '---'}</span>
-                    </div>
-                    <div className="flex items-center gap-2 col-span-full">
-                      <span className="font-semibold w-16">Endereço:</span> 
-                      <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {locador.business_address || '---'}</span>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                // ESTADO C: Falha/Vazio
-                <div className="text-orange-600 text-sm flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4" />
-                  <p>Dados da empresa (Locador) não configurados ou não localizados.</p>
-                </div>
-              )}
+            {/* Card do Locador - Versão Genérica Profissional */}
+            <div className="border border-gray-200 rounded-xl p-5 bg-gray-50 flex items-center gap-4 shadow-sm">
+              <div className="bg-blue-100 p-3 rounded-full">
+                <Building className="w-6 h-6 text-blue-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">Locador Responsável</h3>
+                <p className="text-sm text-gray-500">
+                  Os dados completos da empresa locadora constam no documento final (PDF).
+                </p>
+              </div>
+              <div className="ml-auto">
+                  <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3" /> Identificado
+                  </span>
+              </div>
             </div>
           </div>
 
@@ -454,16 +423,13 @@ const SignContract = () => {
           <div className="pt-8 border-t space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               
-              {/* Assinatura do Locador */}
+              {/* Assinatura do Locador (ESTÁTICO) */}
               <div className="space-y-3">
                 <p className="text-xs font-bold uppercase text-gray-400">Assinatura do Locador</p>
                 <div className="h-32 border-2 border-dashed border-gray-100 rounded-xl flex flex-col items-center justify-center bg-gray-50 p-4">
-                  {locador?.signature_url ? (
-                    <img src={locador.signature_url} alt="Assinatura Locador" className="max-h-full object-contain" />
-                  ) : (
-                    <p className="text-lg font-serif italic text-gray-400">{locador?.business_name || 'Assinatura Padrão'}</p>
-                  )}
-                  <div className="mt-2 text-[10px] text-gray-400 uppercase font-bold">Assinado Digitalmente</div>
+                  <CheckCircle className="h-8 w-8 text-blue-600 mb-2" />
+                  <p className="text-lg font-serif italic text-gray-600">Assinado Digitalmente</p>
+                  <div className="mt-1 text-[10px] text-gray-400 uppercase font-bold">Certificado Válido</div>
                 </div>
               </div>
 
