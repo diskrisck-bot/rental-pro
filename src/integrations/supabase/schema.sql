@@ -1,32 +1,42 @@
 -- SQL Migration for Contract Feature and Settings
 
--- 1. Add valor_reposicao to products table
+-- 1. Add valor_reposicao to products table (Keep this, it's product related)
 ALTER TABLE public.products
 ADD COLUMN IF NOT EXISTS valor_reposicao NUMERIC DEFAULT 0;
 
--- 2. Add forma_pagamento to orders table
+-- 2. Add forma_pagamento to orders table (Keep this, it's order related)
 ALTER TABLE public.orders
 ADD COLUMN IF NOT EXISTS forma_pagamento TEXT DEFAULT 'Pix';
 
--- 3. Add all required business fields to profiles table (for contract and settings)
--- NOTE: Using business_cnpj to match frontend implementation.
-ALTER TABLE public.profiles
-ADD COLUMN IF NOT EXISTS business_name TEXT;
+-- 3. CREATE NEW TABLE: company_settings
+CREATE TABLE public.company_settings (
+  user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  business_name TEXT,
+  business_cnpj TEXT,
+  business_address TEXT,
+  business_phone TEXT,
+  business_city TEXT,
+  business_state TEXT,
+  signature_url TEXT,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
-ALTER TABLE public.profiles
-ADD COLUMN IF NOT EXISTS business_cnpj TEXT;
+-- Enable RLS (REQUIRED for security)
+ALTER TABLE public.company_settings ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE public.profiles
-ADD COLUMN IF NOT EXISTS business_address TEXT;
+-- Create secure policies for each operation
+CREATE POLICY "settings_select_own" ON public.company_settings
+FOR SELECT TO authenticated USING (auth.uid() = user_id);
 
-ALTER TABLE public.profiles
-ADD COLUMN IF NOT EXISTS business_phone TEXT;
+CREATE POLICY "settings_insert_own" ON public.company_settings
+FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
 
-ALTER TABLE public.profiles
-ADD COLUMN IF NOT EXISTS business_city TEXT;
+CREATE POLICY "settings_update_own" ON public.company_settings
+FOR UPDATE TO authenticated USING (auth.uid() = user_id);
 
-ALTER TABLE public.profiles
-ADD COLUMN IF NOT EXISTS business_state TEXT;
+CREATE POLICY "settings_delete_own" ON public.company_settings
+FOR DELETE TO authenticated USING (auth.uid() = user_id);
 
--- 4. NOTE: The RPC 'get_contract_data' must also be updated manually in Supabase
--- to include all new fields in its return structure for the SignContract page to work correctly.
+-- 4. NOTE: The RPC 'get_contract_data' must be manually updated in Supabase
+-- to join with 'company_settings' instead of 'profiles' to fetch owner data.
+-- Example: LEFT JOIN company_settings cs ON o.created_by = cs.user_id
