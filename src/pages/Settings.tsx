@@ -13,16 +13,15 @@ import { Button } from '@/components/ui/button';
 import MaskedInput from 'react-text-mask';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
-interface Profile {
-  id: string;
-  first_name: string;
-  last_name: string;
+// Usamos esta interface para o estado local e para o payload de salvamento
+interface CompanySettings {
+  user_id: string;
   business_name: string;
   business_cnpj: string;
   business_address: string;
   business_phone: string;
-  business_city: string; // Novo
-  business_state: string; // Novo
+  business_city: string;
+  business_state: string;
   signature_url: string | null;
 }
 
@@ -30,74 +29,73 @@ interface Profile {
 const phoneMask = ['(', /[1-9]/, /\d/, ')', ' ', /\d/, /\d/, /\d/, /\d/, /\d/, '-', /\d/, /\d/, /\d/, /\d/];
 const cnpjMask = [/\d/, /\d/, '.', /\d/, /\d/, /\d/, '.', /\d/, /\d/, /\d/, '/', /\d/, /\d/, /\d/, /\d/, '-', /\d/, /\d/];
 
-// Helper function to fetch the current user's profile
-const fetchProfile = async (): Promise<Profile | null> => {
+// Helper function to fetch the current user's company settings
+const fetchCompanySettings = async (): Promise<CompanySettings | null> => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Usuário não autenticado.");
 
+  // *** MUDANÇA CRÍTICA: Buscando de company_settings ***
   const { data, error } = await supabase
-    .from('profiles')
-    .select('id, first_name, last_name, business_name, business_cnpj, business_address, business_phone, business_city, business_state, signature_url')
-    .eq('id', user.id)
+    .from('company_settings')
+    .select('user_id, business_name, business_cnpj, business_address, business_phone, business_city, business_state, signature_url')
+    .eq('user_id', user.id)
     .single();
 
   // Se o erro for 'não encontrado' (código 406), retornamos um objeto base.
-  // Isso permite que o formulário abra em branco para o primeiro preenchimento (UPSERT).
   if (error && error.code !== 'PGRST116') {
-    // Se for qualquer outro erro (RLS, schema, etc.), lançamos o erro para o useQuery
     throw error;
   }
   
-  const baseProfile: Profile = {
-    id: user.id,
-    first_name: '',
-    last_name: '',
-    avatar_url: '',
+  const baseSettings: CompanySettings = {
+    user_id: user.id,
     business_name: '',
     business_cnpj: '',
     business_address: '',
     business_phone: '',
-    business_city: '', // Novo
-    business_state: '', // Novo
+    business_city: '',
+    business_state: '',
     signature_url: null,
   };
 
-  return data ? { ...baseProfile, ...data } : baseProfile;
+  // Mapeia os dados retornados para a interface CompanySettings
+  return data ? { ...baseSettings, ...data } : baseSettings;
 };
 
 const Settings = () => {
   const queryClient = useQueryClient();
-  const [formData, setFormData] = useState<Omit<Profile, 'id' | 'first_name' | 'last_name'>>({
+  const [formData, setFormData] = useState<Omit<CompanySettings, 'user_id'>>({
     business_name: '',
     business_cnpj: '',
     business_address: '',
     business_phone: '',
-    business_city: '', // Novo
-    business_state: '', // Novo
+    business_city: '',
+    business_state: '',
     signature_url: null,
   });
   const [isFormDirty, setIsFormDirty] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
 
-  const { data: profile, isLoading, isError } = useQuery({
-    queryKey: ['userProfile'],
-    queryFn: fetchProfile,
+  const { data: settings, isLoading, isError } = useQuery({
+    queryKey: ['companySettings'],
+    queryFn: fetchCompanySettings,
     staleTime: Infinity,
   });
 
   useEffect(() => {
-    if (profile) {
+    if (settings) {
+      setUserId(settings.user_id);
       setFormData({
-        business_name: profile.business_name || '',
-        business_cnpj: profile.business_cnpj || '',
-        business_address: profile.business_address || '',
-        business_phone: profile.business_phone || '',
-        business_city: profile.business_city || '', // Lendo o novo campo
-        business_state: profile.business_state || '', // Lendo o novo campo
-        signature_url: profile.signature_url,
+        business_name: settings.business_name || '',
+        business_cnpj: settings.business_cnpj || '',
+        business_address: settings.business_address || '',
+        business_phone: settings.business_phone || '',
+        business_city: settings.business_city || '',
+        business_state: settings.business_state || '',
+        signature_url: settings.signature_url,
       });
       setIsFormDirty(false);
     }
-  }, [profile]);
+  }, [settings]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
@@ -108,25 +106,28 @@ const Settings = () => {
     setIsFormDirty(true);
   };
 
-  const updateProfileMutation = useMutation({
-    mutationFn: async (payload: Partial<Profile>) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Usuário não autenticado.");
+  const updateSettingsMutation = useMutation({
+    mutationFn: async (payload: Partial<CompanySettings>) => {
+      if (!userId) throw new Error("ID do usuário não encontrado.");
 
-      // Usando upsert para garantir que o perfil seja criado se não existir
+      // *** MUDANÇA CRÍTICA: Usando UPSERT na tabela company_settings ***
+      const payloadWithId = { 
+        user_id: userId, 
+        ...payload 
+      };
+      
       const { error } = await supabase
-        .from('profiles')
-        .upsert({ 
-          id: user.id, 
-          ...payload
-        }, { onConflict: 'id' });
+        .from('company_settings')
+        .upsert(payloadWithId, { onConflict: 'user_id' });
 
       if (error) throw error;
     },
     onSuccess: () => {
       showSuccess("Configurações salvas com sucesso!");
       setIsFormDirty(false);
-      queryClient.invalidateQueries({ queryKey: ['userProfile'] });
+      queryClient.invalidateQueries({ queryKey: ['companySettings'] });
+      // Invalida queries que dependem do perfil do locador (como OrderDetailsSheet)
+      queryClient.invalidateQueries({ queryKey: ['orderDetails'] }); 
     },
     onError: (error: any) => {
       showError("Erro ao salvar configurações: " + error.message);
@@ -134,13 +135,11 @@ const Settings = () => {
   });
 
   const handleSaveSignature = (base64Image: string) => {
-    // Salva apenas a assinatura, mas usa a mutação de perfil
-    updateProfileMutation.mutate({ signature_url: base64Image });
+    updateSettingsMutation.mutate({ signature_url: base64Image });
     setFormData(prev => ({ ...prev, signature_url: base64Image }));
   };
   
   const handleSaveDetails = () => {
-    // Se o formulário não estiver sujo, mas a assinatura foi alterada, a mutação de assinatura já cuidou disso.
     if (!isFormDirty) return;
     
     const payload = {
@@ -148,11 +147,11 @@ const Settings = () => {
       business_cnpj: formData.business_cnpj,
       business_address: formData.business_address,
       business_phone: formData.business_phone,
-      business_city: formData.business_city, // Salvando o novo campo
-      business_state: formData.business_state, // Salvando o novo campo
+      business_city: formData.business_city,
+      business_state: formData.business_state,
     };
     
-    updateProfileMutation.mutate(payload);
+    updateSettingsMutation.mutate(payload);
   };
 
   if (isLoading) {
@@ -163,7 +162,7 @@ const Settings = () => {
     );
   }
 
-  const isSaving = updateProfileMutation.isPending;
+  const isSaving = updateSettingsMutation.isPending;
 
   return (
     <div className="p-4 md:p-8 space-y-8 max-w-4xl mx-auto">
@@ -172,7 +171,6 @@ const Settings = () => {
         <p className="text-muted-foreground">Gerencie suas preferências e dados de locador.</p>
       </div>
       
-      {/* Aviso de Erro Suave (se houver falha crítica na busca) */}
       {isError && (
         <Alert variant="destructive" className="rounded-xl">
           <AlertTriangle className="h-4 w-4" />
@@ -183,7 +181,6 @@ const Settings = () => {
         </Alert>
       )}
 
-      {/* Detalhes da Empresa */}
       <Card className="rounded-xl shadow-sm">
         <CardHeader>
           <CardTitle className="text-xl flex items-center gap-2">
@@ -246,7 +243,6 @@ const Settings = () => {
             />
           </div>
           
-          {/* Novos Campos: Cidade e Estado */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="business_city">Cidade (Para Cláusula de Foro)</Label>
@@ -272,7 +268,7 @@ const Settings = () => {
           
           <Button 
             onClick={handleSaveDetails} 
-            disabled={!isFormDirty && !isSaving}
+            disabled={!isFormDirty || isSaving}
             className="w-full h-12 bg-blue-600 hover:bg-blue-700 mt-4"
           >
             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
@@ -281,7 +277,6 @@ const Settings = () => {
         </CardContent>
       </Card>
 
-      {/* Assinatura Digital */}
       <Card className="rounded-xl shadow-sm">
         <CardHeader>
           <CardTitle className="text-xl flex items-center gap-2">

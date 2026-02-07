@@ -84,6 +84,7 @@ interface OrderData {
   signature_image: string | null;
   status: string;
   order_items: OrderItem[];
+  created_by: string; // Adicionado para buscar as configurações da empresa
 }
 
 
@@ -106,7 +107,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     try {
       setLoading(true);
       
-      // 1. Fetch Order Data (including forma_pagamento and valor_reposicao)
+      // 1. Fetch Order Data
       const { data, error } = await supabase
         .from('orders')
         .select(`
@@ -121,19 +122,19 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
         .single();
 
       if (error) throw error;
-      setOrder(data as OrderData);
+      const orderData = data as OrderData;
+      setOrder(orderData);
       
-      // 2. Fetch Owner Profile (including city and state)
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
+      // 2. Fetch Owner Profile (from company_settings using the order creator's ID)
+      if (orderData.created_by) {
         const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
+          .from('company_settings') // *** MUDANÇA CRÍTICA AQUI ***
           .select('business_name, business_cnpj, business_address, business_phone, business_city, business_state, signature_url')
-          .eq('id', user.id) // Busca o perfil do usuário logado
+          .eq('user_id', orderData.created_by) // Busca o perfil do criador do pedido
           .single();
           
         if (profileError && profileError.code !== 'PGRST116') {
-          console.warn("Could not fetch owner profile details:", profileError.message);
+          console.warn("Could not fetch owner company settings:", profileError.message);
         } else {
           setOwnerProfile(profileData as OwnerProfile);
         }

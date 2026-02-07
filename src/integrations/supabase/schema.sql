@@ -1,18 +1,17 @@
 -- SQL Migration for Contract Feature and Settings
 
--- 1. Add valor_reposicao to products table (Keep this, it's product related)
+-- 1. Ensure necessary columns exist in products and orders
 ALTER TABLE public.products
 ADD COLUMN IF NOT EXISTS valor_reposicao NUMERIC DEFAULT 0;
 
--- 2. Add forma_pagamento to orders table (Keep this, it's order related)
 ALTER TABLE public.orders
 ADD COLUMN IF NOT EXISTS forma_pagamento TEXT DEFAULT 'Pix';
 
--- 3. CREATE NEW TABLE: company_settings
-CREATE TABLE public.company_settings (
+-- 2. CREATE DEFINITIVE TABLE: company_settings
+CREATE TABLE IF NOT EXISTS public.company_settings (
   user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   business_name TEXT,
-  business_cnpj TEXT,
+  business_cnpj TEXT, -- Usando CNPJ para consistência com o frontend
   business_address TEXT,
   business_phone TEXT,
   business_city TEXT,
@@ -21,22 +20,14 @@ CREATE TABLE public.company_settings (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Enable RLS (REQUIRED for security)
+-- 3. Habilita RLS (Segurança)
 ALTER TABLE public.company_settings ENABLE ROW LEVEL SECURITY;
 
--- Create secure policies for each operation
-CREATE POLICY "settings_select_own" ON public.company_settings
-FOR SELECT TO authenticated USING (auth.uid() = user_id);
+-- 4. Cria Política de Acesso (Permitir tudo para o dono)
+CREATE POLICY "Usuarios gerenciam sua propria empresa" ON public.company_settings
+    FOR ALL
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "settings_insert_own" ON public.company_settings
-FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "settings_update_own" ON public.company_settings
-FOR UPDATE TO authenticated USING (auth.uid() = user_id);
-
-CREATE POLICY "settings_delete_own" ON public.company_settings
-FOR DELETE TO authenticated USING (auth.uid() = user_id);
-
--- 4. NOTE: The RPC 'get_contract_data' must be manually updated in Supabase
+-- 5. NOTE: The RPC 'get_contract_data' must be manually updated in Supabase
 -- to join with 'company_settings' instead of 'profiles' to fetch owner data.
--- Example: LEFT JOIN company_settings cs ON o.created_by = cs.user_id
