@@ -184,7 +184,7 @@ const Orders = () => {
             </Button>
           </TooltipTrigger>
           <TooltipContent className="max-w-xs bg-gray-800 text-white p-3 rounded-lg">
-            <p className="text-xs">Vá em Configurações > Empresa para habilitar a emissão de pedidos.</p>
+            <p className="text-xs">Vá em Configurações &gt; Empresa para habilitar a emissão de pedidos.</p>
           </TooltipContent>
         </Tooltip>
       );
