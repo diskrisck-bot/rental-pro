@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { Loader2, CheckCircle, AlertTriangle, Download, Building, User } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { format, parseISO } from 'date-fns';
@@ -15,6 +15,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { cn } from '@/lib/utils';
 
+// Interfaces
 interface ProductItem {
   name: string;
   price: number;
@@ -68,8 +69,7 @@ const SignContract = () => {
     }
     setLoading(true);
     try {
-      // 1. Busca os dados do pedido via RPC (Seguro para acesso público)
-      // O RPC já retorna todos os dados necessários do Locador (owner_*) para o PDF.
+      // Busca os dados via RPC (Seguro para acesso público)
       const { data: rpcData, error: rpcError } = await supabase.rpc('get_contract_data', { 
         p_order_id: orderId 
       });
@@ -89,6 +89,8 @@ const SignContract = () => {
         total_amount: rawOrder?.total_amount || 0,
         signed_at: rawOrder?.signed_at || null,
         signature_image: rawOrder?.signature_image || null,
+        signer_ip: rawOrder?.signer_ip || null,
+        signer_user_agent: rawOrder?.signer_user_agent || null,
         status: rawOrder?.status || 'draft',
         fulfillment_type: rawOrder?.fulfillment_type || 'reservation',
         user_id: rawOrder?.user_id || rawOrder?.created_by || '',
@@ -98,8 +100,6 @@ const SignContract = () => {
       setOrder(orderData);
       setCustomerSignature(orderData?.signature_image);
 
-      // 2. Define Locador Data (Usando apenas dados do RPC para o PDF)
-      // Removemos a busca direta na tabela 'profiles' para evitar problemas de RLS em acesso público.
       setLocador({
         business_name: rawOrder?.owner_name || null,
         business_cnpj: rawOrder?.owner_cnpj || null,
@@ -110,9 +110,8 @@ const SignContract = () => {
 
     } catch (error: any) {
       console.error("[SignContract] Critical Error:", error.message);
-      showError("Não foi possível carregar o contrato. Verifique o link.");
+      showError("Não foi possível carregar o contrato.");
     } finally {
-      // GARANTIA: O loading deve ser desativado aqui para evitar tela travada.
       setLoading(false); 
     }
   };
@@ -121,6 +120,7 @@ const SignContract = () => {
     fetchData();
   }, [orderId]);
 
+  // FUNÇÃO DE ASSINATURA AJUSTADA (RPC)
   const handleSign = async () => {
     if (!orderId || !order || !customerSignature) return;
     if (!agreed) {
@@ -130,28 +130,24 @@ const SignContract = () => {
 
     setSigning(true);
     try {
+      // Captura IP do cliente
       const ipRes = await fetch('https://api.ipify.org?format=json');
       const ipData = await ipRes.json();
       
-      const newStatus = order?.fulfillment_type === 'immediate' ? 'picked_up' : 'reserved';
-      
-      const { error } = await supabase
-        .from('orders')
-        .update({
-          signed_at: new Date().toISOString(),
-          signer_ip: ipData?.ip || '0.0.0.0',
-          signer_user_agent: navigator.userAgent,
-          signature_image: customerSignature,
-          status: newStatus,
-          picked_up_at: newStatus === 'picked_up' ? new Date().toISOString() : null
-        })
-        .eq('id', orderId);
+      // Chamada da Função SQL via RPC para ignorar RLS e atualizar status
+      const { error } = await supabase.rpc('sign_order_contract', {
+        target_order_id: orderId,
+        signature_data: customerSignature,
+        client_ip: ipData?.ip || '0.0.0.0',
+        client_agent: navigator.userAgent
+      });
 
       if (error) throw error;
 
       showSuccess("Contrato assinado com sucesso!");
-      fetchData(); 
+      fetchData(); // Recarrega para mostrar status "Assinado" e habilitar PDF
     } catch (error: any) {
+      console.error("[Signature Error]", error.message);
       showError("Erro ao assinar: " + error.message);
     } finally {
       setSigning(false);
@@ -166,322 +162,132 @@ const SignContract = () => {
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
-      
-      const profile = locador || {};
       const isFinal = !!order.signed_at;
       
-      // Função para adicionar rodapé com marca d'água
       const addWatermark = (doc: jsPDF, pageNumber: number) => {
         doc.setPage(pageNumber);
         doc.setFontSize(8);
         doc.setTextColor(150, 150, 150);
-        const watermarkText = "Gerado e Assinado digitalmente via RentalPro (rentalpro.com.br)";
-        doc.text(watermarkText, pageWidth / 2, pageHeight - 10, { align: 'center' });
+        doc.text("Gerado via RentalPro (rentalpro.com.br)", pageWidth / 2, pageHeight - 10, { align: 'center' });
       };
       
-      // --- 1. Conteúdo do Contrato (Página 1) ---
-      
+      // Cabeçalho PDF
       doc.setFontSize(20);
       doc.setTextColor(30, 58, 138);
       doc.text("CONTRATO DE LOCAÇÃO", pageWidth / 2, 20, { align: 'center' });
       
-      // Dados do Locador (Empresa)
+      // Dados Locador
       doc.setFontSize(12);
       doc.setTextColor(0, 0, 0);
       doc.setFont("helvetica", "bold");
       doc.text("LOCADOR (EMPRESA)", 14, 35);
       doc.setFont("helvetica", "normal");
-      doc.text(`Nome: ${profile.business_name || 'N/A'}`, 14, 42);
-      doc.text(`CNPJ/CPF: ${profile.business_cnpj || 'N/A'}`, 14, 49);
-      doc.text(`Endereço: ${profile.business_address || 'N/A'}`, 14, 56);
-      doc.text(`Telefone: ${profile.business_phone || 'N/A'}`, 14, 63);
+      doc.text(`Nome: ${locador.business_name || 'N/A'}`, 14, 42);
+      doc.text(`CNPJ: ${locador.business_cnpj || 'N/A'}`, 14, 49);
       
-      // Dados do Locatário (Cliente)
+      // Dados Locatário
       doc.setFont("helvetica", "bold");
       doc.text("LOCATÁRIO (CLIENTE)", pageWidth / 2 + 10, 35);
       doc.setFont("helvetica", "normal");
-      doc.text(`Nome: ${order.customer_name || 'N/A'}`, pageWidth / 2 + 10, 42);
-      doc.text(`CPF: ${order.customer_cpf || 'N/A'}`, pageWidth / 2 + 10, 49);
-      doc.text(`Telefone: ${order.customer_phone || 'N/A'}`, pageWidth / 2 + 10, 56);
+      doc.text(`Nome: ${order.customer_name}`, pageWidth / 2 + 10, 42);
+      doc.text(`CPF: ${order.customer_cpf}`, pageWidth / 2 + 10, 49);
       
-      // Período e Valor
-      doc.setFontSize(12);
-      doc.text(`Pedido: #${order.id.split('-')[0]}`, 14, 75);
-      doc.text(`Período: ${format(parseISO(order.start_date), "dd/MM/yyyy")} a ${format(parseISO(order.end_date), "dd/MM/yyyy")}`, 14, 82);
-
       // Tabela de Itens
-      const tableData = order.items.map((item: any) => [
-        item.products?.name || 'Produto',
-        item.quantity,
-        `R$ ${Number(item.products?.price || 0).toFixed(2)}`
-      ]);
-
       autoTable(doc, {
         startY: 90,
         head: [['Produto', 'Qtd', 'Preço/Dia']],
-        body: tableData,
-        headStyles: { fillStyle: 'F', fillColor: [37, 99, 235] },
+        body: order.items.map(i => [i.products.name, i.quantity, `R$ ${i.products.price.toFixed(2)}`]),
+        headStyles: { fillColor: [37, 99, 235] },
       });
 
       const finalY = (doc as any).lastAutoTable.finalY || 120;
-      doc.setFontSize(14);
       doc.setFont("helvetica", "bold");
-      doc.text(`VALOR TOTAL: R$ ${Number(order.total_amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, pageWidth - 14, finalY + 15, { align: 'right' });
+      doc.text(`VALOR TOTAL: R$ ${order.total_amount.toLocaleString('pt-BR')}`, pageWidth - 14, finalY + 15, { align: 'right' });
 
-      // Assinaturas (Locador e Locatário)
-      let currentY = finalY + 40;
-      
-      // Assinatura do Locador (Dono)
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-      doc.text("__________________________________________", pageWidth - 80, currentY);
-      doc.text("Assinatura do Locador (RentalPro)", pageWidth - 80, currentY + 5);
-      
-      if (profile.signature_url) {
-        doc.addImage(profile.signature_url, 'PNG', pageWidth - 80, currentY - 25, 60, 25);
-      } else {
-        doc.setFontSize(12);
-        doc.setFont("times", "italic");
-        doc.text(profile.business_name || 'Locador', pageWidth - 80, currentY - 10);
-        doc.setFont("helvetica", "normal");
-      }
-
-      // Assinatura do Locatário (Cliente)
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-      doc.text("__________________________________________", 14, currentY);
-      doc.text("Assinatura do Locatário (Cliente)", 14, currentY + 5);
-      
-      if (order.signature_image) {
-        doc.addImage(order.signature_image, 'PNG', 14, currentY - 25, 60, 25);
-      } else {
-        doc.setFontSize(12);
-        doc.setFont("times", "italic");
-        doc.text("Aguardando Assinatura", 14, currentY - 10);
-        doc.setFont("helvetica", "normal");
-      }
-      
-      // --- 2. Certificado de Assinatura (Página 2, se assinado) ---
+      // Certificado Digital (Página 2)
       if (isFinal && order.signed_at) {
         doc.addPage();
-        
-        doc.setFontSize(18);
-        doc.setTextColor(30, 58, 138);
-        doc.text("CERTIFICADO DE ASSINATURA ELETRÔNICA", pageWidth / 2, 20, { align: 'center' });
-        
-        doc.setFontSize(12);
-        doc.setTextColor(0, 0, 0);
-        
-        const auditY = 40;
-        
-        doc.text("Este documento foi assinado digitalmente pelo Locatário, conferindo validade jurídica conforme a Medida Provisória nº 2.200-2/2001.", 14, auditY);
-        
+        doc.setFontSize(16);
+        doc.text("CERTIFICADO DE ASSINATURA", pageWidth / 2, 20, { align: 'center' });
         doc.setFontSize(10);
-        doc.setFont("helvetica", "bold");
-        doc.text("Detalhes da Assinatura:", 14, auditY + 15);
-        
         doc.setFont("helvetica", "normal");
-        doc.text(`ID do Documento (Hash): ${order.id}`, 14, auditY + 25);
-        doc.text(`Assinado por: ${order.customer_name} (Locatário)`, 14, auditY + 35);
-        doc.text(`Data/Hora da Assinatura: ${format(parseISO(order.signed_at), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })}`, 14, auditY + 45);
-        doc.text(`IP de Origem: ${order.signer_ip || 'N/A'}`, 14, auditY + 55);
-        doc.text(`Dispositivo (User Agent): ${order.signer_user_agent || 'N/A'}`, 14, auditY + 65, { maxWidth: pageWidth - 28 });
+        doc.text(`Assinado em: ${format(parseISO(order.signed_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`, 14, 40);
+        doc.text(`IP: ${order.signer_ip}`, 14, 50);
+        doc.addImage(order.signature_image!, 'PNG', 14, 60, 50, 20);
       }
 
-      // Add watermark to all pages
-      const totalPages = doc.internal.pages.length;
-      for (let i = 1; i <= totalPages; i++) {
-        addWatermark(doc, i);
-      }
-
-      doc.save(`contrato-assinado-${order.id.split('-')[0]}.pdf`);
-      showSuccess("Download do contrato finalizado iniciado.");
-    } catch (error: any) {
-      showError("Erro ao gerar PDF final: " + error.message);
-    } finally {
-      setIsDownloading(false);
-    }
+      for (let i = 1; i <= doc.internal.pages.length; i++) addWatermark(doc, i);
+      doc.save(`contrato-${order.id.split('-')[0]}.pdf`);
+    } catch (e) { showError("Erro ao gerar PDF"); } finally { setIsDownloading(false); }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 gap-4">
-        <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
-        <p className="text-muted-foreground font-medium">Carregando contrato...</p>
-      </div>
-    );
-  }
-
-  if (!order) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-8 bg-gray-50">
-        <div className="text-center bg-white p-10 rounded-2xl shadow-xl border border-red-100 max-w-md">
-          <AlertTriangle className="h-16 w-16 text-red-500 mx-auto mb-6" />
-          <h1 className="text-2xl font-bold text-gray-900">Contrato não encontrado</h1>
-          <p className="text-muted-foreground mt-3">Este contrato pode ter sido removido ou o link está incorreto.</p>
-          <Button variant="outline" className="mt-8 w-full" onClick={() => window.location.reload()}>Tentar Novamente</Button>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
 
   const isSigned = !!order?.signed_at;
 
   return (
-    <div className="min-h-screen bg-gray-100 py-8 px-4 md:py-12">
-      <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
+    <div className="min-h-screen bg-gray-50 py-12 px-4">
+      <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
         
-        {/* Cabeçalho de Status */}
-        <div className={cn(
-          "p-6 text-center border-b",
-          isSigned ? "bg-green-50 border-green-100" : "bg-blue-50 border-blue-100"
-        )}>
-          <h1 className="text-2xl font-bold text-gray-900">Contrato de Locação Digital</h1>
-          <p className="text-sm text-gray-500 mt-1">Pedido #{order?.id?.split('-')[0] || '---'}</p>
+        {/* Header de Status */}
+        <div className={cn("p-6 text-center border-b", isSigned ? "bg-green-50" : "bg-blue-50")}>
+          <h1 className="text-2xl font-bold">Contrato Digital RentalPro</h1>
           <div className="mt-3">
             {isSigned ? (
-              <Badge className="bg-green-600 text-white hover:bg-green-700 py-1 px-4 gap-2">
-                <CheckCircle className="h-4 w-4" /> CONTRATO ASSINADO
-              </Badge>
+              <Badge className="bg-green-600 text-white"><CheckCircle className="mr-2 h-4 w-4" /> ASSINADO</Badge>
             ) : (
-              <Badge variant="outline" className="border-blue-600 text-blue-600 py-1 px-4 gap-2">
-                <AlertTriangle className="h-4 w-4" /> AGUARDANDO ASSINATURA
-              </Badge>
+              <Badge variant="outline" className="text-blue-600 border-blue-600">AGUARDANDO ASSINATURA</Badge>
             )}
           </div>
         </div>
 
-        <div className="p-6 md:p-10 space-y-8">
-          
-          {/* SEÇÃO 1: DADOS DO LOCADOR (ESTÁTICO) */}
-          <div className="space-y-4">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-gray-400 flex items-center gap-2">
-              <Building className="h-4 w-4" /> 1. Locador (Empresa)
-            </h2>
-            {/* Card do Locador - Versão Genérica Profissional */}
-            <div className="border border-gray-200 rounded-xl p-5 bg-gray-50 flex items-center gap-4 shadow-sm">
-              <div className="bg-blue-100 p-3 rounded-full">
-                <Building className="w-6 h-6 text-blue-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900">Locador Responsável</h3>
-                <p className="text-sm text-gray-500">
-                  Os dados completos da empresa locadora constam no documento final (PDF).
-                </p>
-              </div>
-              <div className="ml-auto">
-                  <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium flex items-center gap-1">
-                    <CheckCircle className="w-3 h-3" /> Identificado
-                  </span>
-              </div>
+        <div className="p-8 space-y-8">
+          {/* Seção Dados Cliente */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-4 border rounded-xl bg-gray-50">
+              <p className="text-xs font-bold text-gray-400">LOCATÁRIO</p>
+              <p className="font-semibold">{order?.customer_name}</p>
+              <p className="text-sm text-gray-500">{order?.customer_cpf}</p>
+            </div>
+            <div className="p-4 border rounded-xl bg-gray-50">
+              <p className="text-xs font-bold text-gray-400">TOTAL DO ALUGUEL</p>
+              <p className="font-bold text-xl text-blue-600">R$ {order?.total_amount.toLocaleString('pt-BR')}</p>
             </div>
           </div>
 
-          {/* SEÇÃO 2: DADOS DO LOCATÁRIO */}
-          <div className="space-y-4">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-gray-400 flex items-center gap-2">
-              <User className="h-4 w-4" /> 2. Locatário (Cliente)
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="border rounded-xl p-4">
-                <p className="text-xs text-gray-500 font-bold uppercase">Nome Completo</p>
-                <p className="font-medium">{order?.customer_name || '---'}</p>
+          {/* Assinatura */}
+          <div className="pt-8 border-t">
+            <p className="text-sm font-bold mb-4">ASSINATURA DO CLIENTE</p>
+            {isSigned ? (
+              <div className="h-32 border border-green-200 bg-green-50 rounded-xl flex items-center justify-center p-4">
+                <img src={order?.signature_image || ''} className="max-h-full" alt="Assinatura" />
               </div>
-              <div className="border rounded-xl p-4">
-                <p className="text-xs text-gray-500 font-bold uppercase">Documento (CPF/CNPJ)</p>
-                <p className="font-medium">{order?.customer_cpf || 'Não informado'}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* SEÇÃO 3: ITENS E PERÍODO */}
-          <div className="space-y-4">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-gray-400">3. Objeto da Locação e Valores</h2>
-            <div className="border rounded-xl overflow-hidden">
-              <div className="bg-gray-50 p-4 border-b flex justify-between items-center">
-                <span className="text-sm font-semibold">Resumo do Período</span>
-                <span className="text-sm font-bold text-blue-600">
-                  {order?.start_date ? format(parseISO(order.start_date), "dd/MM/yy") : '---'} - {order?.end_date ? format(parseISO(order.end_date), "dd/MM/yy") : '---'}
-                </span>
-              </div>
-              <div className="divide-y">
-                {order?.items?.map((item, idx) => (
-                  <div key={idx} className="p-4 flex justify-between items-center text-sm">
-                    <span>{item?.products?.name || 'Produto'} <span className="text-gray-400 font-mono">x{item?.quantity || 0}</span></span>
-                    <span className="font-medium">R$ {Number(item?.products?.price || 0).toFixed(2)} /dia</span>
-                  </div>
-                ))}
-              </div>
-              <div className="bg-blue-600 p-4 text-white flex justify-between items-center">
-                <span className="font-bold">VALOR TOTAL</span>
-                <span className="text-xl font-black">R$ {Number(order?.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* SEÇÃO 4: ASSINATURAS */}
-          <div className="pt-8 border-t space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              
-              {/* Assinatura do Locador (ESTÁTICO) */}
-              <div className="space-y-3">
-                <p className="text-xs font-bold uppercase text-gray-400">Assinatura do Locador</p>
-                <div className="h-32 border-2 border-dashed border-gray-100 rounded-xl flex flex-col items-center justify-center bg-gray-50 p-4">
-                  <CheckCircle className="h-8 w-8 text-blue-600 mb-2" />
-                  <p className="text-lg font-serif italic text-gray-600">Assinado Digitalmente</p>
-                  <div className="mt-1 text-[10px] text-gray-400 uppercase font-bold">Certificado Válido</div>
-                </div>
-              </div>
-
-              {/* Assinatura do Locatário */}
-              <div className="space-y-3">
-                <p className="text-xs font-bold uppercase text-gray-400">Sua Assinatura (Locatário)</p>
-                {isSigned ? (
-                  <div className="h-32 border-2 border-dashed border-green-100 rounded-xl flex items-center justify-center bg-green-50 p-4">
-                    <img src={order?.signature_image || ''} alt="Sua Assinatura" className="max-h-full object-contain" />
-                  </div>
-                ) : (
-                  <SignaturePad onSave={setCustomerSignature} initialSignature={customerSignature} disabled={signing} />
-                )}
-              </div>
-            </div>
-
-            {!isSigned && (
-              <div className="space-y-4 bg-orange-50 border border-orange-100 p-6 rounded-2xl">
-                <div className="flex items-start gap-3">
-                  <Checkbox id="terms" checked={agreed} onCheckedChange={(val) => setAgreed(!!val)} className="mt-1" />
-                  <label htmlFor="terms" className="text-sm text-orange-900 leading-relaxed cursor-pointer">
-                    Confirmo que recebi os itens em perfeito estado e concordo com todos os termos de locação, responsabilidades por danos e prazos de devolução estabelecidos neste instrumento.
+            ) : (
+              <div className="space-y-6">
+                <SignaturePad onSave={setCustomerSignature} />
+                <div className="flex items-start gap-3 bg-blue-50 p-4 rounded-xl">
+                  <Checkbox id="terms" checked={agreed} onCheckedChange={(v) => setAgreed(!!v)} />
+                  <label htmlFor="terms" className="text-sm text-blue-900">
+                    Concordo com os termos de locação e responsabilidades por danos.
                   </label>
                 </div>
                 <Button 
                   onClick={handleSign} 
                   disabled={!agreed || !customerSignature || signing}
-                  className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-lg font-bold shadow-lg shadow-blue-100 active:scale-[0.98] transition-all"
+                  className="w-full h-14 text-lg bg-blue-600"
                 >
-                  {signing ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <CheckCircle className="mr-2 h-5 w-5" />}
-                  {signing ? 'Processando Assinatura...' : 'Finalizar e Assinar Contrato'}
+                  {signing ? <Loader2 className="animate-spin" /> : "Finalizar e Assinar Contrato"}
                 </Button>
               </div>
             )}
 
             {isSigned && (
-              <Button 
-                onClick={generatePDF} 
-                disabled={isDownloading}
-                variant="outline"
-                className="w-full h-14 border-green-600 text-green-600 hover:bg-green-50 font-bold gap-2"
-              >
-                {isDownloading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
-                Baixar Via do Contrato (PDF)
+              <Button onClick={generatePDF} variant="outline" className="w-full h-14 mt-4 text-green-600 border-green-600">
+                <Download className="mr-2 h-5 w-5" /> Baixar PDF Assinado
               </Button>
             )}
           </div>
-
         </div>
-      </div>
-      <div className="mt-8 text-center text-gray-400 text-xs">
-        Documento gerado eletronicamente via <span className="font-bold">RentalPro</span>
       </div>
     </div>
   );
