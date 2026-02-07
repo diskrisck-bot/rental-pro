@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Loader2, Download, MessageCircle, CheckCircle, DollarSign, Clock, Zap, Calendar, AlertTriangle, Package, ArrowRightLeft } from 'lucide-react';
+import { Plus, Search, Loader2, Download, MessageCircle, CheckCircle, DollarSign, Clock, Zap, Calendar, AlertTriangle, Package, ArrowRightLeft, Edit, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
@@ -25,19 +25,17 @@ import { fetchBusinessConfig, fetchProductCount } from '@/integrations/supabase/
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
-// --- FUNÇÃO CORRIGIDA DE STATUS (IGUAL AO DASHBOARD) ---
+// --- STATUS BADGES ---
 const getStatusBadge = (status: string) => {
   switch (status) {
     case 'draft': 
       return <Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-200 uppercase text-[10px]">Rascunho</Badge>;
-    
     case 'pending_signature': 
       return (
         <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 uppercase text-[10px] flex items-center gap-1 w-fit">
            <Clock className="w-3 h-3" /> Aguardando Assinatura
         </Badge>
       );
-
     case 'signed': 
       return (
         <Badge className="bg-green-100 text-green-700 border-green-200 uppercase text-[10px] flex items-center gap-1 w-fit">
@@ -45,31 +43,22 @@ const getStatusBadge = (status: string) => {
           Assinado
         </Badge>
       );
-    
     case 'reserved': 
       return <Badge className="bg-blue-50 text-blue-700 border-blue-200 uppercase text-[10px]">Reservado</Badge>;
-    
     case 'picked_up': 
       return <Badge className="bg-purple-100 text-purple-800 border-purple-200 uppercase text-[10px]">Em Andamento</Badge>;
-    
     case 'returned': 
       return <Badge className="bg-green-100 text-green-800 border-green-200 uppercase text-[10px]">Concluído</Badge>;
-    
     case 'canceled': 
       return <Badge className="bg-red-50 text-red-700 border-red-200 uppercase text-[10px]">Cancelado</Badge>;
-    
     default: 
       return <Badge className="bg-gray-100 text-gray-800 uppercase text-[10px]">{status}</Badge>;
   }
 };
 
 const getPaymentTimingBadge = (timing: string) => {
-  if (timing === 'paid_on_pickup') {
-    return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]"><DollarSign className="h-3 w-3 mr-1" /> Pago (Retirada)</Badge>;
-  }
-  if (timing === 'pay_on_return') {
-    return <Badge className="bg-orange-50 text-orange-700 border-orange-200 text-[10px]"><Clock className="h-3 w-3 mr-1" /> A Pagar (Devolução)</Badge>;
-  }
+  if (timing === 'paid_on_pickup') return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]"><DollarSign className="h-3 w-3 mr-1" /> Pago (Retirada)</Badge>;
+  if (timing === 'pay_on_return') return <Badge className="bg-orange-50 text-orange-700 border-orange-200 text-[10px]"><Clock className="h-3 w-3 mr-1" /> A Pagar (Devolução)</Badge>;
   return null;
 };
 
@@ -212,6 +201,9 @@ const Orders = () => {
               ) : (
                 filteredOrders.map((order) => {
                   const isSigned = !!order.signed_at;
+                  // LÓGICA DE EDIÇÃO: Só pode editar se NÃO estiver assinado e NÃO estiver cancelado/finalizado
+                  const isEditable = !isSigned && order.status !== 'canceled' && order.status !== 'returned';
+                  
                   const whatsappLink = getWhatsappLink(order, isSigned);
                   return (
                     <TableRow key={order.id} className="hover:bg-gray-50/80 transition-colors cursor-pointer" onClick={() => handleViewDetails(order.id)}>
@@ -228,13 +220,26 @@ const Orders = () => {
                         R$ {Number(order.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex justify-end gap-2">
+                        <div className="flex justify-end gap-2 items-center">
+                          
+                          {/* BOTÃO DE EDITAR (NOVO) */}
+                          {isEditable && (
+                            <div onClick={(e) => e.stopPropagation()}>
+                                <CreateOrderDialog orderId={order.id} onOrderCreated={fetchOrders}>
+                                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-blue-600 hover:bg-blue-50 hover:text-blue-700" title="Editar Pedido">
+                                        <Edit className="h-4 w-4" />
+                                    </Button>
+                                </CreateOrderDialog>
+                            </div>
+                          )}
+
                           <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
-                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-green-600 hover:bg-green-50 hover:text-green-700">
+                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-green-600 hover:bg-green-50 hover:text-green-700" title="WhatsApp">
                               <MessageCircle className="h-4 w-4" />
                             </Button>
                           </a>
-                          <Button size="sm" variant="ghost" onClick={() => handleViewDetails(order.id)} className="h-8 w-8 p-0 text-gray-400 hover:text-blue-600">
+                          
+                          <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); handleViewDetails(order.id); }} className="h-8 w-8 p-0 text-gray-400 hover:text-blue-600" title="Ver Detalhes">
                              <ArrowRightLeft className="h-4 w-4" />
                           </Button>
                         </div>
