@@ -1,4 +1,3 @@
-' character as '>' inside TooltipContent.">
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -20,10 +19,10 @@ import { ptBR } from 'date-fns/locale';
 import CreateOrderDialog from '@/components/orders/CreateOrderDialog';
 import OrderDetailsSheet from '@/components/orders/OrderDetailsSheet';
 import { showError } from '@/utils/toast';
-import { useSearchParams, useNavigate } from 'react-router-dom'; // Import useNavigate
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { fetchBusinessConfig } from '@/integrations/supabase/queries'; // Import new query
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'; // Import Tooltip components
+import { fetchBusinessConfig } from '@/integrations/supabase/queries';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 const getStatusBadge = (status: string) => {
   switch (status) {
@@ -80,7 +79,6 @@ const getFulfillmentTypeBadge = (type: string) => {
   return null;
 };
 
-// Função auxiliar para gerar o link do WhatsApp (copiada de OrderDetailsSheet)
 const getWhatsappLink = (order: any, isSigned: boolean) => {
     if (!order) return '#';
     
@@ -104,12 +102,10 @@ Por favor, acesse e assine digitalmente.
     const encodedMessage = encodeURIComponent(messageText);
     
     let phone = order.customer_phone ? order.customer_phone.replace(/\D/g, '') : '';
-    // Adiciona DDI 55 se o número tiver 10 ou 11 dígitos (formato brasileiro)
     if (phone.length === 10 || phone.length === 11) {
       phone = `55${phone}`;
     }
     
-    // Se o número for inválido ou vazio, usa wa.me/ (que abre a lista de contatos)
     const baseUrl = phone ? `https://wa.me/${phone}` : `https://wa.me/`;
     
     return `${baseUrl}?text=${encodedMessage}`;
@@ -123,13 +119,12 @@ const Orders = () => {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate(); // Initialize useNavigate
+  const navigate = useNavigate();
 
-  // Fetch business configuration for validation
   const { data: businessConfig, isLoading: isLoadingConfig } = useQuery({
     queryKey: ['businessConfig'],
     queryFn: fetchBusinessConfig,
-    staleTime: 1000 * 60 * 5, // Cache por 5 minutos
+    staleTime: 1000 * 60 * 5,
   });
 
   const isConfigIncomplete = !businessConfig?.business_name || !businessConfig?.business_cnpj;
@@ -170,13 +165,11 @@ const Orders = () => {
     fetchOrders();
   }, []);
   
-  // Efeito para lidar com a abertura do sheet via URL (fix 1)
   useEffect(() => {
     const idFromUrl = searchParams.get('id');
     if (idFromUrl) {
       setSelectedOrderId(idFromUrl);
       setIsSheetOpen(true);
-      // Limpa o parâmetro da URL para evitar reabertura
       setSearchParams({}, { replace: true });
     }
   }, [searchParams, setSearchParams]);
@@ -198,7 +191,6 @@ const Orders = () => {
 
   return (
     <div className="p-4 md:p-8 space-y-6">
-      {/* Ajuste de Cabeçalho: flex-col no mobile, flex-row no desktop */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Pedidos</h1>
@@ -243,7 +235,7 @@ const Orders = () => {
       </div>
 
       <div className="border rounded-xl bg-white overflow-hidden shadow-sm">
-        <div className="overflow-x-auto"> {/* Garantido overflow-x-auto */}
+        <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -305,19 +297,17 @@ const Orders = () => {
                         <div className="flex justify-end gap-2">
                           {isSigned ? (
                             <>
-                              {/* Botão 1: Baixar Contrato (Abre detalhes para download) */}
                               <Button 
                                 variant="outline" 
                                 size="sm" 
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleViewDetails(order.id); // Abre o painel onde o download é possível
+                                  handleViewDetails(order.id);
                                 }}
                                 className="text-green-600 border-green-200 hover:bg-green-50"
                               >
                                 <Download className="h-4 w-4" />
                               </Button>
-                              {/* Botão 2: Reenviar no WhatsApp */}
                               <a 
                                 href={whatsappLink}
                                 target="_blank"
@@ -330,7 +320,6 @@ const Orders = () => {
                               </a>
                             </>
                           ) : (
-                            // Cenário A: Enviar para Assinar
                             <a 
                               href={whatsappLink}
                               target="_blank"
