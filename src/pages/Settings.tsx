@@ -73,7 +73,8 @@ const Settings = () => {
     signature_url: null,
   });
   const [isFormDirty, setIsFormDirty] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
+  // Removendo o estado userId, pois vamos buscá-lo na mutação
+  // const [userId, setUserId] = useState<string | null>(null); 
 
   const { data: settings, isLoading, isError } = useQuery({
     queryKey: ['companySettings'],
@@ -83,7 +84,7 @@ const Settings = () => {
 
   useEffect(() => {
     if (settings) {
-      setUserId(settings.user_id);
+      // setUserId(settings.user_id); // Não precisamos mais disso
       setFormData({
         business_name: settings.business_name || '',
         business_cnpj: settings.business_cnpj || '',
@@ -108,14 +109,21 @@ const Settings = () => {
 
   const updateSettingsMutation = useMutation({
     mutationFn: async (payload: Partial<CompanySettings>) => {
-      if (!userId) throw new Error("ID do usuário não encontrado.");
+      // 1. Recuperar a sessão atual de forma robusta
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        // Lançar erro para ser capturado pelo onError
+        throw new Error("ID do usuário não encontrado. Por favor, faça login novamente.");
+      }
+      const userId = user.id;
 
-      // *** MUDANÇA CRÍTICA: Usando UPSERT na tabela company_settings ***
+      // 2. Montar o payload com o user_id garantido
       const payloadWithId = { 
         user_id: userId, 
         ...payload 
       };
       
+      // 3. Executar UPSERT
       const { error } = await supabase
         .from('company_settings')
         .upsert(payloadWithId, { onConflict: 'user_id' });
@@ -126,10 +134,10 @@ const Settings = () => {
       showSuccess("Configurações salvas com sucesso!");
       setIsFormDirty(false);
       queryClient.invalidateQueries({ queryKey: ['companySettings'] });
-      // Invalida queries que dependem do perfil do locador (como OrderDetailsSheet)
       queryClient.invalidateQueries({ queryKey: ['orderDetails'] }); 
     },
     onError: (error: any) => {
+      // Exibe a mensagem de erro capturada, incluindo a mensagem de "ID do usuário não encontrado"
       showError("Erro ao salvar configurações: " + error.message);
     },
   });
