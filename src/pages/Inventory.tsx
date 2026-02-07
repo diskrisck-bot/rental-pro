@@ -32,12 +32,12 @@ import {
 import { supabase } from '@/lib/supabase';
 import { showSuccess, showError } from '@/utils/toast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchInventoryAnalytics } from '@/integrations/supabase/queries';
 import { cn } from '@/lib/utils';
 import EditProductSheet from '@/components/inventory/EditProductSheet';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { isWithinInterval, startOfDay, parseISO } from 'date-fns';
 
-// Tipagem básica para os dados da view
+// Tipagem
 interface InventoryItem {
   id: string;
   name: string;
@@ -48,9 +48,7 @@ interface InventoryItem {
   available_quantity: number;
 }
 
-const getAvailabilityStatus = (item: InventoryItem) => {
-  const available = item.available_quantity;
-  const total = item.total_quantity;
+const getAvailabilityStatus = (available: number, total: number) => {
   const percentage = total > 0 ? (available / total) : 0;
 
   if (available <= 0) {
@@ -60,7 +58,7 @@ const getAvailabilityStatus = (item: InventoryItem) => {
       icon: <AlertTriangle className="h-4 w-4 text-red-500" />
     };
   }
-  if (percentage <= 0.2) { // 20% ou menos
+  if (percentage <= 0.2) { 
     return { 
       color: 'text-orange-600 font-bold', 
       badge: <Badge variant="secondary" className="ml-2 bg-orange-100 text-orange-800">Baixo Estoque</Badge>,
@@ -74,9 +72,10 @@ const getAvailabilityStatus = (item: InventoryItem) => {
   };
 };
 
-// Novo componente para o Card Mobile
-const ProductCardMobile = ({ product, handleEditProduct }: { product: InventoryItem, handleEditProduct: (id: string) => void }) => {
-  const status = getAvailabilityStatus(product);
+// Componente Mobile
+const ProductCardMobile = ({ product, available, handleEditProduct }: { product: any, available: number, handleEditProduct: (id: string) => void }) => {
+  const status = getAvailabilityStatus(available, product.total_quantity);
+  const rented = product.total_quantity - available;
   
   return (
     <div className="bg-white border rounded-xl p-4 shadow-sm space-y-3">
@@ -96,33 +95,21 @@ const ProductCardMobile = ({ product, handleEditProduct }: { product: InventoryI
       </div>
       
       <div className="grid grid-cols-3 gap-4 text-center border-t pt-3">
-        <div>
-          <p className="text-xs text-muted-foreground">Total</p>
-          <p className="font-semibold">{product.total_quantity}</p>
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground">Alugados</p>
-          <p className="font-semibold text-blue-600">{product.active_rentals}</p>
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground">Diária</p>
-          <p className="font-semibold">R$ {Number(product.price).toFixed(2)}</p>
-        </div>
+        <div><p className="text-xs text-muted-foreground">Total</p><p className="font-semibold">{product.total_quantity}</p></div>
+        <div><p className="text-xs text-muted-foreground">Alugados</p><p className="font-semibold text-blue-600">{rented}</p></div>
+        <div><p className="text-xs text-muted-foreground">Diária</p><p className="font-semibold">R$ {Number(product.price).toFixed(2)}</p></div>
       </div>
       
       <div className="flex items-center justify-between border-t pt-3">
         <p className="text-sm font-semibold text-gray-700">Disponível Hoje:</p>
         <div className="flex items-center gap-2">
-          <span className={cn("text-lg", status.color)}>
-            {product.available_quantity}
-          </span>
+          <span className={cn("text-lg", status.color)}>{available}</span>
           {status.icon}
         </div>
       </div>
     </div>
   );
 };
-
 
 const Inventory = () => {
   const queryClient = useQueryClient();
@@ -131,302 +118,158 @@ const Inventory = () => {
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
   
   const [newProduct, setNewProduct] = useState({
-    name: '',
-    type: 'trackable',
-    total_quantity: 1,
-    price: 0,
-    serial_number: '', // Novo campo para o serial
+    name: '', type: 'trackable', total_quantity: 1, price: 0, serial_number: '',
   });
 
-  const { data: products, isLoading, isError } = useQuery<InventoryItem[]>({
-    queryKey: ['inventoryAnalytics'],
-    queryFn: fetchInventoryAnalytics,
+  // 1. Busca todos os produtos ativos
+  const { data: rawProducts, isLoading: loadingProducts } = useQuery({
+    queryKey: ['allProducts'],
+    queryFn: async () => {
+      const { data } = await supabase.from('products').select('*').eq('active', true).order('name');
+      return data || [];
+    }
   });
+
+  // 2. Busca pedidos ativos (Assinados, Reservados ou Na Rua)
+  const { data: activeOrders, isLoading: loadingOrders } = useQuery({
+    queryKey: ['inventoryActiveOrders'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('order_items')
+        .select('quantity, product_id, orders!inner(status, start_date, end_date)')
+        .in('orders.status', ['signed', 'reserved', 'picked_up']); // AQUI ESTÁ A CORREÇÃO PRINCIPAL
+      return data || [];
+    }
+  });
+
+  // Função de Cálculo Realtime
+  const calculateStock = (productId: string, total: number) => {
+    if (!activeOrders) return { available: total, rented: 0 };
+    const today = startOfDay(new Date());
+
+    const rentedToday = activeOrders
+      .filter((item: any) => {
+        if (item.product_id !== productId) return false;
+        const start = startOfDay(parseISO(item.orders.start_date));
+        const end = startOfDay(parseISO(item.orders.end_date));
+        return isWithinInterval(today, { start, end });
+      })
+      .reduce((acc: number, item: any) => acc + item.quantity, 0);
+
+    return {
+      available: Math.max(0, total - rentedToday),
+      rented: rentedToday
+    };
+  };
 
   const handleCreateProduct = async () => {
-    if (newProduct.type === 'trackable' && !newProduct.serial_number.trim()) {
-      showError("Produtos rastreáveis requerem um Número de Série inicial.");
-      return;
-    }
-    
-    if (newProduct.type === 'trackable' && newProduct.total_quantity !== 1) {
-        showError("Para produtos rastreáveis, a Quantidade Total deve ser 1 ao cadastrar o primeiro item. Use a aba 'Ativos' para adicionar mais seriais.");
-        return;
-    }
+    if (newProduct.type === 'trackable' && !newProduct.serial_number.trim()) { showError("Produtos rastreáveis requerem um Número de Série inicial."); return; }
+    if (newProduct.type === 'trackable' && newProduct.total_quantity !== 1) { showError("Para produtos rastreáveis, a Quantidade Total deve ser 1."); return; }
 
     setIsSaving(true);
     try {
-      // Passo A: Insira o produto na tabela 'products'
-      const productPayload = {
-        name: newProduct.name,
-        type: newProduct.type,
-        total_quantity: newProduct.total_quantity,
-        price: newProduct.price,
-      };
-      
-      const { data: productData, error: productError } = await supabase
-        .from('products')
-        .insert([productPayload])
-        .select('id')
-        .single();
-
+      const productPayload = { name: newProduct.name, type: newProduct.type, total_quantity: newProduct.total_quantity, price: newProduct.price };
+      const { data: productData, error: productError } = await supabase.from('products').insert([productPayload]).select('id').single();
       if (productError) throw productError;
       
-      const createdProductId = productData.id;
-
-      // Passo C: SE for rastreável, insira o ativo na tabela 'assets'
       if (newProduct.type === 'trackable' && newProduct.serial_number.trim()) {
-        const { error: assetError } = await supabase
-          .from('assets')
-          .insert({
-            product_id: createdProductId,
-            serial_number: newProduct.serial_number.trim(),
-          });
-          
-        if (assetError) throw assetError;
+        await supabase.from('assets').insert({ product_id: productData.id, serial_number: newProduct.serial_number.trim() });
       }
 
-      showSuccess("Produto e Ativo inicial criados com sucesso!");
+      showSuccess("Produto criado!");
       setIsAddModalOpen(false);
-      
-      // Invalida a query da view para forçar a atualização dos dados
-      queryClient.invalidateQueries({ queryKey: ['inventoryAnalytics'] });
-      queryClient.invalidateQueries({ queryKey: ['allProducts'] }); // Atualiza lista de produtos para pedidos
-      
+      queryClient.invalidateQueries({ queryKey: ['allProducts'] });
       setNewProduct({ name: '', type: 'trackable', total_quantity: 1, price: 0, serial_number: '' });
-    } catch (error: any) {
-      showError("Erro ao criar produto: " + error.message);
-    } finally {
-      setIsSaving(false);
-    }
+    } catch (error: any) { showError("Erro: " + error.message); } finally { setIsSaving(false); }
   };
 
-  const handleEditProduct = (productId: string) => {
-    setSelectedProductId(productId);
-    setIsEditSheetOpen(true);
-  };
+  const handleEditProduct = (productId: string) => { setSelectedProductId(productId); setIsEditSheetOpen(true); };
 
-  if (isError) {
-    return <div className="p-8 text-center text-red-500">Erro ao carregar dados do inventário.</div>;
-  }
-  
+  const filteredProducts = rawProducts?.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  const isLoading = loadingProducts || loadingOrders;
   const isTrackable = newProduct.type === 'trackable';
 
   return (
     <div className="p-4 md:p-8 space-y-6">
-      {/* Ajuste de Cabeçalho: flex-col no mobile, flex-row no desktop */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Inventário</h1>
-          <p className="text-muted-foreground">Gerencie seus ativos e estoque aqui.</p>
-        </div>
+        <div><h1 className="text-2xl md:text-3xl font-bold tracking-tight">Inventário</h1><p className="text-muted-foreground">Gerencie seus ativos e estoque em tempo real.</p></div>
         
         <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-blue-600 hover:bg-blue-700 w-full md:w-auto">
-              <Plus className="mr-2 h-4 w-4" /> Novo Produto
-            </Button>
-          </DialogTrigger>
+          <DialogTrigger asChild><Button className="bg-blue-600 hover:bg-blue-700 w-full md:w-auto"><Plus className="mr-2 h-4 w-4" /> Novo Produto</Button></DialogTrigger>
           <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Adicionar Novo Produto</DialogTitle>
-            </DialogHeader>
+            <DialogHeader><DialogTitle>Adicionar Novo Produto</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Nome do Produto</Label>
-                <Input 
-                  id="name" 
-                  value={newProduct.name} 
-                  onChange={(e) => setNewProduct({...newProduct, name: e.target.value})}
-                  placeholder="Ex: Câmera Sony A7III" 
-                />
-              </div>
-              {/* Ajuste de Grid: grid-cols-1 no mobile, grid-cols-2 no desktop */}
+              <div className="space-y-2"><Label>Nome</Label><Input value={newProduct.name} onChange={(e) => setNewProduct({...newProduct, name: e.target.value})} placeholder="Ex: Câmera Sony" /></div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Tipo</Label>
-                  <Select 
-                    value={newProduct.type} 
-                    onValueChange={(val) => {
-                        const type = val as 'trackable' | 'bulk';
-                        setNewProduct(prev => ({
-                            ...prev, 
-                            type: type,
-                            // Se mudar para rastreável, força quantidade para 1
-                            total_quantity: type === 'trackable' ? 1 : prev.total_quantity
-                        }));
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="trackable">Rastreável (Serial)</SelectItem>
-                      <SelectItem value="bulk">Granel (Quantidade)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="quantity">Quantidade Total</Label>
-                  <Input 
-                    id="quantity" 
-                    type="number"
-                    min={isTrackable ? "1" : "0"} // Mínimo 1 se for rastreável
-                    value={newProduct.total_quantity} 
-                    onChange={(e) => setNewProduct({...newProduct, total_quantity: parseInt(e.target.value) || 1})}
-                    disabled={isTrackable} // Desabilita se for rastreável (força 1)
-                  />
-                </div>
+                <div className="space-y-2"><Label>Tipo</Label><Select value={newProduct.type} onValueChange={(val: any) => setNewProduct({...newProduct, type: val, total_quantity: val === 'trackable' ? 1 : newProduct.total_quantity})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="trackable">Rastreável</SelectItem><SelectItem value="bulk">Granel</SelectItem></SelectContent></Select></div>
+                <div className="space-y-2"><Label>Quantidade Total</Label><Input type="number" min={isTrackable ? "1" : "0"} value={newProduct.total_quantity} onChange={(e) => setNewProduct({...newProduct, total_quantity: parseInt(e.target.value) || 1})} disabled={isTrackable} /></div>
               </div>
-              
-              {/* Campo de Número de Série Condicional */}
-              {isTrackable && (
-                <div className="space-y-2">
-                  <Label htmlFor="serial_number">Número de Série / Patrimônio</Label>
-                  <Input 
-                    id="serial_number" 
-                    value={newProduct.serial_number} 
-                    onChange={(e) => setNewProduct({...newProduct, serial_number: e.target.value})}
-                    placeholder="Ex: SN-A7III-001"
-                    required
-                  />
-                  {newProduct.total_quantity > 1 && (
-                    <p className="text-xs text-orange-600 flex items-center gap-1 mt-1">
-                        <AlertTriangle className="h-3 w-3" />
-                        Para itens rastreáveis, a quantidade é forçada para 1. Adicione mais seriais na tela de edição.
-                    </p>
-                  )}
-                </div>
-              )}
-              
-              <div className="space-y-2">
-                <Label htmlFor="price">Preço da Diária (R$)</Label>
-                <Input 
-                  id="price" 
-                  type="number"
-                  step="0.01"
-                  value={newProduct.price} 
-                  onChange={(e) => setNewProduct({...newProduct, price: parseFloat(e.target.value) || 0})}
-                />
-              </div>
+              {isTrackable && (<div className="space-y-2"><Label>Serial Inicial</Label><Input value={newProduct.serial_number} onChange={(e) => setNewProduct({...newProduct, serial_number: e.target.value})} placeholder="SN-001" required /></div>)}
+              <div className="space-y-2"><Label>Preço Diária (R$)</Label><Input type="number" step="0.01" value={newProduct.price} onChange={(e) => setNewProduct({...newProduct, price: parseFloat(e.target.value) || 0})} /></div>
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsAddModalOpen(false)} disabled={isSaving}>Cancelar</Button>
-              <Button onClick={handleCreateProduct} className="bg-blue-600 hover:bg-blue-700" disabled={isSaving}>
-                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-                Salvar Produto
-              </Button>
-            </DialogFooter>
+            <DialogFooter><Button variant="outline" onClick={() => setIsAddModalOpen(false)}>Cancelar</Button><Button onClick={handleCreateProduct} disabled={isSaving}>{isSaving ? <Loader2 className="animate-spin" /> : 'Salvar'}</Button></DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
       <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input placeholder="Buscar produtos..." className="pl-10" />
-        </div>
-        <Button variant="outline" size="icon">
-          <Filter className="h-4 w-4" />
-        </Button>
+        <div className="relative flex-1 max-w-sm"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" /><Input placeholder="Buscar..." className="pl-10" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+        <Button variant="outline" size="icon"><Filter className="h-4 w-4" /></Button>
       </div>
 
-      {/* Visualização Desktop (Tabela) */}
       {!isMobile && (
         <div className="border rounded-xl bg-white overflow-hidden shadow-sm">
-          <div className="overflow-x-auto"> {/* Garantido overflow-x-auto */}
+          <div className="overflow-x-auto">
             <Table>
-              <TableHeader>
+              <TableHeader className="bg-gray-50">
                 <TableRow>
                   <TableHead>Nome</TableHead>
                   <TableHead>Tipo</TableHead>
-                  <TableHead className="text-center">Estoque Total</TableHead>
-                  <TableHead className="text-center">Alugados Agora</TableHead>
-                  <TableHead className="text-center">Disponível Hoje</TableHead>
-                  <TableHead>Preço (Diária)</TableHead>
+                  <TableHead className="text-center">Total</TableHead>
+                  <TableHead className="text-center text-blue-600">Alugados (Hoje)</TableHead>
+                  <TableHead className="text-center text-green-600">Disponível (Hoje)</TableHead>
+                  <TableHead>Diária</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="h-24 text-center">
-                      <Loader2 className="h-6 w-6 animate-spin mx-auto text-blue-600" />
-                    </TableCell>
-                  </TableRow>
-                ) : products?.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                      Nenhum produto cadastrado.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  products?.map((product) => {
-                    const status = getAvailabilityStatus(product);
-                    return (
-                      <TableRow key={product.id}>
-                        <TableCell className="font-medium">{product.name}</TableCell>
-                        <TableCell>
-                          <Badge variant={product.type === 'trackable' ? 'default' : 'secondary'} className="capitalize">
-                            {product.type === 'trackable' ? 'Rastreável' : 'Granel'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-center text-gray-500">{product.total_quantity}</TableCell>
-                        <TableCell className="text-center text-blue-600 font-medium">{product.active_rentals}</TableCell>
-                        <TableCell className="text-center">
-                          <div className="flex items-center justify-center">
-                            <span className={cn("font-bold", status.color)}>
-                              {product.available_quantity}
-                            </span>
-                            {status.badge}
-                          </div>
-                        </TableCell>
-                        <TableCell>R$ {Number(product.price).toFixed(2)}</TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" onClick={() => handleEditProduct(product.id)}>
-                            <Edit className="h-4 w-4 mr-1" /> Editar
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
+                {isLoading ? <TableRow><TableCell colSpan={7} className="h-24 text-center"><Loader2 className="animate-spin mx-auto text-blue-600" /></TableCell></TableRow> : 
+                 filteredProducts?.length === 0 ? <TableRow><TableCell colSpan={7} className="text-center h-24">Nenhum produto.</TableCell></TableRow> :
+                 filteredProducts?.map((product) => {
+                   const { available, rented } = calculateStock(product.id, product.total_quantity || 0);
+                   const status = getAvailabilityStatus(available, product.total_quantity || 0);
+                   return (
+                     <TableRow key={product.id}>
+                       <TableCell className="font-medium">{product.name}</TableCell>
+                       <TableCell><Badge variant={product.type === 'trackable' ? 'default' : 'secondary'}>{product.type === 'trackable' ? 'Rastreável' : 'Granel'}</Badge></TableCell>
+                       <TableCell className="text-center text-gray-500">{product.total_quantity}</TableCell>
+                       <TableCell className="text-center font-bold text-blue-600 bg-blue-50/50 rounded">{rented}</TableCell>
+                       <TableCell className="text-center"><div className="flex items-center justify-center gap-1"><span className={cn("font-bold", status.color)}>{available}</span>{status.badge}</div></TableCell>
+                       <TableCell>R$ {Number(product.price).toFixed(2)}</TableCell>
+                       <TableCell className="text-right"><Button variant="ghost" size="sm" onClick={() => handleEditProduct(product.id)}><Edit className="h-4 w-4 mr-1" /> Editar</Button></TableCell>
+                     </TableRow>
+                   );
+                 })}
               </TableBody>
             </Table>
           </div>
         </div>
       )}
       
-      {/* Visualização Mobile (Cards) */}
       {isMobile && (
         <div className="space-y-4">
-          {isLoading ? (
-            <div className="h-24 text-center flex items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin mx-auto text-blue-600" />
-            </div>
-          ) : products?.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8 border-2 border-dashed rounded-xl">
-              Nenhum produto cadastrado.
-            </p>
-          ) : (
-            products?.map((product) => (
-              <ProductCardMobile 
-                key={product.id} 
-                product={product} 
-                handleEditProduct={handleEditProduct} 
-              />
-            ))
-          )}
+          {isLoading ? <div className="text-center"><Loader2 className="animate-spin mx-auto" /></div> : 
+           filteredProducts?.map((product) => {
+             const { available } = calculateStock(product.id, product.total_quantity || 0);
+             return <ProductCardMobile key={product.id} product={product} available={available} handleEditProduct={handleEditProduct} />;
+           })}
         </div>
       )}
 
-      <EditProductSheet
-        productId={selectedProductId}
-        open={isEditSheetOpen}
-        onOpenChange={setIsEditSheetOpen}
-      />
+      <EditProductSheet productId={selectedProductId} open={isEditSheetOpen} onOpenChange={setIsEditSheetOpen} />
     </div>
   );
 };
