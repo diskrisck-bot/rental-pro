@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Loader2, Download, MessageCircle, CheckCircle, DollarSign, Clock, Zap, Calendar, AlertTriangle, Package } from 'lucide-react';
+import { Plus, Search, Loader2, Download, MessageCircle, CheckCircle, DollarSign, Clock, Zap, Calendar, AlertTriangle, Package, ArrowRightLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
@@ -25,76 +25,70 @@ import { fetchBusinessConfig, fetchProductCount } from '@/integrations/supabase/
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
-// AJUSTE 1: Status do Pedido com visual profissional
+// --- FUNÇÃO CORRIGIDA DE STATUS (IGUAL AO DASHBOARD) ---
 const getStatusBadge = (status: string) => {
   switch (status) {
-    case 'pending':
     case 'draft': 
       return <Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-200 uppercase text-[10px]">Rascunho</Badge>;
+    
+    case 'pending_signature': 
+      return (
+        <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 uppercase text-[10px] flex items-center gap-1 w-fit">
+           <Clock className="w-3 h-3" /> Aguardando Assinatura
+        </Badge>
+      );
+
     case 'signed': 
       return (
         <Badge className="bg-green-100 text-green-700 border-green-200 uppercase text-[10px] flex items-center gap-1 w-fit">
-          <div className="w-1 h-1 rounded-full bg-green-500 animate-pulse" />
+          <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
           Assinado
         </Badge>
       );
+    
+    case 'reserved': 
+      return <Badge className="bg-blue-50 text-blue-700 border-blue-200 uppercase text-[10px]">Reservado</Badge>;
+    
     case 'picked_up': 
-      return <Badge className="bg-blue-100 text-blue-800 border-blue-200 uppercase text-[10px]">Em Andamento</Badge>;
+      return <Badge className="bg-purple-100 text-purple-800 border-purple-200 uppercase text-[10px]">Em Andamento</Badge>;
+    
     case 'returned': 
-      return <Badge className="bg-indigo-100 text-indigo-800 border-indigo-200 uppercase text-[10px]">Concluído</Badge>;
+      return <Badge className="bg-green-100 text-green-800 border-green-200 uppercase text-[10px]">Concluído</Badge>;
+    
     case 'canceled': 
       return <Badge className="bg-red-50 text-red-700 border-red-200 uppercase text-[10px]">Cancelado</Badge>;
+    
     default: 
-      return <Badge className="uppercase text-[10px]">{status}</Badge>;
+      return <Badge className="bg-gray-100 text-gray-800 uppercase text-[10px]">{status}</Badge>;
   }
 };
 
 const getPaymentTimingBadge = (timing: string) => {
   if (timing === 'paid_on_pickup') {
-    return (
-      <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 text-[10px]">
-        <DollarSign className="h-3 w-3 mr-1" /> Pago (Retirada)
-      </Badge>
-    );
+    return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]"><DollarSign className="h-3 w-3 mr-1" /> Pago (Retirada)</Badge>;
   }
   if (timing === 'pay_on_return') {
-    return (
-      <Badge className="bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 text-[10px]">
-        <Clock className="h-3 w-3 mr-1" /> A Pagar (Devolução)
-      </Badge>
-    );
+    return <Badge className="bg-orange-50 text-orange-700 border-orange-200 text-[10px]"><Clock className="h-3 w-3 mr-1" /> A Pagar (Devolução)</Badge>;
   }
   return null;
 };
 
 const getFulfillmentTypeBadge = (type: string) => {
-  if (type === 'immediate') {
-    return (
-      <Badge variant="secondary" className="bg-orange-50 text-orange-700 border-orange-200 text-[10px]">
-        <Zap className="h-3 w-3 mr-1" /> Imediata
-      </Badge>
-    );
-  }
-  if (type === 'reservation') {
-    return (
-      <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-200 text-[10px]">
-        <Calendar className="h-3 w-3 mr-1" /> Reserva
-      </Badge>
-    );
-  }
+  if (type === 'immediate') return <Badge variant="secondary" className="bg-orange-50 text-orange-700 border-orange-200 text-[10px]"><Zap className="h-3 w-3 mr-1" /> Imediata</Badge>;
+  if (type === 'reservation') return <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-200 text-[10px]"><Calendar className="h-3 w-3 mr-1" /> Reserva</Badge>;
   return null;
 };
 
 const getWhatsappLink = (order: any, isSigned: boolean) => {
     if (!order) return '#';
-    const signLink = `${window.location.origin}/contract/${order.id}`; // Ajustado para a rota correta de contrato
+    const signLink = `${window.location.origin}/contract/${order.id}`;
     let messageText = isSigned 
-      ? `Olá ${order.customer_name}! ✅\nAqui está sua via do contrato assinado #${order.id.split('-')[0]}:\n${signLink}`
-      : `Olá ${order.customer_name}! 📦\nAqui está o link para visualizar e assinar seu contrato de locação #${order.id.split('-')[0]}:\n${signLink}\n\nPor favor, acesse e realize a assinatura digital.`;
-
+      ? `Olá ${order.customer_name}! ✅\nSegue seu contrato assinado #${order.id.split('-')[0]}:\n${signLink}`
+      : `Olá ${order.customer_name}! 📦\nSegue link para assinatura do contrato #${order.id.split('-')[0]}:\n${signLink}`;
+    
     const encodedMessage = encodeURIComponent(messageText);
     let phone = order.customer_phone ? order.customer_phone.replace(/\D/g, '') : '';
-    if (phone.length === 10 || phone.length === 11) phone = `55${phone}`;
+    if (phone.length >= 10) phone = `55${phone}`;
     return `https://wa.me/${phone}?text=${encodedMessage}`;
 };
 
@@ -138,9 +132,7 @@ const Orders = () => {
     }
   };
 
-  useEffect(() => {
-    fetchOrders();
-  }, []);
+  useEffect(() => { fetchOrders(); }, []);
   
   useEffect(() => {
     const idFromUrl = searchParams.get('id');
@@ -203,7 +195,7 @@ const Orders = () => {
           <Table>
             <TableHeader className="bg-gray-50">
               <TableRow>
-                <TableHead className="w-[180px]">Contrato</TableHead>
+                <TableHead className="w-[100px]">ID</TableHead>
                 <TableHead>Cliente</TableHead>
                 <TableHead>Período</TableHead>
                 <TableHead>Status</TableHead>
@@ -224,18 +216,7 @@ const Orders = () => {
                   return (
                     <TableRow key={order.id} className="hover:bg-gray-50/80 transition-colors cursor-pointer" onClick={() => handleViewDetails(order.id)}>
                       <TableCell>
-                        <div className="flex flex-col gap-1">
-                          <span className="font-mono text-[10px] text-gray-400 font-bold uppercase tracking-tighter">#{order.id.split('-')[0]}</span>
-                          {isSigned ? (
-                            <div className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded border border-green-100 w-fit uppercase">
-                               <CheckCircle className="h-3 w-3" /> Assinado
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-1 text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-100 w-fit uppercase">
-                               <Clock className="h-3 w-3" /> Aguardando
-                            </div>
-                          )}
-                        </div>
+                        <span className="font-mono text-xs text-gray-500 font-bold">#{order.id.split('-')[0]}</span>
                       </TableCell>
                       <TableCell className="font-semibold text-gray-700">{order.customer_name}</TableCell>
                       <TableCell className="text-xs text-gray-500">
@@ -248,12 +229,14 @@ const Orders = () => {
                       </TableCell>
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="sm" onClick={() => handleViewDetails(order.id)} className="h-8 w-8 p-0"><Download className="h-4 w-4 text-gray-500" /></Button>
                           <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
-                            <Button size="sm" className={cn("h-8 px-3 text-xs font-bold", isSigned ? "bg-green-500 hover:bg-green-600" : "bg-blue-600 hover:bg-blue-700")}>
-                              <MessageCircle className="h-3.5 w-3.5 mr-1" /> {isSigned ? 'Enviar Via' : 'Enviar Link'}
+                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-green-600 hover:bg-green-50 hover:text-green-700">
+                              <MessageCircle className="h-4 w-4" />
                             </Button>
                           </a>
+                          <Button size="sm" variant="ghost" onClick={() => handleViewDetails(order.id)} className="h-8 w-8 p-0 text-gray-400 hover:text-blue-600">
+                             <ArrowRightLeft className="h-4 w-4" />
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
