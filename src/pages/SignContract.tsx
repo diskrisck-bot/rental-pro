@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Loader2, CheckCircle, Download, FileText, ShieldCheck } from 'lucide-react';
+import { Loader2, CheckCircle, Download, FileText, ShieldCheck, Printer } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import SignaturePad from '@/components/settings/SignaturePad';
 import { showError, showSuccess } from '@/utils/toast';
-import { Badge } from '@/components/ui/badge';
 import jsPDF from 'jspdf';
 
 const SignContract = () => {
@@ -23,163 +22,278 @@ const SignContract = () => {
   const [agreed, setAgreed] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
 
+  // 1. BUSCAR DADOS
   const fetchData = async () => {
-    if (!orderId) { setLoading(false); return; }
+    if (!orderId) return;
     setLoading(true);
     try {
-      const { data: rpcData, error: rpcError } = await supabase.rpc('get_contract_data', { 
-        p_order_id: orderId 
-      });
-
-      if (rpcError) throw rpcError;
-      if (!rpcData || rpcData.length === 0) throw new Error("Contrato não encontrado.");
+      const { data: rpcData, error } = await supabase.rpc('get_contract_data', { p_order_id: orderId });
+      
+      if (error) throw error;
+      if (!rpcData || rpcData.length === 0) throw new Error("Pedido não encontrado.");
 
       const raw = rpcData[0];
       setOrder(raw);
       setCustomerSignature(raw.signature_image);
+      
+      // Tratamento de dados vazios para evitar "null" no texto
       setLocador({
-        business_name: raw.owner_name,
-        business_cnpj: raw.owner_cnpj,
-        business_address: raw.owner_address,
-        business_city: raw.owner_city,
-        signature_url: raw.owner_signature
+        name: raw.owner_name || "Locadora (Nome não configurado)",
+        cnpj: raw.owner_cnpj || "CNPJ não informado",
+        address: raw.owner_address || "Endereço da empresa",
+        city: raw.owner_city || "Cidade da Empresa", // Se vier vazio do banco, usa o placeholder
+        signature: raw.owner_signature
       });
-    } catch (error: any) {
-      showError("Erro ao carregar dados.");
-    } finally { setLoading(false); }
+    } catch (e) {
+      showError("Erro ao carregar dados do contrato.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { fetchData(); }, [orderId]);
 
-  const getContractText = () => {
+  // 2. FUNÇÃO QUE GERA O TEXTO JURÍDICO (Usada na Tela e no PDF para garantir consistência)
+  const buildContractText = () => {
     if (!order || !locador) return "";
-    const dias = differenceInDays(parseISO(order.end_date), parseISO(order.start_date)) || 0;
     
-    return `
-CONTRATO DE LOCAÇÃO DE EQUIPAMENTOS
+    const dias = differenceInDays(parseISO(order.end_date), parseISO(order.start_date)) || 1;
+    const formatMoney = (val: any) => Number(val).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const listaItens = order.items?.map((i: any) => `• ${i.quantity}x ${i.name} (Reposição: ${formatMoney(i.replacement_value)})`).join('\n');
 
-LOCADOR: ${locador.business_name || '---'}, inscrito no CNPJ/CPF sob o nº ${locador.business_cnpj || '---'}, com sede em ${locador.business_address || '---'}, na cidade de ${locador.business_city || '---'}.
-
-LOCATÁRIA: ${order.customer_name || '---'}, inscrita no CNPJ/CPF sob o nº ${order.customer_cpf || '---'}, residente em ${order.customer_address || '---'}.
-
-CLÁUSULA PRIMEIRA – DO OBJETO
-O presente contrato tem por objeto a locação dos seguintes itens:
-${order.items?.map((i: any) => `- ${i.quantity}x ${i.name}`).join('\n')}
-
-CLÁUSULA SEGUNDA – DO PRAZO
-A locação terá a duração de ${dias} dias, iniciando-se em ${format(parseISO(order.start_date), "dd/MM/yyyy")} e encerrando-se em ${format(parseISO(order.end_date), "dd/MM/yyyy")}.
-
-CLÁUSULA TERCEIRA – DO PREÇO E PAGAMENTO
-Pela locação, a LOCATÁRIA pagará o valor total de R$ ${Number(order.total_amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} via ${order.payment_method || 'forma a combinar'}.
-
-CLÁUSULA QUARTA – DA CONSERVAÇÃO E DANOS
-Em caso de danos, furto ou roubo, a LOCATÁRIA indenizará o LOCADOR nos valores de reposição:
-${order.items?.map((i: any) => `- ${i.name}: R$ ${Number(i.replacement_value || 0).toLocaleString('pt-BR')}`).join('\n')}
-
-CLÁUSULA QUINTA – DO FORO
-Fica eleito o foro da comarca de ${locador.business_city || 'Comarca do Locador'} para dirimir dúvidas.
-
-${locador.business_city || 'Brasil'}, ${format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}.
-    `;
+    return {
+      header: "CONTRATO DE LOCAÇÃO DE BENS MÓVEIS",
+      intro: `IDENTIFICAÇÃO DAS PARTES\n\nLOCADOR: ${locador.name}, pessoa jurídica de direito privado, inscrita no CNPJ sob o nº ${locador.cnpj}, com sede em ${locador.address}, doravante denominada LOCADORA.\n\nLOCATÁRIO: ${order.customer_name}, inscrito(a) no CPF/CNPJ sob o nº ${order.customer_cpf || 'Não informado'}, residente e domiciliado(a) em ${order.customer_address || 'Endereço não informado'}, doravante denominado(a) LOCATÁRIO.`,
+      clauses: [
+        { title: "CLÁUSULA PRIMEIRA – DO OBJETO", text: `O presente contrato tem como objeto a locação dos bens descritos abaixo, de propriedade da LOCADORA, que o LOCATÁRIO declara receber em perfeito estado de conservação e funcionamento:\n\n${listaItens}` },
+        { title: "CLÁUSULA SEGUNDA – DO PRAZO", text: `O prazo de locação é de ${dias} diária(s), iniciando-se no dia ${format(parseISO(order.start_date), "dd/MM/yyyy")} e encerrando-se impreterivelmente no dia ${format(parseISO(order.end_date), "dd/MM/yyyy")}.` },
+        { title: "CLÁUSULA TERCEIRA – DO VALOR", text: `Pela locação, o LOCATÁRIO pagará à LOCADORA a importância total de ${formatMoney(order.total_amount)}. Forma de pagamento: ${order.payment_method || 'A combinar'}.` },
+        { title: "CLÁUSULA QUARTA – DA RESPONSABILIDADE E REPOSIÇÃO", text: `O LOCATÁRIO assume total responsabilidade pela guarda e conservação dos bens locados. Em caso de perda, roubo, furto ou danos irreparáveis, fica obrigado a indenizar a LOCADORA pelo VALOR DE REPOSIÇÃO indicado na Cláusula Primeira, sem prejuízo do pagamento das diárias até a efetiva reposição.` },
+        { title: "CLÁUSULA QUINTA – DO FORO", text: `As partes elegem o foro da Comarca de ${locador.city} para dirimir quaisquer dúvidas oriundas deste contrato.` }
+      ],
+      footer: `E, por estarem justos e contratados, assinam o presente documento eletronicamente.\n\n${locador.city}, ${format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}.`
+    };
   };
 
+  // 3. GERADOR DE PDF PROFISSIONAL (A4)
   const generatePDF = async () => {
     if (!order || !locador) return;
     setIsDownloading(true);
-    try {
-      const doc = new jsPDF();
-      const margin = 14;
-      const maxW = doc.internal.pageSize.getWidth() - (margin * 2);
+
+    const doc = new jsPDF({ format: 'a4', unit: 'mm' });
+    const content = buildContractText();
+    
+    // Configurações de layout A4
+    const margin = 20;
+    const pageWidth = 210;
+    const maxLineWidth = pageWidth - (margin * 2);
+    let currentY = 20;
+
+    // Helper para adicionar texto com quebra de linha automática
+    const printText = (text: string, fontSize = 10, fontStyle = "normal", align = "left") => {
+      doc.setFont("helvetica", fontStyle);
+      doc.setFontSize(fontSize);
       
-      doc.setFontSize(14); doc.setFont("helvetica", "bold");
-      doc.text("CONTRATO DE LOCAÇÃO DIGITAL", 105, 20, { align: 'center' });
+      const lines = doc.splitTextToSize(text, maxLineWidth);
+      
+      // Verifica se precisa de nova página
+      if (currentY + (lines.length * 5) > 280) {
+        doc.addPage();
+        currentY = 20;
+      }
+      
+      doc.text(lines, align === "center" ? pageWidth / 2 : margin, currentY, { align: align as any });
+      currentY += (lines.length * 4) + 4; // Espaçamento entre parágrafos
+    };
 
-      doc.setFontSize(10); doc.setFont("helvetica", "normal");
-      const textLines = doc.splitTextToSize(getContractText(), maxW);
-      doc.text(textLines, margin, 35);
+    // --- MONTAGEM DO DOCUMENTO ---
+    
+    // Título
+    printText(content.header, 14, "bold", "center");
+    currentY += 5;
 
-      const finalY = 40 + (textLines.length * 5);
-      doc.line(margin, finalY + 20, margin + 70, finalY + 20);
-      doc.text("Assinatura do Locador", margin, finalY + 25);
-      doc.line(130, finalY + 20, 200, finalY + 20);
-      doc.text("Assinatura do Locatário", 130, finalY + 25);
+    // Introdução (Partes)
+    printText(content.intro, 10, "normal", "justify");
+    currentY += 5;
 
-      doc.addPage();
-      doc.setFontSize(14); doc.text("CERTIFICADO DE AUDITORIA", 105, 20, { align: 'center' });
-      doc.setFontSize(9);
-      doc.text(`ID do Documento: ${order.order_id}`, margin, 40);
-      doc.text(`IP: ${order.signer_ip || '---'} | Data: ${order.signed_at ? format(parseISO(order.signed_at), "dd/MM/yyyy HH:mm") : 'Pendente'}`, margin, 48);
-      if (order.signature_image) doc.addImage(order.signature_image, 'PNG', margin, 60, 50, 20);
+    // Cláusulas (Loop)
+    content.clauses.forEach(clause => {
+      printText(clause.title, 10, "bold", "left");
+      printText(clause.text, 10, "normal", "left"); // Left fica melhor que justify para listas
+      currentY += 2;
+    });
 
-      doc.save(`contrato-${order.order_id.split('-')[0]}.pdf`);
-    } catch (e) { showError("Erro ao gerar PDF"); } finally { setIsDownloading(false); }
+    // Encerramento
+    currentY += 5;
+    printText(content.footer, 10, "normal", "left");
+
+    // Área de Assinaturas (Layout lado a lado)
+    currentY += 20;
+    if (currentY > 250) { doc.addPage(); currentY = 30; }
+
+    const yAssinatura = currentY;
+    
+    // Assinatura Locador
+    doc.line(margin, yAssinatura, margin + 70, yAssinatura);
+    doc.setFontSize(8);
+    doc.text(locador.name.substring(0, 35), margin, yAssinatura + 5);
+    doc.text("LOCADOR", margin, yAssinatura + 9);
+
+    // Assinatura Cliente
+    doc.line(120, yAssinatura, 190, yAssinatura);
+    doc.text(order.customer_name.substring(0, 35), 120, yAssinatura + 5);
+    doc.text("LOCATÁRIO", 120, yAssinatura + 9);
+
+    // --- PÁGINA 2: AUDITORIA (LOGS TÉCNICOS) ---
+    doc.addPage();
+    currentY = 20;
+    printText("CERTIFICADO DE ASSINATURA DIGITAL", 14, "bold", "center");
+    currentY += 10;
+    
+    printText("Este documento foi assinado eletronicamente e possui validade jurídica.", 10, "normal", "center");
+    currentY += 15;
+
+    const logBoxY = currentY;
+    doc.setDrawColor(200);
+    doc.setFillColor(245, 245, 245);
+    doc.rect(margin, logBoxY, maxLineWidth, 80, 'FD');
+    
+    currentY += 10;
+    const addLog = (label: string, value: string) => {
+      doc.setFont("courier", "bold"); doc.text(label, margin + 10, currentY);
+      doc.setFont("courier", "normal"); doc.text(value, margin + 50, currentY);
+      currentY += 8;
+    };
+
+    addLog("ID do Pedido:", order.order_id);
+    addLog("Data/Hora:", order.signed_at ? format(parseISO(order.signed_at), "dd/MM/yyyy HH:mm:ss") : "Pendente");
+    addLog("IP do Cliente:", order.signer_ip || "N/A");
+    addLog("Navegador:", (order.signer_user_agent || "N/A").substring(0, 40) + "...");
+    
+    // Imagem da assinatura
+    if (order.signature_image) {
+        currentY += 5;
+        doc.text("Rubrica Capturada:", margin + 10, currentY);
+        doc.addImage(order.signature_image, 'PNG', margin + 10, currentY + 5, 40, 20);
+    }
+
+    // Salvar
+    doc.save(`Contrato-${order.order_id.split('-')[0]}.pdf`);
+    setIsDownloading(false);
   };
 
+  // 4. FUNÇÃO DE ASSINATURA
   const handleSign = async () => {
-    if (!orderId || !customerSignature || !agreed) return;
+    if (!customerSignature || !agreed) return;
     setSigning(true);
     try {
-      const ipRes = await fetch('https://api.ipify.org?format=json');
-      const ipData = await ipRes.json();
-      await supabase.rpc('sign_order_contract', {
+      const ip = await fetch('https://api.ipify.org?format=json').then(r => r.json()).catch(() => ({ ip: 'IP Oculto' }));
+      
+      const { error } = await supabase.rpc('sign_order_contract', {
         target_order_id: orderId,
         signature_data: customerSignature,
-        client_ip: ipData?.ip || '0.0.0.0',
+        client_ip: ip.ip || '0.0.0.0',
         client_agent: navigator.userAgent
       });
-      showSuccess("Contrato assinado!");
-      fetchData();
-    } catch (error: any) { showError("Erro ao assinar"); } finally { setSigning(false); }
+
+      if (error) throw error;
+      
+      showSuccess("Assinado com sucesso!");
+      fetchData(); // Recarrega para mostrar a tela de sucesso
+    } catch (e) {
+      showError("Erro ao salvar assinatura.");
+    } finally {
+      setSigning(false);
+    }
   };
 
   if (loading) return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
+  const contractContent = buildContractText();
+
   return (
-    <div className="min-h-screen bg-gray-50 py-6 px-4">
-      <div className="mx-auto max-w-3xl bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-        <div className="bg-blue-600 p-4 text-white text-center">
-          <h1 className="text-xl font-bold font-serif">Contrato RentalPro</h1>
+    <div className="min-h-screen bg-gray-100 py-8 px-4 flex justify-center items-start">
+      <div className="w-full max-w-4xl bg-white shadow-xl rounded-xl overflow-hidden border border-gray-200">
+        
+        {/* CABEÇALHO DA TELA */}
+        <div className="bg-slate-900 text-white p-6 text-center">
+          <h1 className="text-xl font-bold uppercase tracking-wider">
+            {order.signed_at ? "Contrato Vigente" : "Revisão e Assinatura"}
+          </h1>
+          <p className="text-slate-400 text-sm mt-1">Pedido #{order.order_id.split('-')[0]}</p>
         </div>
 
-        <div className="p-6 space-y-6">
-          {!order.signed_at && (
-            <div className="space-y-4">
-              <h2 className="text-sm font-bold text-gray-500 uppercase flex items-center gap-2">
-                <FileText className="h-4 w-4" /> Termos do Contrato
-              </h2>
-              <div className="bg-gray-50 p-6 border rounded-lg h-72 overflow-y-auto text-sm leading-relaxed text-gray-800 whitespace-pre-wrap font-serif">
-                {getContractText()}
+        <div className="p-6 md:p-8 space-y-8">
+          
+          {/* VISUALIZADOR DO CONTRATO (Tela) */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-slate-700 font-bold border-b pb-2">
+              <FileText className="w-5 h-5" />
+              <h2>Termos do Contrato</h2>
+            </div>
+            
+            {/* Caixa de Texto com Rolagem */}
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 h-96 overflow-y-auto shadow-inner">
+              <div className="font-serif text-sm leading-relaxed text-slate-800 whitespace-pre-wrap">
+                <p className="text-center font-bold mb-4 text-base">{contractContent.header}</p>
+                <p className="mb-4 text-justify">{contractContent.intro}</p>
+                {contractContent.clauses?.map((c, idx) => (
+                  <div key={idx} className="mb-4">
+                    <strong className="block mb-1">{c.title}</strong>
+                    <span className="text-justify block">{c.text}</span>
+                  </div>
+                ))}
+                <p className="mt-6 font-bold">{contractContent.footer}</p>
               </div>
             </div>
-          )}
+          </div>
 
+          {/* ÁREA DE AÇÃO (Assinar ou Baixar) */}
           {!order.signed_at ? (
-            <div className="space-y-6">
-              <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg flex items-start gap-3">
+            <div className="bg-blue-50 p-6 rounded-xl border border-blue-100 space-y-6 animate-in fade-in slide-in-from-bottom-4">
+              <div className="flex items-start gap-3">
                 <Checkbox id="terms" checked={agreed} onCheckedChange={(v) => setAgreed(!!v)} className="mt-1" />
-                <label htmlFor="terms" className="text-sm text-blue-900 cursor-pointer">
-                  Confirmo que li e aceito todas as cláusulas e valores de reposição.
+                <label htmlFor="terms" className="text-sm text-blue-900 font-medium cursor-pointer leading-tight">
+                  Li o contrato acima na íntegra e concordo com todas as cláusulas, prazos e valores de reposição estipulados.
                 </label>
               </div>
-              
+
               <div className="space-y-2">
-                <p className="text-xs font-bold text-gray-400 uppercase">Assine no campo abaixo</p>
-                <SignaturePad onSave={setCustomerSignature} />
+                <label className="text-xs font-bold text-slate-500 uppercase">Sua Assinatura Digital</label>
+                <div className="bg-white rounded-lg border border-slate-200 shadow-sm">
+                  <SignaturePad onSave={setCustomerSignature} />
+                </div>
               </div>
 
-              <Button onClick={handleSign} disabled={signing || !agreed || !customerSignature} className="w-full h-14 text-lg bg-blue-600 font-bold">
-                {signing ? "Processando..." : <><ShieldCheck className="mr-2" /> Assinar Digitalmente</>}
+              <Button 
+                onClick={handleSign} 
+                disabled={signing || !agreed || !customerSignature} 
+                className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-lg font-bold shadow-lg transition-all"
+              >
+                {signing ? <><Loader2 className="animate-spin mr-2" /> Processando...</> : <><ShieldCheck className="mr-2" /> ASSINAR CONTRATO</>}
               </Button>
             </div>
           ) : (
-            <div className="text-center py-10 space-y-6">
-              <CheckCircle className="h-16 w-16 text-green-600 mx-auto" />
-              <h2 className="text-2xl font-bold text-gray-900">Documento Assinado com Sucesso</h2>
-              <Button onClick={generatePDF} variant="outline" className="w-full h-14 border-blue-600 text-blue-600 font-bold">
-                {isDownloading ? <Loader2 className="animate-spin" /> : <Download className="mr-2" />} Baixar PDF Completo
+            <div className="text-center py-6 space-y-6">
+              <div className="inline-flex items-center justify-center p-4 bg-green-100 rounded-full mb-2">
+                <CheckCircle className="h-12 w-12 text-green-600" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-slate-800">Assinatura Recebida!</h2>
+                <p className="text-slate-500">Este contrato tem validade jurídica garantida.</p>
+              </div>
+              
+              <Button 
+                onClick={generatePDF} 
+                variant="outline" 
+                className="w-full md:w-2/3 h-14 border-2 border-slate-800 text-slate-800 font-bold hover:bg-slate-50"
+              >
+                {isDownloading ? <Loader2 className="animate-spin mr-2" /> : <Printer className="mr-2" />}
+                BAIXAR VIA EM PDF (A4)
               </Button>
             </div>
           )}
+
         </div>
       </div>
     </div>
