@@ -1,267 +1,195 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Loader2, User, Save, Building, Phone, MapPin } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
-import { showError, showSuccess } from '@/utils/toast';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
+import { showSuccess, showError } from '@/utils/toast';
+import { supabase } from '@/lib/supabase';
 import SignaturePad from '@/components/settings/SignaturePad';
-import { Button } from '@/components/ui/button';
-import MaskedInput from 'react-text-mask';
-
-interface Profile {
-  id: string;
-  first_name: string;
-  last_name: string;
-  business_name: string;
-  business_cnpj: string;
-  business_address: string;
-  business_phone: string;
-  signature_url: string | null;
-}
-
-// Máscaras
-const phoneMask = ['(', /[1-9]/, /\d/, ')', ' ', /\d/, /\d/, /\d/, /\d/, /\d/, '-', /\d/, /\d/, /\d/, /\d/];
-const cnpjMask = [/\d/, /\d/, '.', /\d/, /\d/, /\d/, '.', /\d/, /\d/, /\d/, '/', /\d/, /\d/, /\d/, /\d/, '-', /\d/, /\d/];
-
-// Helper function to fetch the current user's profile
-const fetchProfile = async (): Promise<Profile | null> => {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Usuário não autenticado.");
-
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, first_name, last_name, business_name, business_cnpj, business_address, business_phone, signature_url')
-    .eq('id', user.id)
-    .single();
-
-  // Se o erro for 'não encontrado' (código 406), retornamos um objeto base.
-  if (error && error.code !== 'PGRST116') {
-    throw error;
-  }
-  
-  const baseProfile: Profile = {
-    id: user.id,
-    first_name: '',
-    last_name: '',
-    business_name: '',
-    business_cnpj: '',
-    business_address: '',
-    business_phone: '',
-    signature_url: null,
-  };
-
-  return data ? { ...baseProfile, ...data } : baseProfile;
-};
+import { Loader2, Building, Save, MapPin } from 'lucide-react';
 
 const Settings = () => {
-  const queryClient = useQueryClient();
-  const [formData, setFormData] = useState<Omit<Profile, 'id' | 'first_name' | 'last_name'>>({
-    business_name: '',
-    business_cnpj: '',
-    business_address: '',
-    business_phone: '',
-    signature_url: null,
-  });
-  const [isFormDirty, setIsFormDirty] = useState(false);
-
-  const { data: profile, isLoading, isError } = useQuery({
-    queryKey: ['userProfile'],
-    queryFn: fetchProfile,
-    staleTime: Infinity,
-  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  
+  // Estados do Formulário
+  const [businessName, setBusinessName] = useState('');
+  const [cnpj, setCnpj] = useState('');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [city, setCity] = useState(''); // NOVO CAMPO
+  const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (profile) {
-      setFormData({
-        business_name: profile.business_name || '',
-        business_cnpj: profile.business_cnpj || '',
-        business_address: profile.business_address || '',
-        business_phone: profile.business_phone || '',
-        signature_url: profile.signature_url,
-      });
-      setIsFormDirty(false);
-    }
-  }, [profile]);
+    fetchProfile();
+  }, []);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { id, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [id]: value,
-    }));
-    setIsFormDirty(true);
-  };
-
-  const updateProfileMutation = useMutation({
-    mutationFn: async (payload: Partial<Profile>) => {
+  const fetchProfile = async () => {
+    try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Usuário não autenticado.");
+      if (!user) return;
 
-      // Usando upsert para garantir que o perfil seja criado se não existir
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
-        .upsert({ 
-          id: user.id, 
-          ...payload
-        }, { onConflict: 'id' });
+        .select('*')
+        .eq('id', user.id)
+        .single();
 
+      if (error && error.code !== 'PGRST116') throw error;
+
+      if (data) {
+        setBusinessName(data.business_name || '');
+        setCnpj(data.business_cnpj || '');
+        setPhone(data.business_phone || '');
+        setAddress(data.business_address || '');
+        setCity(data.business_city || ''); // Carrega a cidade
+        setSignatureUrl(data.signature_url);
+      }
+    } catch (error: any) {
+      showError('Erro ao carregar perfil.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuário não logado");
+
+      const updates = {
+        id: user.id,
+        business_name: businessName,
+        business_cnpj: cnpj,
+        business_phone: phone,
+        business_address: address,
+        business_city: city, // Salva a cidade
+        signature_url: signatureUrl,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase.from('profiles').upsert(updates);
       if (error) throw error;
-    },
-    onSuccess: () => {
-      showSuccess("Configurações salvas com sucesso!");
-      setIsFormDirty(false);
-      queryClient.invalidateQueries({ queryKey: ['userProfile'] });
-    },
-    onError: (error: any) => {
-      showError("Erro ao salvar configurações: " + error.message);
-    },
-  });
 
-  const handleSaveSignature = (base64Image: string) => {
-    // Salva apenas a assinatura, mas usa a mutação de perfil
-    updateProfileMutation.mutate({ signature_url: base64Image });
-    setFormData(prev => ({ ...prev, signature_url: base64Image }));
-  };
-  
-  const handleSaveDetails = () => {
-    if (!isFormDirty) return;
-    
-    const payload = {
-      business_name: formData.business_name,
-      business_cnpj: formData.business_cnpj,
-      business_address: formData.business_address,
-      business_phone: formData.business_phone,
-    };
-    
-    updateProfileMutation.mutate(payload);
+      showSuccess('Configurações salvas com sucesso!');
+    } catch (error: any) {
+      showError('Erro ao salvar: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  if (isLoading) {
-    return (
-      <div className="p-8 flex items-center justify-center h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-      </div>
-    );
-  }
-
-  if (isError || !profile) {
-    return <div className="p-8 text-center text-red-500">Erro ao carregar configurações.</div>;
-  }
-
-  const isSaving = updateProfileMutation.isPending;
+  if (loading) return <div className="flex h-96 items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   return (
-    <div className="p-4 md:p-8 space-y-8 max-w-4xl mx-auto">
+    <div className="p-6 max-w-4xl mx-auto space-y-8 pb-20">
       <div>
-        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Configurações</h1>
-        <p className="text-muted-foreground">Gerencie suas preferências e dados de locador.</p>
+        <h1 className="text-3xl font-bold text-gray-900">Configurações</h1>
+        <p className="text-gray-500">Gerencie os dados da sua locadora que aparecerão no contrato.</p>
       </div>
 
-      {/* Detalhes da Empresa */}
-      <Card className="rounded-xl shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-xl flex items-center gap-2">
-            <Building className="h-5 w-5 text-blue-600" />
-            Dados Jurídicos da Empresa (Locador)
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Estas informações serão usadas para preencher o cabeçalho dos contratos de locação.
-          </p>
-          
+      <div className="bg-white p-6 rounded-xl border shadow-sm space-y-6">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="p-2 bg-blue-100 rounded-lg text-blue-700">
+            <Building className="h-5 w-5" />
+          </div>
+          <h2 className="text-xl font-semibold text-gray-800">Dados Jurídicos da Empresa</h2>
+        </div>
+
+        <div className="grid gap-6">
           <div className="space-y-2">
-            <Label htmlFor="business_name">Nome da Empresa / Razão Social</Label>
+            <Label htmlFor="name">Nome da Empresa / Razão Social</Label>
             <Input 
-              id="business_name" 
-              value={formData.business_name} 
-              onChange={handleChange}
+              id="name" 
+              value={businessName} 
+              onChange={(e) => setBusinessName(e.target.value)} 
               placeholder="Ex: RentalPro Locações LTDA"
-              disabled={isSaving}
+              className="h-11"
             />
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="business_cnpj">CNPJ / CPF</Label>
-              <MaskedInput
-                mask={cnpjMask}
-                placeholder="XX.XXX.XXX/XXXX-XX"
-                id="business_cnpj"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                value={formData.business_cnpj}
-                onChange={handleChange}
-                disabled={isSaving}
+              <Label htmlFor="cnpj">CNPJ / CPF</Label>
+              <Input 
+                id="cnpj" 
+                value={cnpj} 
+                onChange={(e) => setCnpj(e.target.value)} 
+                placeholder="00.000.000/0001-00"
+                className="h-11"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="business_phone">Telefone / WhatsApp</Label>
-              <MaskedInput
-                mask={phoneMask}
-                placeholder="(XX) XXXXX-XXXX"
-                id="business_phone"
-                type="tel"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                value={formData.business_phone}
-                onChange={handleChange}
-                disabled={isSaving}
+              <Label htmlFor="phone">Telefone / WhatsApp</Label>
+              <Input 
+                id="phone" 
+                value={phone} 
+                onChange={(e) => setPhone(e.target.value)} 
+                placeholder="(00) 00000-0000"
+                className="h-11"
               />
             </div>
           </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="business_address">Endereço Completo</Label>
-            <Input 
-              id="business_address" 
-              value={formData.business_address} 
-              onChange={handleChange}
-              placeholder="Ex: Rua das Flores, 123, Centro, São Paulo - SP"
-              disabled={isSaving}
-            />
-          </div>
-          
-          <Button 
-            onClick={handleSaveDetails} 
-            disabled={!isFormDirty || isSaving}
-            className="w-full h-12 bg-blue-600 hover:bg-blue-700 mt-4"
-          >
-            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
-            Salvar Detalhes da Empresa
-          </Button>
-        </CardContent>
-      </Card>
 
-      {/* Assinatura Digital */}
-      <Card className="rounded-xl shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-xl flex items-center gap-2">
-            <User className="h-5 w-5 text-blue-600" />
-            Assinatura Digital Padrão (Locador)
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Esta assinatura será automaticamente aplicada em todos os contratos gerados.
-          </p>
-          
-          <SignaturePad 
-            onSave={handleSaveSignature}
-            initialSignature={formData.signature_url}
-            isSaving={isSaving}
-          />
-          
-          {isSaving && (
-            <div className="flex items-center text-sm text-blue-600">
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Salvando assinatura...
+          {/* ENDEREÇO E CIDADE */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="md:col-span-2 space-y-2">
+              <Label htmlFor="address">Endereço Completo</Label>
+              <Input 
+                id="address" 
+                value={address} 
+                onChange={(e) => setAddress(e.target.value)} 
+                placeholder="Rua Exemplo, 123 - Bairro"
+                className="h-11"
+              />
             </div>
-          )}
-        </CardContent>
-      </Card>
+            <div className="space-y-2">
+              <Label htmlFor="city" className="flex items-center gap-1">
+                 Cidade / UF <span className="text-red-500">*</span>
+              </Label>
+              <div className="relative">
+                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input 
+                  id="city" 
+                  value={city} 
+                  onChange={(e) => setCity(e.target.value)} 
+                  placeholder="Ex: Rio de Janeiro - RJ"
+                  className="pl-9 h-11 border-blue-200 focus:border-blue-500 bg-blue-50/30"
+                />
+              </div>
+              <p className="text-[10px] text-gray-500">Usado para definir o Foro e a data do contrato.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ÁREA DE ASSINATURA PADRÃO */}
+      <div className="bg-white p-6 rounded-xl border shadow-sm space-y-6">
+        <div>
+          <h2 className="text-xl font-semibold text-gray-800">Assinatura Digital do Locador</h2>
+          <p className="text-sm text-gray-500">Esta assinatura será aplicada automaticamente nos contratos gerados.</p>
+        </div>
+        
+        <div className="max-w-md">
+           <SignaturePad 
+             initialUrl={signatureUrl} 
+             onSave={(url) => setSignatureUrl(url)} 
+           />
+        </div>
+      </div>
+
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t flex justify-end md:static md:bg-transparent md:border-0 md:p-0">
+        <Button 
+          onClick={handleSave} 
+          disabled={saving} 
+          className="w-full md:w-auto h-12 px-8 bg-blue-600 hover:bg-blue-700 text-lg shadow-lg"
+        >
+          {saving ? <><Loader2 className="animate-spin mr-2" /> Salvando...</> : <><Save className="mr-2" /> Salvar Configurações</>}
+        </Button>
+      </div>
     </div>
   );
 };
