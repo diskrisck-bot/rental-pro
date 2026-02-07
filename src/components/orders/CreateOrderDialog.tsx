@@ -198,13 +198,6 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
       return;
     }
 
-    // 1. Captura do Usuário Atual
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      showError("Sessão expirada. Faça login novamente.");
-      return;
-    }
-
     try {
       setLoading(true);
 
@@ -258,9 +251,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         payment_method: values.payment_method,
         payment_timing: values.payment_timing,
         fulfillment_type: values.fulfillment_type,
-        status: orderId ? undefined : initialStatus, // Novo pedido usa o status inicial
-        user_id: user.id, // INCLUSÃO OBRIGATÓRIA (Tenant Isolation)
-        created_by: user.id, // INCLUSÃO OBRIGATÓRIA (Tenant Isolation)
+        status: orderId ? undefined : initialStatus // Novo pedido usa o status inicial
       };
 
       let currentOrderId = orderId;
@@ -297,8 +288,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
       const itemsToInsert = selectedItems.map(item => ({
         order_id: currentOrderId,
         product_id: item.product_id,
-        quantity: item.quantity,
-        user_id: user.id, // INCLUSÃO OBRIGATÓRIA (Tenant Isolation)
+        quantity: item.quantity
       }));
 
       const { error: itemsError } = await supabase
