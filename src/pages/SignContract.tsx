@@ -12,7 +12,6 @@ import SignaturePad from '@/components/settings/SignaturePad';
 import { showError, showSuccess } from '@/utils/toast';
 import { Badge } from '@/components/ui/badge';
 import jsPDF from 'jspdf';
-import { cn } from '@/lib/utils';
 
 const SignContract = () => {
   const { orderId } = useParams<{ orderId: string }>();
@@ -52,7 +51,6 @@ const SignContract = () => {
 
   useEffect(() => { fetchData(); }, [orderId]);
 
-  // Função para gerar o texto jurídico padronizado
   const getContractText = () => {
     if (!order || !locador) return "";
     const dias = differenceInDays(parseISO(order.end_date), parseISO(order.start_date)) || 0;
@@ -129,28 +127,27 @@ ${locador.business_city || 'Brasil'}, ${format(new Date(), "dd 'de' MMMM 'de' yy
         client_ip: ipData?.ip || '0.0.0.0',
         client_agent: navigator.userAgent
       });
-      showSuccess("Contrato assinado com sucesso!");
+      showSuccess("Contrato assinado!");
       fetchData();
     } catch (error: any) { showError("Erro ao assinar"); } finally { setSigning(false); }
   };
 
-  if (loading) return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin" /></div>;
+  if (loading) return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   return (
     <div className="min-h-screen bg-gray-50 py-6 px-4">
       <div className="mx-auto max-w-3xl bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
         <div className="bg-blue-600 p-4 text-white text-center">
-          <h1 className="text-xl font-bold">Assinatura de Contrato Digital</h1>
+          <h1 className="text-xl font-bold font-serif">Contrato RentalPro</h1>
         </div>
 
         <div className="p-6 space-y-6">
-          {/* RESOLUÇÃO PROBLEMA 1: Visualizador de Contrato */}
           {!order.signed_at && (
             <div className="space-y-4">
-              <h2 className="text-sm font-bold text-gray-400 uppercase flex items-center gap-2">
-                <FileText className="h-4 w-4" /> Leia as cláusulas abaixo
+              <h2 className="text-sm font-bold text-gray-500 uppercase flex items-center gap-2">
+                <FileText className="h-4 w-4" /> Termos do Contrato
               </h2>
-              <div className="bg-gray-50 p-4 border rounded-lg h-64 overflow-y-auto text-xs leading-relaxed text-gray-700 whitespace-pre-wrap font-serif">
+              <div className="bg-gray-50 p-6 border rounded-lg h-72 overflow-y-auto text-sm leading-relaxed text-gray-800 whitespace-pre-wrap font-serif">
                 {getContractText()}
               </div>
             </div>
@@ -158,31 +155,28 @@ ${locador.business_city || 'Brasil'}, ${format(new Date(), "dd 'de' MMMM 'de' yy
 
           {!order.signed_at ? (
             <div className="space-y-6">
-              <div className="p-4 bg-orange-50 border border-orange-100 rounded-lg flex items-start gap-3">
+              <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg flex items-start gap-3">
                 <Checkbox id="terms" checked={agreed} onCheckedChange={(v) => setAgreed(!!v)} className="mt-1" />
-                <label htmlFor="terms" className="text-sm text-orange-900 cursor-pointer">
-                  Eu li, entendi e concordo com todas as cláusulas e valores de reposição estabelecidos acima.
+                <label htmlFor="terms" className="text-sm text-blue-900 cursor-pointer">
+                  Confirmo que li e aceito todas as cláusulas e valores de reposição.
                 </label>
               </div>
               
               <div className="space-y-2">
-                <p className="text-xs font-bold text-gray-400 uppercase">Sua Assinatura</p>
+                <p className="text-xs font-bold text-gray-400 uppercase">Assine no campo abaixo</p>
                 <SignaturePad onSave={setCustomerSignature} />
               </div>
 
-              <Button onClick={handleSign} disabled={signing || !agreed || !customerSignature} className="w-full h-14 text-lg bg-blue-600">
-                {signing ? <Loader2 className="animate-spin" /> : <ShieldCheck className="mr-2" />} Finalizar e Assinar
+              <Button onClick={handleSign} disabled={signing || !agreed || !customerSignature} className="w-full h-14 text-lg bg-blue-600 font-bold">
+                {signing ? "Processando..." : <><ShieldCheck className="mr-2" /> Assinar Digitalmente</>}
               </Button>
             </div>
           ) : (
             <div className="text-center py-10 space-y-6">
-              <div className="inline-flex items-center justify-center h-20 w-20 rounded-full bg-green-100 mb-2">
-                <CheckCircle className="h-10 w-10 text-green-600" />
-              </div>
-              <h2 className="text-2xl font-bold text-gray-900">Documento Assinado!</h2>
-              <Badge className="bg-green-100 text-green-700 border-green-200">Válido conforme MP 2.200-2/2001</Badge>
+              <CheckCircle className="h-16 w-16 text-green-600 mx-auto" />
+              <h2 className="text-2xl font-bold text-gray-900">Documento Assinado com Sucesso</h2>
               <Button onClick={generatePDF} variant="outline" className="w-full h-14 border-blue-600 text-blue-600 font-bold">
-                {isDownloading ? <Loader2 className="animate-spin" /> : <Download className="mr-2" />} Baixar Cópia em PDF
+                {isDownloading ? <Loader2 className="animate-spin" /> : <Download className="mr-2" />} Baixar PDF Completo
               </Button>
             </div>
           )}
