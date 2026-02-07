@@ -135,7 +135,8 @@ const Inventory = () => {
     name: '',
     type: 'trackable',
     total_quantity: 1,
-    price: 0
+    price: 0,
+    valor_reposicao: 0, // Adicionado
   });
 
   const { data: products, isLoading, isError } = useQuery<InventoryItem[]>({
@@ -148,7 +149,13 @@ const Inventory = () => {
       // A inserção deve ocorrer na tabela 'products'
       const { error } = await supabase
         .from('products')
-        .insert([newProduct]);
+        .insert([{
+          name: newProduct.name,
+          type: newProduct.type,
+          total_quantity: newProduct.total_quantity,
+          price: newProduct.price,
+          valor_reposicao: newProduct.valor_reposicao, // Salvando o novo campo
+        }]);
 
       if (error) throw error;
 
@@ -158,7 +165,7 @@ const Inventory = () => {
       // Invalida a query da view para forçar a atualização dos dados
       queryClient.invalidateQueries({ queryKey: ['inventoryAnalytics'] });
       
-      setNewProduct({ name: '', type: 'trackable', total_quantity: 1, price: 0 });
+      setNewProduct({ name: '', type: 'trackable', total_quantity: 1, price: 0, valor_reposicao: 0 });
     } catch (error: any) {
       showError("Erro ao criar produto: " + error.message);
     }
@@ -238,6 +245,18 @@ const Inventory = () => {
                   step="0.01"
                   value={newProduct.price} 
                   onChange={(e) => setNewProduct({...newProduct, price: parseFloat(e.target.value) || 0})}
+                />
+              </div>
+              {/* Novo Campo: Valor de Reposição */}
+              <div className="space-y-2">
+                <Label htmlFor="valor_reposicao">Valor de Reposição (R$)</Label>
+                <Input 
+                  id="valor_reposicao" 
+                  type="number"
+                  step="0.01"
+                  value={newProduct.valor_reposicao} 
+                  onChange={(e) => setNewProduct({...newProduct, valor_reposicao: parseFloat(e.target.value) || 0})}
+                  placeholder="Valor para indenização em caso de perda"
                 />
               </div>
             </div>

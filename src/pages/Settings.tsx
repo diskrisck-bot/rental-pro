@@ -20,6 +20,8 @@ interface Profile {
   business_cnpj: string;
   business_address: string;
   business_phone: string;
+  business_city: string; // Novo
+  business_state: string; // Novo
   signature_url: string | null;
 }
 
@@ -34,7 +36,7 @@ const fetchProfile = async (): Promise<Profile | null> => {
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, first_name, last_name, business_name, business_cnpj, business_address, business_phone, signature_url')
+    .select('id, first_name, last_name, business_name, business_cnpj, business_address, business_phone, business_city, business_state, signature_url')
     .eq('id', user.id)
     .single();
 
@@ -47,10 +49,13 @@ const fetchProfile = async (): Promise<Profile | null> => {
     id: user.id,
     first_name: '',
     last_name: '',
+    avatar_url: '',
     business_name: '',
     business_cnpj: '',
     business_address: '',
     business_phone: '',
+    business_city: '', // Novo
+    business_state: '', // Novo
     signature_url: null,
   };
 
@@ -64,6 +69,8 @@ const Settings = () => {
     business_cnpj: '',
     business_address: '',
     business_phone: '',
+    business_city: '', // Novo
+    business_state: '', // Novo
     signature_url: null,
   });
   const [isFormDirty, setIsFormDirty] = useState(false);
@@ -81,6 +88,8 @@ const Settings = () => {
         business_cnpj: profile.business_cnpj || '',
         business_address: profile.business_address || '',
         business_phone: profile.business_phone || '',
+        business_city: profile.business_city || '', // Lendo o novo campo
+        business_state: profile.business_state || '', // Lendo o novo campo
         signature_url: profile.signature_url,
       });
       setIsFormDirty(false);
@@ -135,6 +144,8 @@ const Settings = () => {
       business_cnpj: formData.business_cnpj,
       business_address: formData.business_address,
       business_phone: formData.business_phone,
+      business_city: formData.business_city, // Salvando o novo campo
+      business_state: formData.business_state, // Salvando o novo campo
     };
     
     updateProfileMutation.mutate(payload);
@@ -222,6 +233,30 @@ const Settings = () => {
               placeholder="Ex: Rua das Flores, 123, Centro, São Paulo - SP"
               disabled={isSaving}
             />
+          </div>
+          
+          {/* Novos Campos: Cidade e Estado */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="business_city">Cidade (Para Cláusula de Foro)</Label>
+              <Input 
+                id="business_city" 
+                value={formData.business_city} 
+                onChange={handleChange}
+                placeholder="Ex: São Paulo"
+                disabled={isSaving}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="business_state">Estado (UF)</Label>
+              <Input 
+                id="business_state" 
+                value={formData.business_state} 
+                onChange={handleChange}
+                placeholder="Ex: SP"
+                disabled={isSaving}
+              />
+            </div>
           </div>
           
           <Button 

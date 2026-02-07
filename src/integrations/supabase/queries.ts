@@ -106,7 +106,7 @@ export const fetchTimelineData = async () => {
   // 1. Fetch all products (resources)
   const { data: products, error: productsError } = await supabase
     .from('products')
-    .select('id, name, type, total_quantity, price')
+    .select('id, name, type, total_quantity, price, valor_reposicao') // Incluído valor_reposicao
     .order('name', { ascending: true });
 
   if (productsError) throw productsError;
@@ -159,7 +159,7 @@ export const fetchProductAssets = async (productId: string) => {
 export const fetchAllProducts = async () => {
   const { data, error } = await supabase
     .from('products')
-    .select('id, name, price, type')
+    .select('id, name, price, type, valor_reposicao') // Incluído valor_reposicao
     .order('name', { ascending: true });
 
   if (error) throw error;
