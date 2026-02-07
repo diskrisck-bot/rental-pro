@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { startOfDay, endOfDay, formatISO, format } from 'date-fns';
+import { startOfDay, endOfDay, formatISO, format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
 
 // Helper para definir o intervalo de busca para 'Hoje'
 const getTodayRange = () => {
@@ -184,7 +184,7 @@ export const fetchBusinessName = async (): Promise<string | null> => {
   return data?.business_name || null;
 };
 
-// NOVO: Função para buscar a configuração crítica da empresa (usada para validação de pedidos)
+// Função para buscar a configuração crítica da empresa (usada para validação de pedidos)
 export const fetchBusinessConfig = async (): Promise<{ business_name: string | null, business_cnpj: string | null } | null> => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
@@ -200,4 +200,49 @@ export const fetchBusinessConfig = async (): Promise<{ business_name: string | n
   }
   
   return data || { business_name: null, business_cnpj: null };
+};
+
+// NOVO: Função para buscar a receita mensal real
+export const fetchMonthlyRevenue = async () => {
+  const today = new Date();
+  const sixMonthsAgo = subMonths(today, 5);
+  const startOfPeriod = startOfMonth(sixMonthsAgo);
+  
+  // Busca todos os pedidos não cancelados desde o início do período
+  const { data, error } = await supabase
+    .from('orders')
+    .select('total_amount, created_at')
+    .neq('status', 'canceled')
+    .gte('created_at', formatISO(startOfPeriod));
+
+  if (error) throw error;
+
+  // Inicializa o mapa de receita para os últimos 6 meses
+  const monthlyRevenueMap = new Map<string, number>();
+  const monthNames = [];
+  
+  for (let i = 0; i < 6; i++) {
+    const monthDate = subMonths(today, 5 - i);
+    const monthKey = format(monthDate, 'MMM'); // Ex: Jan, Fev
+    monthNames.push(monthKey);
+    monthlyRevenueMap.set(monthKey, 0);
+  }
+
+  // Agrupa a receita
+  data.forEach(order => {
+    const monthKey = format(parseISO(order.created_at), 'MMM');
+    const amount = Number(order.total_amount) || 0;
+    
+    if (monthlyRevenueMap.has(monthKey)) {
+      monthlyRevenueMap.set(monthKey, monthlyRevenueMap.get(monthKey)! + amount);
+    }
+  });
+
+  // Converte para o formato do gráfico
+  const chartData = monthNames.map(month => ({
+    name: month,
+    revenue: monthlyRevenueMap.get(month) || 0,
+  }));
+
+  return chartData;
 };
