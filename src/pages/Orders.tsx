@@ -1,3 +1,4 @@
+' character as '>' inside TooltipContent.">
 "use client";
 
 import React, { useState, useEffect } from 'react';
