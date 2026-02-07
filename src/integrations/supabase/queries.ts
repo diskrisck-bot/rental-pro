@@ -3,10 +3,7 @@ import { startOfDay, endOfDay, formatISO, format, subMonths, startOfMonth, endOf
 
 // Helper para definir o intervalo de busca para 'Hoje'
 const getTodayRange = () => {
-  // Obtém a data de hoje no formato YYYY-MM-DD (sem tempo ou fuso)
   const todayDateString = format(new Date(), 'yyyy-MM-dd');
-  
-  // Para consultas de intervalo (que são mais seguras para timestamp with time zone)
   const start = startOfDay(new Date());
   const end = endOfDay(new Date());
   
@@ -18,14 +15,12 @@ const getTodayRange = () => {
 };
 
 export const fetchDashboardMetrics = async () => {
-  // 1. Total Orders Count
   const { count: totalOrdersCount, error: ordersCountError } = await supabase
     .from('orders')
     .select('*', { count: 'exact', head: true });
 
   if (ordersCountError) throw ordersCountError;
 
-  // 2. Itens na Rua (Ativos): status = 'picked_up'
   const { count: activeRentalsCount, error: activeRentalsError } = await supabase
     .from('orders')
     .select('*', { count: 'exact', head: true })
@@ -33,7 +28,6 @@ export const fetchDashboardMetrics = async () => {
 
   if (activeRentalsError) throw activeRentalsError;
 
-  // 3. Reservas Futuras: status = 'reserved' OU 'pending_signature'
   const { count: futureReservationsCount, error: futureReservationsError } = await supabase
     .from('orders')
     .select('*', { count: 'exact', head: true })
@@ -41,23 +35,18 @@ export const fetchDashboardMetrics = async () => {
 
   if (futureReservationsError) throw futureReservationsError;
 
-  // 4. Total Revenue Sum
   const { data: revenueData, error: revenueError } = await supabase
     .from('orders')
     .select('total_amount');
     
   if (revenueError) throw revenueError;
-  
-  // Soma todos os total_amount (garantindo que sejam tratados como números)
   const totalRevenue = revenueData.reduce((sum, order) => sum + (Number(order.total_amount) || 0), 0);
 
-  // 5. Clientes (Contagem de nomes de clientes únicos)
   const { data: clientData, error: clientError } = await supabase
     .from('orders')
     .select('customer_name');
 
   if (clientError) throw clientError;
-
   const uniqueClients = new Set(clientData.map(order => order.customer_name)).size;
   
   return {
@@ -71,9 +60,6 @@ export const fetchDashboardMetrics = async () => {
 
 export const fetchPendingPickups = async () => {
   const { start, end } = getTodayRange();
-  
-  // Filtra pedidos reservados onde a data de início está dentro do intervalo de hoje.
-  // Apenas status 'reserved' (que já foram assinados e confirmados)
   const { data, error } = await supabase
     .from('orders')
     .select('id, customer_name, start_date')
@@ -88,8 +74,6 @@ export const fetchPendingPickups = async () => {
 
 export const fetchPendingReturns = async () => {
   const { start, end } = getTodayRange();
-
-  // Filtra pedidos retirados onde a data de fim está dentro do intervalo de hoje.
   const { data, error } = await supabase
     .from('orders')
     .select('id, customer_name, end_date')
@@ -103,7 +87,6 @@ export const fetchPendingReturns = async () => {
 };
 
 export const fetchTimelineData = async () => {
-  // 1. Fetch all products (resources)
   const { data: products, error: productsError } = await supabase
     .from('products')
     .select('id, name, type, total_quantity, price')
@@ -111,7 +94,6 @@ export const fetchTimelineData = async () => {
 
   if (productsError) throw productsError;
 
-  // 2. Fetch all active order items with order details (allocations)
   const { data: orderItems, error: itemsError } = await supabase
     .from('order_items')
     .select(`
@@ -125,14 +107,13 @@ export const fetchTimelineData = async () => {
         status
       )
     `)
-    .in('orders.status', ['reserved', 'picked_up', 'pending_signature']); // Inclui pending_signature para bloquear estoque
+    .in('orders.status', ['reserved', 'picked_up', 'pending_signature']);
 
   if (itemsError) throw itemsError;
 
   return { products, orderItems };
 };
 
-// Nova função para buscar dados da view inventory_analytics
 export const fetchInventoryAnalytics = async () => {
   const { data, error } = await supabase
     .from('inventory_analytics')
@@ -143,7 +124,6 @@ export const fetchInventoryAnalytics = async () => {
   return data;
 };
 
-// Função para buscar todos os ativos (serial numbers) de um produto
 export const fetchProductAssets = async (productId: string) => {
   const { data, error } = await supabase
     .from('assets')
@@ -155,7 +135,6 @@ export const fetchProductAssets = async (productId: string) => {
   return data;
 };
 
-// Função para buscar todos os produtos (usada no formulário de pedido)
 export const fetchAllProducts = async () => {
   const { data, error } = await supabase
     .from('products')
@@ -166,7 +145,15 @@ export const fetchAllProducts = async () => {
   return data;
 };
 
-// Função para buscar o nome da empresa do perfil (usada no Dashboard)
+export const fetchProductCount = async () => {
+  const { count, error } = await supabase
+    .from('products')
+    .select('*', { count: 'exact', head: true });
+
+  if (error) throw error;
+  return count || 0;
+};
+
 export const fetchBusinessName = async (): Promise<string | null> => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
@@ -177,14 +164,10 @@ export const fetchBusinessName = async (): Promise<string | null> => {
     .eq('id', user.id)
     .single();
 
-  if (error && error.code !== 'PGRST116') {
-    throw error;
-  }
-  
+  if (error && error.code !== 'PGRST116') throw error;
   return data?.business_name || null;
 };
 
-// Função para buscar a configuração crítica da empresa (usada para validação de pedidos)
 export const fetchBusinessConfig = async (): Promise<{ business_name: string | null, business_cnpj: string | null } | null> => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
@@ -195,20 +178,15 @@ export const fetchBusinessConfig = async (): Promise<{ business_name: string | n
     .eq('id', user.id)
     .single();
 
-  if (error && error.code !== 'PGRST116') {
-    throw error;
-  }
-  
+  if (error && error.code !== 'PGRST116') throw error;
   return data || { business_name: null, business_cnpj: null };
 };
 
-// NOVO: Função para buscar a receita mensal real
 export const fetchMonthlyRevenue = async () => {
   const today = new Date();
   const sixMonthsAgo = subMonths(today, 5);
   const startOfPeriod = startOfMonth(sixMonthsAgo);
   
-  // Busca todos os pedidos não cancelados desde o início do período
   const { data, error } = await supabase
     .from('orders')
     .select('total_amount, created_at')
@@ -217,18 +195,16 @@ export const fetchMonthlyRevenue = async () => {
 
   if (error) throw error;
 
-  // Inicializa o mapa de receita para os últimos 6 meses
   const monthlyRevenueMap = new Map<string, number>();
   const monthNames = [];
   
   for (let i = 0; i < 6; i++) {
     const monthDate = subMonths(today, 5 - i);
-    const monthKey = format(monthDate, 'MMM'); // Ex: Jan, Fev
+    const monthKey = format(monthDate, 'MMM');
     monthNames.push(monthKey);
     monthlyRevenueMap.set(monthKey, 0);
   }
 
-  // Agrupa a receita
   data.forEach(order => {
     const monthKey = format(parseISO(order.created_at), 'MMM');
     const amount = Number(order.total_amount) || 0;
@@ -238,7 +214,6 @@ export const fetchMonthlyRevenue = async () => {
     }
   });
 
-  // Converte para o formato do gráfico
   const chartData = monthNames.map(month => ({
     name: month,
     revenue: monthlyRevenueMap.get(month) || 0,

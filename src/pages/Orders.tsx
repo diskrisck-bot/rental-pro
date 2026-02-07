@@ -1,7 +1,8 @@
+Products -> New Order).">
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Loader2, Download, MessageCircle, CheckCircle, DollarSign, Clock, Zap, Calendar, AlertTriangle } from 'lucide-react';
+import { Plus, Search, Loader2, Download, MessageCircle, CheckCircle, DollarSign, Clock, Zap, Calendar, AlertTriangle, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
@@ -21,7 +22,7 @@ import OrderDetailsSheet from '@/components/orders/OrderDetailsSheet';
 import { showError } from '@/utils/toast';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { fetchBusinessConfig } from '@/integrations/supabase/queries';
+import { fetchBusinessConfig, fetchProductCount } from '@/integrations/supabase/queries';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 const getStatusBadge = (status: string) => {
@@ -81,33 +82,15 @@ const getFulfillmentTypeBadge = (type: string) => {
 
 const getWhatsappLink = (order: any, isSigned: boolean) => {
     if (!order) return '#';
-    
     const signLink = `${window.location.origin}/sign/${order.id}`;
-    
-    let messageText = '';
-    if (isSigned) {
-        messageText = `Olá ${order.customer_name}! ✅
-Aqui está sua via do contrato assinado #${order.id.split('-')[0]}:
-${signLink}
-`;
-    } else {
-        messageText = `Olá ${order.customer_name}! 📦
-Aqui está o link para visualizar e assinar seu contrato de locação #${order.id.split('-')[0]}:
-${signLink}
-
-Por favor, acesse e assine digitalmente.
-`;
-    }
+    let messageText = isSigned 
+      ? `Olá ${order.customer_name}! ✅\nAqui está sua via do contrato assinado #${order.id.split('-')[0]}:\n${signLink}\n`
+      : `Olá ${order.customer_name}! 📦\nAqui está o link para visualizar e assinar seu contrato de locação #${order.id.split('-')[0]}:\n${signLink}\n\nPor favor, acesse e assine digitalmente.`;
 
     const encodedMessage = encodeURIComponent(messageText);
-    
     let phone = order.customer_phone ? order.customer_phone.replace(/\D/g, '') : '';
-    if (phone.length === 10 || phone.length === 11) {
-      phone = `55${phone}`;
-    }
-    
+    if (phone.length === 10 || phone.length === 11) phone = `55${phone}`;
     const baseUrl = phone ? `https://wa.me/${phone}` : `https://wa.me/`;
-    
     return `${baseUrl}?text=${encodedMessage}`;
 };
 
@@ -117,46 +100,31 @@ const Orders = () => {
   const [search, setSearch] = useState("");
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
-  
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  // --- CORREÇÃO SÊNIOR: Verificação Crítica de Configuração da Empresa ---
-  // Removemos o staleTime para forçar a verificação toda vez que a tela é montada
   const { data: businessConfig, isLoading: isLoadingConfig } = useQuery({
     queryKey: ['businessConfig'],
     queryFn: fetchBusinessConfig,
-    staleTime: 0, // Garante que buscaremos dados frescos ao entrar na tela
+    staleTime: 0,
   });
 
-  // Lógica robusta: Verifica se os campos existem e não são apenas espaços em branco
-  const isCompanyConfigured = !!(
-    businessConfig?.business_name?.trim() && 
-    businessConfig?.business_cnpj?.trim()
-  );
+  const { data: productCount, isLoading: isLoadingProducts } = useQuery({
+    queryKey: ['productCount'],
+    queryFn: fetchProductCount,
+    staleTime: 0,
+  });
 
-  const handleActionClick = (e: React.MouseEvent) => {
-    if (!isCompanyConfigured) {
-      e.preventDefault();
-      navigate('/settings');
-      showError("Ação Necessária: Preencha o Nome e CNPJ da empresa nas Configurações para habilitar novos pedidos.");
-    }
-  };
+  const isCompanyConfigured = !!(businessConfig?.business_name?.trim() && businessConfig?.business_cnpj?.trim());
+  const hasProducts = (productCount || 0) > 0;
 
   const fetchOrders = async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
         .from('orders')
-        .select(`
-          *,
-          order_items (
-            quantity,
-            products (name)
-          )
-        `)
+        .select(`*, order_items (quantity, products (name))`)
         .order('created_at', { ascending: false });
-
       if (error) throw error;
       setOrders(data || []);
     } catch (error: any) {
@@ -194,6 +162,62 @@ const Orders = () => {
     );
   });
 
+  const isGlobalLoading = isLoadingConfig || isLoadingProducts;
+
+  const renderHeaderButton = () => {
+    if (isGlobalLoading) {
+      return (
+        <Button disabled className="w-full md:w-auto bg-gray-100 text-gray-400">
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verificando Dados...
+        </Button>
+      );
+    }
+
+    if (!isCompanyConfigured) {
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button 
+              className="bg-orange-600 hover:bg-orange-700 w-full md:w-auto shadow-lg"
+              onClick={() => navigate('/settings')}
+            >
+              <AlertTriangle className="mr-2 h-4 w-4" /> Configure a Empresa
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs bg-gray-800 text-white p-3 rounded-lg">
+            <p className="text-xs">Vá em Configurações > Empresa para habilitar a emissão de pedidos.</p>
+          </TooltipContent>
+        </Tooltip>
+      );
+    }
+
+    if (!hasProducts) {
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button 
+              className="bg-indigo-600 hover:bg-indigo-700 text-white w-full md:w-auto shadow-lg"
+              onClick={() => navigate('/inventory')}
+            >
+              <Package className="mr-2 h-4 w-4" /> Cadastre um Produto
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs bg-gray-800 text-white p-3 rounded-lg">
+            <p className="text-xs">Você precisa ter itens no inventário para criar um pedido.</p>
+          </TooltipContent>
+        </Tooltip>
+      );
+    }
+
+    return (
+      <CreateOrderDialog onOrderCreated={fetchOrders}>
+        <Button className="bg-blue-600 hover:bg-blue-700 w-full md:w-auto shadow-lg shadow-blue-100">
+          <Plus className="mr-2 h-4 w-4" /> Novo Pedido
+        </Button>
+      </CreateOrderDialog>
+    );
+  };
+
   return (
     <div className="p-4 md:p-8 space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -201,32 +225,7 @@ const Orders = () => {
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Pedidos</h1>
           <p className="text-muted-foreground">Acompanhe e gerencie todos os aluguéis.</p>
         </div>
-        
-        {isLoadingConfig ? (
-          <Button disabled className="w-full md:w-auto bg-gray-100 text-gray-400">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verificando Dados...
-          </Button>
-        ) : !isCompanyConfigured ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button 
-                className="bg-orange-600 hover:bg-orange-700 w-full md:w-auto shadow-lg"
-                onClick={handleActionClick}
-              >
-                <AlertTriangle className="mr-2 h-4 w-4" /> Configure a Empresa
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-xs bg-gray-800 text-white p-3 rounded-lg">
-              <p className="text-xs">Dados de Locador (Nome e CNPJ) são obrigatórios para gerar contratos válidos.</p>
-            </TooltipContent>
-          </Tooltip>
-        ) : (
-          <CreateOrderDialog onOrderCreated={fetchOrders}>
-            <Button className="bg-blue-600 hover:bg-blue-700 w-full md:w-auto shadow-lg shadow-blue-100">
-              <Plus className="mr-2 h-4 w-4" /> Novo Pedido
-            </Button>
-          </CreateOrderDialog>
-        )}
+        {renderHeaderButton()}
       </div>
 
       <div className="relative max-w-sm">
@@ -271,70 +270,31 @@ const Orders = () => {
                 filteredOrders.map((order) => {
                   const isSigned = !!order.signed_at;
                   const whatsappLink = getWhatsappLink(order, isSigned);
-                  
                   return (
                     <TableRow key={order.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => handleViewDetails(order.id)}>
                       <TableCell className="font-medium">
-                        <div className="font-mono text-[10px] text-gray-400 mb-1">
-                          #{order.id.split('-')[0]}
-                        </div>
+                        <div className="font-mono text-[10px] text-gray-400 mb-1">#{order.id.split('-')[0]}</div>
                         {isSigned ? (
-                          <Badge className="bg-green-100 text-green-800 border-green-200">
-                            <CheckCircle className="h-3 w-3 mr-1" /> Assinado
-                          </Badge>
+                          <Badge className="bg-green-100 text-green-800 border-green-200"><CheckCircle className="h-3 w-3 mr-1" /> Assinado</Badge>
                         ) : (
-                          <Badge className="bg-orange-100 text-orange-800 border-orange-200">
-                            Aguardando Assinatura
-                          </Badge>
+                          <Badge className="bg-orange-100 text-orange-800 border-orange-200">Aguardando Assinatura</Badge>
                         )}
                       </TableCell>
                       <TableCell className="font-medium">{order.customer_name}</TableCell>
                       <TableCell>{getFulfillmentTypeBadge(order.fulfillment_type)}</TableCell>
-                      <TableCell className="text-sm">
-                        {format(new Date(order.start_date), 'dd/MM')} - {format(new Date(order.end_date), 'dd/MM')}
-                      </TableCell>
+                      <TableCell className="text-sm">{format(new Date(order.start_date), 'dd/MM')} - {format(new Date(order.end_date), 'dd/MM')}</TableCell>
                       <TableCell>{getStatusBadge(order.status)}</TableCell>
                       <TableCell>{getPaymentTimingBadge(order.payment_timing)}</TableCell>
-                      <TableCell className="font-semibold text-blue-600">
-                        R$ {Number(order.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </TableCell>
+                      <TableCell className="font-semibold text-blue-600">R$ {Number(order.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           {isSigned ? (
                             <>
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleViewDetails(order.id);
-                                }}
-                                className="text-green-600 border-green-200 hover:bg-green-50"
-                              >
-                                <Download className="h-4 w-4" />
-                              </Button>
-                              <a 
-                                href={whatsappLink}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <Button variant="ghost" size="sm" className="text-green-600 hover:bg-green-50">
-                                  <MessageCircle className="h-4 w-4" />
-                                </Button>
-                              </a>
+                              <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleViewDetails(order.id); }} className="text-green-600 border-green-200 hover:bg-green-50"><Download className="h-4 w-4" /></Button>
+                              <a href={whatsappLink} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}><Button variant="ghost" size="sm" className="text-green-600 hover:bg-green-50"><MessageCircle className="h-4 w-4" /></Button></a>
                             </>
                           ) : (
-                            <a 
-                              href={whatsappLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Button variant="secondary" size="sm" className="bg-blue-50 text-blue-600 hover:bg-blue-100">
-                                <MessageCircle className="h-4 w-4 mr-1" /> Enviar
-                              </Button>
-                            </a>
+                            <a href={whatsappLink} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}><Button variant="secondary" size="sm" className="bg-blue-50 text-blue-600 hover:bg-blue-100"><MessageCircle className="h-4 w-4 mr-1" /> Enviar</Button></a>
                           )}
                         </div>
                       </TableCell>
@@ -346,13 +306,7 @@ const Orders = () => {
           </Table>
         </div>
       </div>
-
-      <OrderDetailsSheet 
-        orderId={selectedOrderId}
-        open={isSheetOpen}
-        onOpenChange={setIsSheetOpen}
-        onStatusUpdate={fetchOrders}
-      />
+      <OrderDetailsSheet orderId={selectedOrderId} open={isSheetOpen} onOpenChange={setIsSheetOpen} onStatusUpdate={fetchOrders} />
     </div>
   );
 };
