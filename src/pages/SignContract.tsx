@@ -36,13 +36,12 @@ const SignContract = () => {
       setOrder(raw);
       setCustomerSignature(raw.signature_image);
       
-      // Tratamento de dados vazios para evitar "null" no texto
       setLocador({
         name: raw.owner_name || "Locadora (Nome não configurado)",
         cnpj: raw.owner_cnpj || "CNPJ não informado",
         address: raw.owner_address || "Endereço da empresa",
-        city: raw.owner_city || "Cidade da Empresa", // Se vier vazio do banco, usa o placeholder
-        signature: raw.owner_signature
+        city: raw.owner_city || "Cidade da Empresa",
+        signature: raw.owner_signature // Importante para o PDF
       });
     } catch (e) {
       showError("Erro ao carregar dados do contrato.");
@@ -53,7 +52,7 @@ const SignContract = () => {
 
   useEffect(() => { fetchData(); }, [orderId]);
 
-  // 2. FUNÇÃO QUE GERA O TEXTO JURÍDICO (Usada na Tela e no PDF para garantir consistência)
+  // 2. FUNÇÃO QUE GERA O TEXTO JURÍDICO (Visualização Tela)
   const buildContractText = () => {
     if (!order || !locador) return "";
     
@@ -75,7 +74,7 @@ const SignContract = () => {
     };
   };
 
-  // 3. GERADOR DE PDF PROFISSIONAL (A4)
+  // 3. GERADOR DE PDF PROFISSIONAL (Igual ao do Dono)
   const generatePDF = async () => {
     if (!order || !locador) return;
     setIsDownloading(true);
@@ -83,101 +82,84 @@ const SignContract = () => {
     const doc = new jsPDF({ format: 'a4', unit: 'mm' });
     const content = buildContractText();
     
-    // Configurações de layout A4
     const margin = 20;
     const pageWidth = 210;
     const maxLineWidth = pageWidth - (margin * 2);
     let currentY = 20;
 
-    // Helper para adicionar texto com quebra de linha automática
     const printText = (text: string, fontSize = 10, fontStyle = "normal", align = "left") => {
       doc.setFont("helvetica", fontStyle);
       doc.setFontSize(fontSize);
-      
       const lines = doc.splitTextToSize(text, maxLineWidth);
-      
-      // Verifica se precisa de nova página
-      if (currentY + (lines.length * 5) > 280) {
-        doc.addPage();
-        currentY = 20;
-      }
-      
+      if (currentY + (lines.length * 5) > 280) { doc.addPage(); currentY = 20; }
       doc.text(lines, align === "center" ? pageWidth / 2 : margin, currentY, { align: align as any });
-      currentY += (lines.length * 4) + 4; // Espaçamento entre parágrafos
+      currentY += (lines.length * 4) + 4;
     };
 
-    // --- MONTAGEM DO DOCUMENTO ---
-    
-    // Título
+    // --- CONTEÚDO ---
     printText(content.header, 14, "bold", "center");
     currentY += 5;
-
-    // Introdução (Partes)
     printText(content.intro, 10, "normal", "justify");
     currentY += 5;
 
-    // Cláusulas (Loop)
     content.clauses.forEach(clause => {
       printText(clause.title, 10, "bold", "left");
-      printText(clause.text, 10, "normal", "left"); // Left fica melhor que justify para listas
+      printText(clause.text, 10, "normal", "left");
       currentY += 2;
     });
 
-    // Encerramento
     currentY += 5;
     printText(content.footer, 10, "normal", "left");
 
-    // Área de Assinaturas (Layout lado a lado)
-    currentY += 20;
-    if (currentY > 250) { doc.addPage(); currentY = 30; }
+    // --- ASSINATURAS (Página 1) ---
+    currentY += 30;
+    if (currentY > 250) { doc.addPage(); currentY = 40; }
 
-    const yAssinatura = currentY;
-    
+    const yLinha = currentY;
+    const yImagem = currentY - 25;
+
     // Assinatura Locador
-    doc.line(margin, yAssinatura, margin + 70, yAssinatura);
-    doc.setFontSize(8);
-    doc.text(locador.name.substring(0, 35), margin, yAssinatura + 5);
-    doc.text("LOCADOR", margin, yAssinatura + 9);
+    if (locador.signature) {
+       try { doc.addImage(locador.signature, 'PNG', margin + 5, yImagem, 50, 25); } catch (e) {}
+    }
+    doc.line(margin, yLinha, margin + 70, yLinha);
+    doc.setFontSize(8); doc.text("LOCADOR", margin, yLinha + 5);
 
     // Assinatura Cliente
-    doc.line(120, yAssinatura, 190, yAssinatura);
-    doc.text(order.customer_name.substring(0, 35), 120, yAssinatura + 5);
-    doc.text("LOCATÁRIO", 120, yAssinatura + 9);
+    if (order.signature_image) {
+       try { doc.addImage(order.signature_image, 'PNG', 120 + 5, yImagem, 50, 25); } catch (e) {}
+    }
+    doc.line(120, yLinha, 190, yLinha);
+    doc.text("LOCATÁRIO", 120, yLinha + 5);
 
-    // --- PÁGINA 2: AUDITORIA (LOGS TÉCNICOS) ---
+    // --- AUDITORIA (Página 2) ---
     doc.addPage();
     currentY = 20;
     printText("CERTIFICADO DE ASSINATURA DIGITAL", 14, "bold", "center");
     currentY += 10;
     
-    printText("Este documento foi assinado eletronicamente e possui validade jurídica.", 10, "normal", "center");
-    currentY += 15;
-
-    const logBoxY = currentY;
     doc.setDrawColor(200);
     doc.setFillColor(245, 245, 245);
-    doc.rect(margin, logBoxY, maxLineWidth, 80, 'FD');
-    
+    doc.rect(margin, currentY, maxLineWidth, 60, 'FD');
     currentY += 10;
+    
     const addLog = (label: string, value: string) => {
-      doc.setFont("courier", "bold"); doc.text(label, margin + 10, currentY);
-      doc.setFont("courier", "normal"); doc.text(value, margin + 50, currentY);
-      currentY += 8;
+      doc.setFont("courier", "bold"); doc.text(label, margin + 5, currentY);
+      doc.setFont("courier", "normal"); doc.text(value, margin + 45, currentY);
+      currentY += 7;
     };
 
     addLog("ID do Pedido:", order.order_id);
     addLog("Data/Hora:", order.signed_at ? format(parseISO(order.signed_at), "dd/MM/yyyy HH:mm:ss") : "Pendente");
     addLog("IP do Cliente:", order.signer_ip || "N/A");
-    addLog("Navegador:", (order.signer_user_agent || "N/A").substring(0, 40) + "...");
+    addLog("Navegador:", (order.signer_user_agent || "N/A").substring(0, 30) + "...");
     
-    // Imagem da assinatura
     if (order.signature_image) {
         currentY += 5;
-        doc.text("Rubrica Capturada:", margin + 10, currentY);
-        doc.addImage(order.signature_image, 'PNG', margin + 10, currentY + 5, 40, 20);
+        doc.text("Rubrica Capturada:", margin + 5, currentY);
+        doc.addImage(order.signature_image, 'PNG', margin + 5, currentY + 5, 40, 20);
     }
 
-    // Salvar
     doc.save(`Contrato-${order.order_id.split('-')[0]}.pdf`);
     setIsDownloading(false);
   };
@@ -199,7 +181,7 @@ const SignContract = () => {
       if (error) throw error;
       
       showSuccess("Assinado com sucesso!");
-      fetchData(); // Recarrega para mostrar a tela de sucesso
+      fetchData(); 
     } catch (e) {
       showError("Erro ao salvar assinatura.");
     } finally {
@@ -215,7 +197,7 @@ const SignContract = () => {
     <div className="min-h-screen bg-gray-100 py-8 px-4 flex justify-center items-start">
       <div className="w-full max-w-4xl bg-white shadow-xl rounded-xl overflow-hidden border border-gray-200">
         
-        {/* CABEÇALHO DA TELA */}
+        {/* CABEÇALHO */}
         <div className="bg-slate-900 text-white p-6 text-center">
           <h1 className="text-xl font-bold uppercase tracking-wider">
             {order.signed_at ? "Contrato Vigente" : "Revisão e Assinatura"}
@@ -225,19 +207,18 @@ const SignContract = () => {
 
         <div className="p-6 md:p-8 space-y-8">
           
-          {/* VISUALIZADOR DO CONTRATO (Tela) */}
+          {/* VISUALIZADOR DE TELA */}
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-slate-700 font-bold border-b pb-2">
               <FileText className="w-5 h-5" />
               <h2>Termos do Contrato</h2>
             </div>
             
-            {/* Caixa de Texto com Rolagem */}
             <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 h-96 overflow-y-auto shadow-inner">
               <div className="font-serif text-sm leading-relaxed text-slate-800 whitespace-pre-wrap">
                 <p className="text-center font-bold mb-4 text-base">{contractContent.header}</p>
                 <p className="mb-4 text-justify">{contractContent.intro}</p>
-                {contractContent.clauses?.map((c, idx) => (
+                {contractContent.clauses?.map((c: any, idx: number) => (
                   <div key={idx} className="mb-4">
                     <strong className="block mb-1">{c.title}</strong>
                     <span className="text-justify block">{c.text}</span>
@@ -248,7 +229,7 @@ const SignContract = () => {
             </div>
           </div>
 
-          {/* ÁREA DE AÇÃO (Assinar ou Baixar) */}
+          {/* AÇÕES */}
           {!order.signed_at ? (
             <div className="bg-blue-50 p-6 rounded-xl border border-blue-100 space-y-6 animate-in fade-in slide-in-from-bottom-4">
               <div className="flex items-start gap-3">
