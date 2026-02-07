@@ -33,6 +33,8 @@ const getStatusBadge = (status: string) => {
       return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Em Andamento</Badge>;
     case 'returned': 
       return <Badge className="bg-green-100 text-green-800 border-green-200">Concluído</Badge>;
+    case 'canceled': 
+      return <Badge className="bg-red-50 text-red-700 border-red-200">Cancelado</Badge>;
     default: 
       return <Badge>{status}</Badge>;
   }

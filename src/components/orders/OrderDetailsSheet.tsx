@@ -26,7 +26,8 @@ import {
   MessageCircle,
   Download,
   Building,
-  AlertTriangle
+  AlertTriangle,
+  XCircle // Novo ícone para Cancelar
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { format, isAfter, parseISO } from 'date-fns';
@@ -364,6 +365,42 @@ Por favor, acesse e assine digitalmente.
       setUpdating(false);
     }
   };
+  
+  const handleCancelOrder = async () => {
+    if (!orderId) return;
+    
+    const confirmation = window.confirm("Tem certeza que deseja CANCELAR este pedido? O estoque reservado será liberado imediatamente.");
+    
+    if (!confirmation) return;
+    
+    try {
+      setUpdating(true);
+      
+      const { error } = await supabase
+        .from('orders')
+        .update({ status: 'canceled' })
+        .eq('id', orderId);
+        
+      if (error) throw error;
+      
+      showSuccess("Pedido cancelado com sucesso! Estoque liberado.");
+      
+      // Invalidações para liberar o estoque e atualizar listas
+      queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] });
+      queryClient.invalidateQueries({ queryKey: ['pendingPickups'] });
+      queryClient.invalidateQueries({ queryKey: ['pendingReturns'] });
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['timelineData'] });
+      
+      onOpenChange(false); // Fecha o modal
+      onStatusUpdate(); // Atualiza a lista de pedidos
+      
+    } catch (error: any) {
+      showError("Erro ao cancelar pedido: " + error.message);
+    } finally {
+      setUpdating(false);
+    }
+  };
 
   const getStatusConfig = (status: string) => {
     switch (status) {
@@ -372,6 +409,7 @@ Por favor, acesse e assine digitalmente.
       case 'reserved': return { label: 'Reservado', color: 'bg-blue-50 text-blue-700 border-blue-200' };
       case 'picked_up': return { label: 'Em Andamento', color: 'bg-blue-100 text-blue-800 border-blue-200' };
       case 'returned': return { label: 'Concluído', color: 'bg-green-100 text-green-800 border-green-200' };
+      case 'canceled': return { label: 'Cancelado', color: 'bg-red-50 text-red-700 border-red-200' }; // Novo status
       default: return { label: status, color: 'bg-gray-100 text-gray-800' };
     }
   };
@@ -390,9 +428,14 @@ Por favor, acesse e assine digitalmente.
   const isOverdue = order?.returned_at && order?.end_date && isAfter(parseISO(order.returned_at), parseISO(order.end_date));
   const isSigned = !!order?.signed_at;
   const isPendingSignature = order?.status === 'pending_signature';
+  const isCanceled = order?.status === 'canceled';
+  const isCompleted = order?.status === 'returned';
+  
+  // Se o pedido estiver cancelado ou concluído, não deve haver botão de ação principal
+  const isActionDisabled = isCanceled || isCompleted;
 
   const renderActionButton = () => {
-    if (!order) return null;
+    if (!order || isActionDisabled) return null;
 
     let buttonProps = {
       label: '',
@@ -427,8 +470,6 @@ Por favor, acesse e assine digitalmente.
             color: 'bg-green-600 hover:bg-green-700',
             disabled: false,
         };
-    } else if (order.status === 'returned') {
-        return null;
     } else if (order.status === 'draft') {
         // Rascunhos não devem ter botão de ação principal aqui, pois o fluxo é via modal de edição.
         return null;
@@ -495,43 +536,53 @@ Por favor, acesse e assine digitalmente.
           </div>
 
           {/* Alerta de Assinatura Pendente */}
-          {!isSigned && (
+          {!isSigned && !isCanceled && !isCompleted && (
             <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-sm text-yellow-800 flex items-center gap-3">
               <AlertTriangle className="h-5 w-5 flex-shrink-0" />
               <p className="font-semibold">Contrato não assinado.</p>
             </div>
           )}
+          
+          {/* Alerta de Cancelado */}
+          {isCanceled && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-800 flex items-center gap-3">
+              <XCircle className="h-5 w-5 flex-shrink-0" />
+              <p className="font-semibold">Este pedido foi cancelado. O estoque foi liberado.</p>
+            </div>
+          )}
 
           {/* Botão de Enviar Contrato (AGORA É UM LINK <a>) */}
-          <div className="space-y-3">
-             <a 
-                href={getWhatsappLink(order)}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={handleShareContract} // Agora definido
-                className={cn(
-                  "w-full h-14 bg-green-600 hover:bg-green-700 text-white font-bold gap-3 rounded-xl shadow-lg transition-all active:scale-95",
-                  "inline-flex items-center justify-center text-base", // Estiliza como botão
-                  loading && "opacity-50 cursor-not-allowed"
-                )}
-                aria-disabled={loading}
-             >
-                <MessageCircle className="h-6 w-6" />
-                {isSigned ? 'Reenviar Contrato Assinado' : 'Enviar Link de Assinatura'}
-             </a>
-             
-             {isSigned && (
-                <Button 
-                  onClick={handleDownloadFinalPDF} 
-                  disabled={isGeneratingContract || loading}
-                  variant="outline"
-                  className="w-full h-12 border-green-500 text-green-600 hover:bg-green-50"
-                >
-                  {isGeneratingContract ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <Download className="h-5 w-5 mr-2" />}
-                  Baixar Contrato Assinado
-                </Button>
-             )}
-          </div>
+          {!isCanceled && (
+            <div className="space-y-3">
+               <a 
+                  href={getWhatsappLink(order)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={handleShareContract} // Agora definido
+                  className={cn(
+                    "w-full h-14 bg-green-600 hover:bg-green-700 text-white font-bold gap-3 rounded-xl shadow-lg transition-all active:scale-95",
+                    "inline-flex items-center justify-center text-base", // Estiliza como botão
+                    loading && "opacity-50 cursor-not-allowed"
+                  )}
+                  aria-disabled={loading}
+               >
+                  <MessageCircle className="h-6 w-6" />
+                  {isSigned ? 'Reenviar Contrato Assinado' : 'Enviar Link de Assinatura'}
+               </a>
+               
+               {isSigned && (
+                  <Button 
+                    onClick={handleDownloadFinalPDF} 
+                    disabled={isGeneratingContract || loading}
+                    variant="outline"
+                    className="w-full h-12 border-green-500 text-green-600 hover:bg-green-50"
+                  >
+                    {isGeneratingContract ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <Download className="h-5 w-5 mr-2" />}
+                    Baixar Contrato Assinado
+                  </Button>
+               )}
+            </div>
+          )}
 
           <div className="space-y-3">
             <h3 className="text-sm font-semibold flex items-center gap-2">
@@ -616,10 +667,28 @@ Por favor, acesse e assine digitalmente.
               <AlertTriangle className="h-4 w-4 inline mr-1" /> Assinatura pendente para liberar.
             </div>
           )}
+          
+          {/* Ação Principal */}
           {renderActionButton()}
-          <Button variant="outline" className="w-full h-12" onClick={() => onOpenChange(false)}>
-            Fechar Painel
-          </Button>
+          
+          <div className="flex justify-between gap-2 w-full">
+            {/* Botão de Cancelamento (Visível se não estiver concluído ou cancelado) */}
+            {!isActionDisabled && (
+              <Button 
+                variant="ghost" 
+                className="w-full h-12 text-red-600 hover:bg-red-50" 
+                onClick={handleCancelOrder}
+                disabled={updating}
+              >
+                {updating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-5 w-5" />}
+                Cancelar Pedido
+              </Button>
+            )}
+            
+            <Button variant="outline" className={cn("h-12", isActionDisabled ? "w-full" : "w-1/2")} onClick={() => onOpenChange(false)}>
+              Fechar Painel
+            </Button>
+          </div>
         </SheetFooter>
       </SheetContent>
     </Sheet>
