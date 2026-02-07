@@ -6,7 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import MainLayout from "./components/layout/MainLayout";
 import Login from "./pages/Login";
-import SignContract from "./pages/SignContract"; // Import SignContract
+import SignContract from "./pages/SignContract";
 
 const queryClient = new QueryClient();
 
@@ -17,11 +17,14 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          {/* Rotas Públicas */}
+          {/* --- ROTAS PÚBLICAS (Acessíveis sem Login) --- */}
           <Route path="/login" element={<Login />} />
-          <Route path="/sign/:orderId" element={<SignContract />} />
           
-          {/* Rotas Protegidas */}
+          {/* AJUSTE AQUI: Mudamos de "/sign/" para "/contract/" para bater com o link do WhatsApp */}
+          <Route path="/contract/:orderId" element={<SignContract />} />
+          
+          {/* --- ROTAS PROTEGIDAS (Exigem Login) --- */}
+          {/* O "/*" pega qualquer coisa que não foi definida acima e joga para o layout protegido */}
           <Route path="/*" element={<ProtectedRoute> <MainLayout /> </ProtectedRoute>} />
         </Routes>
       </BrowserRouter>
