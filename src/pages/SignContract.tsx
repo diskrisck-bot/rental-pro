@@ -43,6 +43,8 @@ interface ContractData {
   total_amount: number;
   signed_at: string | null;
   signature_image: string | null;
+  signer_ip: string | null;
+  signer_user_agent: string | null;
   status: string;
   fulfillment_type: string;
   user_id: string; 
@@ -161,6 +163,151 @@ const SignContract = () => {
       showError("Erro ao assinar: " + error.message);
     } finally {
       setSigning(false);
+    }
+  };
+  
+  const generatePDF = async () => {
+    if (!order || !locador) return;
+    setIsDownloading(true);
+    
+    try {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      
+      const profile = locador || {};
+      const isFinal = !!order.signed_at;
+      
+      // Função para adicionar rodapé com marca d'água
+      const addWatermark = (doc: jsPDF, pageNumber: number) => {
+        doc.setPage(pageNumber);
+        doc.setFontSize(8);
+        doc.setTextColor(150, 150, 150);
+        const watermarkText = "Gerado e Assinado digitalmente via RentalPro (rentalpro.com.br)";
+        doc.text(watermarkText, pageWidth / 2, pageHeight - 10, { align: 'center' });
+      };
+      
+      // --- 1. Conteúdo do Contrato (Página 1) ---
+      
+      doc.setFontSize(20);
+      doc.setTextColor(30, 58, 138);
+      doc.text("CONTRATO DE LOCAÇÃO", pageWidth / 2, 20, { align: 'center' });
+      
+      // Dados do Locador (Empresa)
+      doc.setFontSize(12);
+      doc.setTextColor(0, 0, 0);
+      doc.setFont("helvetica", "bold");
+      doc.text("LOCADOR (EMPRESA)", 14, 35);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Nome: ${profile.business_name || 'N/A'}`, 14, 42);
+      doc.text(`CNPJ/CPF: ${profile.business_cnpj || 'N/A'}`, 14, 49);
+      doc.text(`Endereço: ${profile.business_address || 'N/A'}`, 14, 56);
+      doc.text(`Telefone: ${profile.business_phone || 'N/A'}`, 14, 63);
+      
+      // Dados do Locatário (Cliente)
+      doc.setFont("helvetica", "bold");
+      doc.text("LOCATÁRIO (CLIENTE)", pageWidth / 2 + 10, 35);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Nome: ${order.customer_name || 'N/A'}`, pageWidth / 2 + 10, 42);
+      doc.text(`CPF: ${order.customer_cpf || 'N/A'}`, pageWidth / 2 + 10, 49);
+      doc.text(`Telefone: ${order.customer_phone || 'N/A'}`, pageWidth / 2 + 10, 56);
+      
+      // Período e Valor
+      doc.setFontSize(12);
+      doc.text(`Pedido: #${order.id.split('-')[0]}`, 14, 75);
+      doc.text(`Período: ${format(parseISO(order.start_date), "dd/MM/yyyy")} a ${format(parseISO(order.end_date), "dd/MM/yyyy")}`, 14, 82);
+
+      // Tabela de Itens
+      const tableData = order.items.map((item: any) => [
+        item.products?.name || 'Produto',
+        item.quantity,
+        `R$ ${Number(item.products?.price || 0).toFixed(2)}`
+      ]);
+
+      autoTable(doc, {
+        startY: 90,
+        head: [['Produto', 'Qtd', 'Preço/Dia']],
+        body: tableData,
+        headStyles: { fillStyle: 'F', fillColor: [37, 99, 235] },
+      });
+
+      const finalY = (doc as any).lastAutoTable.finalY || 120;
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text(`VALOR TOTAL: R$ ${Number(order.total_amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, pageWidth - 14, finalY + 15, { align: 'right' });
+
+      // Assinaturas (Locador e Locatário)
+      let currentY = finalY + 40;
+      
+      // Assinatura do Locador (Dono)
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text("__________________________________________", pageWidth - 80, currentY);
+      doc.text("Assinatura do Locador (RentalPro)", pageWidth - 80, currentY + 5);
+      
+      if (profile.signature_url) {
+        doc.addImage(profile.signature_url, 'PNG', pageWidth - 80, currentY - 25, 60, 25);
+      } else {
+        doc.setFontSize(12);
+        doc.setFont("times", "italic");
+        doc.text(profile.business_name || 'Locador', pageWidth - 80, currentY - 10);
+        doc.setFont("helvetica", "normal");
+      }
+
+      // Assinatura do Locatário (Cliente)
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text("__________________________________________", 14, currentY);
+      doc.text("Assinatura do Locatário (Cliente)", 14, currentY + 5);
+      
+      if (order.signature_image) {
+        doc.addImage(order.signature_image, 'PNG', 14, currentY - 25, 60, 25);
+      } else {
+        doc.setFontSize(12);
+        doc.setFont("times", "italic");
+        doc.text("Aguardando Assinatura", 14, currentY - 10);
+        doc.setFont("helvetica", "normal");
+      }
+      
+      // --- 2. Certificado de Assinatura (Página 2, se assinado) ---
+      if (isFinal && order.signed_at) {
+        doc.addPage();
+        
+        doc.setFontSize(18);
+        doc.setTextColor(30, 58, 138);
+        doc.text("CERTIFICADO DE ASSINATURA ELETRÔNICA", pageWidth / 2, 20, { align: 'center' });
+        
+        doc.setFontSize(12);
+        doc.setTextColor(0, 0, 0);
+        
+        const auditY = 40;
+        
+        doc.text("Este documento foi assinado digitalmente pelo Locatário, conferindo validade jurídica conforme a Medida Provisória nº 2.200-2/2001.", 14, auditY);
+        
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "bold");
+        doc.text("Detalhes da Assinatura:", 14, auditY + 15);
+        
+        doc.setFont("helvetica", "normal");
+        doc.text(`ID do Documento (Hash): ${order.id}`, 14, auditY + 25);
+        doc.text(`Assinado por: ${order.customer_name} (Locatário)`, 14, auditY + 35);
+        doc.text(`Data/Hora da Assinatura: ${format(parseISO(order.signed_at), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })}`, 14, auditY + 45);
+        doc.text(`IP de Origem: ${order.signer_ip || 'N/A'}`, 14, auditY + 55);
+        doc.text(`Dispositivo (User Agent): ${order.signer_user_agent || 'N/A'}`, 14, auditY + 65, { maxWidth: pageWidth - 28 });
+      }
+
+      // Add watermark to all pages
+      const totalPages = doc.internal.pages.length;
+      for (let i = 1; i <= totalPages; i++) {
+        addWatermark(doc, i);
+      }
+
+      doc.save(`contrato-assinado-${order.id.split('-')[0]}.pdf`);
+      showSuccess("Download do contrato finalizado iniciado.");
+    } catch (error: any) {
+      showError("Erro ao gerar PDF final: " + error.message);
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -328,12 +475,13 @@ const SignContract = () => {
 
             {isSigned && (
               <Button 
+                onClick={generatePDF} 
+                disabled={isDownloading}
                 variant="outline"
                 className="w-full h-14 border-green-600 text-green-600 hover:bg-green-50 font-bold gap-2"
-                onClick={() => window.print()}
               >
-                <Download className="h-5 w-5" />
-                Imprimir / Salvar PDF
+                {isDownloading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
+                Baixar Via do Contrato (PDF)
               </Button>
             )}
           </div>
