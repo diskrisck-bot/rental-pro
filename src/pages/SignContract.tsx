@@ -108,18 +108,27 @@ const SignContract = () => {
       
       contractData.created_by = orderMeta.created_by;
       
-      // 3. Fetch Owner Settings from company_settings
+      // 3. Fetch Owner Settings from dados_locadora
       if (contractData.created_by) {
         const { data: settingsData, error: settingsError } = await supabase
-          .from('company_settings') // *** MUDANÇA CRÍTICA AQUI ***
-          .select('business_name, business_cnpj, business_address, business_phone, business_city, business_state, signature_url')
+          .from('dados_locadora') // *** MUDANÇA CRÍTICA AQUI ***
+          .select('nome_fantasia, documento, endereco, telefone, cidade, estado, signature_url')
           .eq('user_id', contractData.created_by)
           .single();
           
         if (settingsError && settingsError.code !== 'PGRST116') {
           console.warn("Could not fetch owner company settings:", settingsError.message);
-        } else {
-          setOwnerSettings(settingsData as OwnerSettings);
+        } else if (settingsData) {
+          // Mapeia os campos do DB para a interface do FE
+          setOwnerSettings({
+            business_name: settingsData.nome_fantasia,
+            business_cnpj: settingsData.documento,
+            business_address: settingsData.endereco,
+            business_phone: settingsData.telefone,
+            business_city: settingsData.cidade,
+            business_state: settingsData.estado,
+            signature_url: settingsData.signature_url,
+          } as OwnerSettings);
         }
       }
 

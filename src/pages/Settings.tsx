@@ -34,10 +34,10 @@ const fetchCompanySettings = async (): Promise<CompanySettings | null> => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Usuário não autenticado.");
 
-  // *** MUDANÇA CRÍTICA: Buscando de company_settings ***
+  // *** MUDANÇA CRÍTICA: Buscando de dados_locadora ***
   const { data, error } = await supabase
-    .from('company_settings')
-    .select('user_id, business_name, business_cnpj, business_address, business_phone, business_city, business_state, signature_url')
+    .from('dados_locadora')
+    .select('user_id, nome_fantasia, documento, endereco, telefone, cidade, estado, signature_url')
     .eq('user_id', user.id)
     .single();
 
@@ -57,8 +57,21 @@ const fetchCompanySettings = async (): Promise<CompanySettings | null> => {
     signature_url: null,
   };
 
-  // Mapeia os dados retornados para a interface CompanySettings
-  return data ? { ...baseSettings, ...data } : baseSettings;
+  // Mapeia os dados retornados do DB (dados_locadora) para a interface do FE (CompanySettings)
+  if (data) {
+    return {
+      user_id: data.user_id,
+      business_name: data.nome_fantasia || '',
+      business_cnpj: data.documento || '',
+      business_address: data.endereco || '',
+      business_phone: data.telefone || '',
+      business_city: data.cidade || '',
+      business_state: data.estado || '',
+      signature_url: data.signature_url,
+    };
+  }
+
+  return baseSettings;
 };
 
 const Settings = () => {
@@ -73,8 +86,7 @@ const Settings = () => {
     signature_url: null,
   });
   const [isFormDirty, setIsFormDirty] = useState(false);
-  // Removendo o estado userId, pois vamos buscá-lo na mutação
-  // const [userId, setUserId] = useState<string | null>(null); 
+  const [userId, setUserId] = useState<string | null>(null);
 
   const { data: settings, isLoading, isError } = useQuery({
     queryKey: ['companySettings'],
@@ -84,7 +96,7 @@ const Settings = () => {
 
   useEffect(() => {
     if (settings) {
-      // setUserId(settings.user_id); // Não precisamos mais disso
+      setUserId(settings.user_id);
       setFormData({
         business_name: settings.business_name || '',
         business_cnpj: settings.business_cnpj || '',
@@ -112,21 +124,26 @@ const Settings = () => {
       // 1. Recuperar a sessão atual de forma robusta
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        // Lançar erro para ser capturado pelo onError
         throw new Error("ID do usuário não encontrado. Por favor, faça login novamente.");
       }
       const userId = user.id;
 
-      // 2. Montar o payload com o user_id garantido
-      const payloadWithId = { 
-        user_id: userId, 
-        ...payload 
+      // 2. Mapear payload do FE para as colunas do DB (dados_locadora)
+      const dbPayload = {
+        user_id: userId,
+        nome_fantasia: payload.business_name,
+        documento: payload.business_cnpj,
+        endereco: payload.business_address,
+        telefone: payload.business_phone,
+        cidade: payload.business_city,
+        estado: payload.business_state,
+        signature_url: payload.signature_url,
       };
       
-      // 3. Executar UPSERT
+      // 3. Executar UPSERT na nova tabela
       const { error } = await supabase
-        .from('company_settings')
-        .upsert(payloadWithId, { onConflict: 'user_id' });
+        .from('dados_locadora')
+        .upsert(dbPayload, { onConflict: 'user_id' });
 
       if (error) throw error;
     },
@@ -137,7 +154,6 @@ const Settings = () => {
       queryClient.invalidateQueries({ queryKey: ['orderDetails'] }); 
     },
     onError: (error: any) => {
-      // Exibe a mensagem de erro capturada, incluindo a mensagem de "ID do usuário não encontrado"
       showError("Erro ao salvar configurações: " + error.message);
     },
   });
@@ -150,7 +166,7 @@ const Settings = () => {
   const handleSaveDetails = () => {
     if (!isFormDirty) return;
     
-    const payload = {
+    const payload: Partial<CompanySettings> = {
       business_name: formData.business_name,
       business_cnpj: formData.business_cnpj,
       business_address: formData.business_address,

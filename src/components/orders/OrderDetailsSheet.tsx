@@ -125,18 +125,27 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
       const orderData = data as OrderData;
       setOrder(orderData);
       
-      // 2. Fetch Owner Profile (from company_settings using the order creator's ID)
+      // 2. Fetch Owner Profile (from dados_locadora using the order creator's ID)
       if (orderData.created_by) {
         const { data: profileData, error: profileError } = await supabase
-          .from('company_settings') // *** MUDANÇA CRÍTICA AQUI ***
-          .select('business_name, business_cnpj, business_address, business_phone, business_city, business_state, signature_url')
+          .from('dados_locadora') // *** MUDANÇA CRÍTICA AQUI ***
+          .select('nome_fantasia, documento, endereco, telefone, cidade, estado, signature_url')
           .eq('user_id', orderData.created_by) // Busca o perfil do criador do pedido
           .single();
           
         if (profileError && profileError.code !== 'PGRST116') {
           console.warn("Could not fetch owner company settings:", profileError.message);
-        } else {
-          setOwnerProfile(profileData as OwnerProfile);
+        } else if (profileData) {
+          // Mapeia os campos do DB para a interface do FE
+          setOwnerProfile({
+            business_name: profileData.nome_fantasia,
+            business_cnpj: profileData.documento,
+            business_address: profileData.endereco,
+            business_phone: profileData.telefone,
+            business_city: profileData.cidade,
+            business_state: profileData.estado,
+            signature_url: profileData.signature_url,
+          } as OwnerProfile);
         }
       }
 
