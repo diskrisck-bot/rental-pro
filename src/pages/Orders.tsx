@@ -121,20 +121,25 @@ const Orders = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
+  // --- CORREÇÃO SÊNIOR: Verificação Crítica de Configuração da Empresa ---
+  // Removemos o staleTime para forçar a verificação toda vez que a tela é montada
   const { data: businessConfig, isLoading: isLoadingConfig } = useQuery({
     queryKey: ['businessConfig'],
     queryFn: fetchBusinessConfig,
-    staleTime: 1000 * 60 * 5,
+    staleTime: 0, // Garante que buscaremos dados frescos ao entrar na tela
   });
 
-  const isConfigIncomplete = !businessConfig?.business_name || !businessConfig?.business_cnpj;
-  const buttonText = isConfigIncomplete ? "Configure a Empresa" : "Novo Pedido";
+  // Lógica robusta: Verifica se os campos existem e não são apenas espaços em branco
+  const isCompanyConfigured = !!(
+    businessConfig?.business_name?.trim() && 
+    businessConfig?.business_cnpj?.trim()
+  );
 
-  const handleRedirectToSettings = (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (isConfigIncomplete) {
+  const handleActionClick = (e: React.MouseEvent) => {
+    if (!isCompanyConfigured) {
+      e.preventDefault();
       navigate('/settings');
-      showError("Por favor, preencha o Nome e CNPJ da empresa nas Configurações.");
+      showError("Ação Necessária: Preencha o Nome e CNPJ da empresa nas Configurações para habilitar novos pedidos.");
     }
   };
 
@@ -198,27 +203,27 @@ const Orders = () => {
         </div>
         
         {isLoadingConfig ? (
-          <Button disabled className="w-full md:w-auto bg-gray-200 text-gray-600">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Carregando Config...
+          <Button disabled className="w-full md:w-auto bg-gray-100 text-gray-400">
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verificando Dados...
           </Button>
-        ) : isConfigIncomplete ? (
+        ) : !isCompanyConfigured ? (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button 
-                className="bg-red-600 hover:bg-red-700 w-full md:w-auto"
-                onClick={handleRedirectToSettings}
+                className="bg-orange-600 hover:bg-orange-700 w-full md:w-auto shadow-lg"
+                onClick={handleActionClick}
               >
-                <AlertTriangle className="mr-2 h-4 w-4" /> {buttonText}
+                <AlertTriangle className="mr-2 h-4 w-4" /> Configure a Empresa
               </Button>
             </TooltipTrigger>
-            <TooltipContent className="max-w-xs bg-gray-800 text-white border-none rounded-lg shadow-lg p-3">
-              <p className="text-xs">Vá em Configurações &gt; Empresa para habilitar a emissão de pedidos.</p>
+            <TooltipContent className="max-w-xs bg-gray-800 text-white p-3 rounded-lg">
+              <p className="text-xs">Dados de Locador (Nome e CNPJ) são obrigatórios para gerar contratos válidos.</p>
             </TooltipContent>
           </Tooltip>
         ) : (
           <CreateOrderDialog onOrderCreated={fetchOrders}>
-            <Button className="bg-blue-600 hover:bg-blue-700 w-full md:w-auto">
-              <Plus className="mr-2 h-4 w-4" /> {buttonText}
+            <Button className="bg-blue-600 hover:bg-blue-700 w-full md:w-auto shadow-lg shadow-blue-100">
+              <Plus className="mr-2 h-4 w-4" /> Novo Pedido
             </Button>
           </CreateOrderDialog>
         )}
