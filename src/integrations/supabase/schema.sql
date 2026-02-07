@@ -24,10 +24,15 @@ CREATE TABLE IF NOT EXISTS public.company_settings (
 ALTER TABLE public.company_settings ENABLE ROW LEVEL SECURITY;
 
 -- 4. Cria Política de Acesso (Permitir tudo para o dono)
+DROP POLICY IF EXISTS "Usuarios gerenciam sua propria empresa" ON public.company_settings;
 CREATE POLICY "Usuarios gerenciam sua propria empresa" ON public.company_settings
     FOR ALL
     USING (auth.uid() = user_id)
     WITH CHECK (auth.uid() = user_id);
 
--- 5. NOTE: The RPC 'get_contract_data' must be manually updated in Supabase
--- to join with 'company_settings' instead of 'profiles' to fetch owner data.
+-- 5. GARANTIR PERMISSÕES DE ACESSO (CRÍTICO PARA POSTGREST)
+GRANT ALL ON TABLE public.company_settings TO anon, authenticated, service_role;
+-- Se a tabela tivesse uma coluna SERIAL, precisaríamos de:
+-- GRANT ALL ON SEQUENCE company_settings_id_seq TO anon, authenticated, service_role;
+
+-- 6. NOTA: O comando NOTIFY pgrst, 'reload schema'; deve ser executado manualmente no console Supabase.
