@@ -14,7 +14,6 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Badge } from '@/components/ui/badge'; // Ensure Badge is imported
 import { Building } from 'lucide-react';
-import { generateContractHTML } from '@/utils/contractGenerator'; // Importar o gerador de HTML
 
 interface ProductItem {
   name: string;
@@ -46,29 +45,15 @@ interface ContractData {
   owner_address: string | null;
   owner_phone: string | null;
   owner_signature: string | null;
-  
-  // Campos que o RPC pode não retornar (precisamos buscar)
-  created_by: string | null; // Adicionado para buscar settings
-  
+
   // Items (JSONB from RPC)
   items: OrderItem[];
-}
-
-interface OwnerSettings {
-  business_name: string | null;
-  business_cnpj: string | null;
-  business_address: string | null;
-  business_phone: string | null;
-  business_city: string | null;
-  business_state: string | null;
-  signature_url: string | null;
 }
 
 const SignContract = () => {
   const { orderId } = useParams<{ orderId: string }>();
   const navigate = useNavigate();
   const [data, setData] = useState<ContractData | null>(null);
-  const [ownerSettings, setOwnerSettings] = useState<OwnerSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [signing, setSigning] = useState(false);
   const [customerSignature, setCustomerSignature] = useState<string | null>(null);
@@ -81,7 +66,7 @@ const SignContract = () => {
     if (!orderId) return;
     setLoading(true);
     try {
-      // 1. Fetch Order Data via RPC
+      // Usando RPC para buscar dados de forma segura, ignorando RLS
       const { data: rpcData, error } = await supabase.rpc('get_contract_data', { 
         p_order_id: orderId 
       });
@@ -97,41 +82,6 @@ const SignContract = () => {
 
       const contractData: ContractData = rpcData[0];
       
-      // 2. Fetch Order created_by to get owner settings
-      const { data: orderMeta, error: metaError } = await supabase
-        .from('orders')
-        .select('created_by')
-        .eq('id', orderId)
-        .single();
-        
-      if (metaError) throw metaError;
-      
-      contractData.created_by = orderMeta.created_by;
-      
-      // 3. Fetch Owner Settings from dados_locadora
-      if (contractData.created_by) {
-        const { data: settingsData, error: settingsError } = await supabase
-          .from('dados_locadora') // *** MUDANÇA CRÍTICA AQUI ***
-          .select('nome_fantasia, documento, endereco, telefone, cidade, estado, signature_url')
-          .eq('user_id', contractData.created_by)
-          .single();
-          
-        if (settingsError && settingsError.code !== 'PGRST116') {
-          console.warn("Could not fetch owner company settings:", settingsError.message);
-        } else if (settingsData) {
-          // Mapeia os campos do DB para a interface do FE
-          setOwnerSettings({
-            business_name: settingsData.nome_fantasia,
-            business_cnpj: settingsData.documento,
-            business_address: settingsData.endereco,
-            business_phone: settingsData.telefone,
-            business_city: settingsData.cidade,
-            business_state: settingsData.estado,
-            signature_url: settingsData.signature_url,
-          } as OwnerSettings);
-        }
-      }
-
       setData(contractData);
       setCustomerSignature(contractData.signature_image);
     } catch (error: any) {
@@ -192,9 +142,6 @@ const SignContract = () => {
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       
-      // Usa ownerSettings se disponível, senão usa dados do RPC (que podem estar incompletos)
-      const owner = ownerSettings || contractData;
-      
       // Função para adicionar rodapé com marca d'água
       const addWatermark = (doc: jsPDF, pageNumber: number) => {
         doc.setPage(pageNumber);
@@ -225,10 +172,10 @@ const SignContract = () => {
       doc.setFont("helvetica", "bold");
       doc.text("LOCADOR (EMPRESA)", 14, 35);
       doc.setFont("helvetica", "normal");
-      doc.text(`Nome: ${owner.business_name || contractData.owner_name || 'N/A'}`, 14, 42);
-      doc.text(`CNPJ/CPF: ${owner.business_cnpj || contractData.owner_cnpj || 'N/A'}`, 14, 49);
-      doc.text(`Endereço: ${owner.business_address || contractData.owner_address || 'N/A'}`, 14, 56);
-      doc.text(`Telefone: ${owner.business_phone || contractData.owner_phone || 'N/A'}`, 14, 63);
+      doc.text(`Nome: ${contractData.owner_name || 'N/A'}`, 14, 42);
+      doc.text(`CNPJ/CPF: ${contractData.owner_cnpj || 'N/A'}`, 14, 49);
+      doc.text(`Endereço: ${contractData.owner_address || 'N/A'}`, 14, 56);
+      doc.text(`Telefone: ${contractData.owner_phone || 'N/A'}`, 14, 63);
       
       // Dados do Locatário (Cliente)
       doc.setFont("helvetica", "bold");
@@ -272,17 +219,14 @@ const SignContract = () => {
       doc.text("__________________________________________", pageWidth - 80, currentY);
       doc.text("Assinatura do Locador (RentalPro)", pageWidth - 80, currentY + 5);
       
-      const ownerSignature = owner.signature_url || contractData.owner_signature;
-      const ownerName = owner.business_name || contractData.owner_name;
-      
-      if (ownerSignature) {
+      if (contractData.owner_signature) {
         // Desenha a assinatura do Locador
-        doc.addImage(ownerSignature, 'PNG', pageWidth - 80, currentY - 25, 60, 25);
+        doc.addImage(contractData.owner_signature, 'PNG', pageWidth - 80, currentY - 25, 60, 25);
       } else {
         // Placeholder se não houver assinatura padrão
         doc.setFontSize(12);
         doc.setFont("times", "italic");
-        doc.text(ownerName || 'Locador', pageWidth - 80, currentY - 10);
+        doc.text(contractData.owner_name || 'Locador', pageWidth - 80, currentY - 10);
         doc.setFont("helvetica", "normal");
       }
 
@@ -366,7 +310,6 @@ const SignContract = () => {
   }
 
   const isSigned = !!data.signed_at;
-  const owner = ownerSettings || data; // Prioriza settings, senão usa dados do RPC
 
   return (
     <div className="min-h-screen flex flex-col items-center p-4 md:p-8 bg-gray-100">
@@ -389,9 +332,9 @@ const SignContract = () => {
         {/* Detalhes do Locador */}
         <div className="border rounded-xl p-4 bg-gray-50 space-y-2">
           <p className="text-sm font-bold text-gray-700 flex items-center gap-2"><Building className="h-4 w-4"/> Locador (Empresa)</p>
-          <p className="text-sm text-muted-foreground">{owner.business_name || data.owner_name || 'Nome da Empresa não configurado.'}</p>
-          <p className="text-xs text-muted-foreground">CNPJ: {owner.business_cnpj || data.owner_cnpj || 'N/A'} | Tel: {owner.business_phone || data.owner_phone || 'N/A'}</p>
-          <p className="text-xs text-muted-foreground">Endereço: {owner.business_address || data.owner_address || 'N/A'}</p>
+          <p className="text-sm text-muted-foreground">{data.owner_name || 'Nome da Empresa não configurado.'}</p>
+          <p className="text-xs text-muted-foreground">CNPJ: {data.owner_cnpj || 'N/A'} | Tel: {data.owner_phone || 'N/A'}</p>
+          <p className="text-xs text-muted-foreground">Endereço: {data.owner_address || 'N/A'}</p>
         </div>
 
         {/* Detalhes do Cliente e Período */}
@@ -440,14 +383,14 @@ const SignContract = () => {
           <div className="border rounded-xl p-4 bg-blue-50 border-blue-100">
             <p className="text-sm font-semibold text-blue-800 mb-2">Locador (RentalPro)</p>
             <div className="h-[60px] flex items-center justify-center">
-              {(owner.signature_url || data.owner_signature) ? (
+              {data.owner_signature ? (
                 <img 
-                  src={owner.signature_url || data.owner_signature || ''} 
+                  src={data.owner_signature} 
                   alt="Assinatura do Locador" 
                   className="max-h-full max-w-full object-contain"
                 />
               ) : (
-                <p className="text-sm text-muted-foreground italic">{owner.business_name || data.owner_name || 'Assinatura Padrão Não Configurada'}</p>
+                <p className="text-sm text-muted-foreground italic">{data.owner_name || 'Assinatura Padrão Não Configurada'}</p>
               )}
             </div>
           </div>

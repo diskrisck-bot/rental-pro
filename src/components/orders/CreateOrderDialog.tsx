@@ -47,13 +47,6 @@ interface OrderItem {
 const phoneMask = ['(', /[1-9]/, /\d/, ')', ' ', /\d/, /\d/, /\d/, /\d/, /\d/, '-', /\d/, /\d/, /\d/, /\d/];
 const cpfMask = [/\d/, /\d/, /\d/, '.', /\d/, /\d/, /\d/, '.', /\d/, /\d/, /\d/, '-', /\d/, /\d/];
 
-const paymentMethods = [
-  { value: 'Pix', label: 'Pix' },
-  { value: 'Cartão de Crédito', label: 'Cartão de Crédito' },
-  { value: 'Dinheiro', label: 'Dinheiro' },
-  { value: 'Débito', label: 'Débito' },
-];
-
 const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDialogProps) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -79,7 +72,6 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
       customer_cpf: '',
       start_date: format(new Date(), 'yyyy-MM-dd'),
       end_date: format(new Date(Date.now() + 86400000), 'yyyy-MM-dd'),
-      forma_pagamento: 'Pix', // Novo campo
     }
   });
 
@@ -120,7 +112,6 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             setValue('customer_cpf', orderData.customer_cpf || '');
             setValue('start_date', format(parseISO(orderData.start_date), 'yyyy-MM-dd'));
             setValue('end_date', format(parseISO(orderData.end_date), 'yyyy-MM-dd'));
-            setValue('forma_pagamento', orderData.forma_pagamento || 'Pix'); // Lendo o novo campo
             
             const existingItems = orderData.order_items.map((item: any) => ({
               product_id: item.product_id,
@@ -138,7 +129,6 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             customer_cpf: '',
             start_date: format(new Date(), 'yyyy-MM-dd'),
             end_date: format(new Date(Date.now() + 86400000), 'yyyy-MM-dd'),
-            forma_pagamento: 'Pix', // Novo campo
           });
           setSelectedItems([]);
         }
@@ -226,8 +216,6 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         end_date: newEnd.toISOString(),
         // --- 1. MÓDULO FINANCEIRO (CÁLCULO OBRIGATÓRIO) ---
         total_amount: financialSummary.totalAmount,
-        // --- NOVO CAMPO ---
-        forma_pagamento: values.forma_pagamento,
         // --- FIM DO CÁLCULO ---
         status: orderId ? undefined : 'reserved' // Novo pedido começa como 'reserved'
       };
@@ -343,8 +331,8 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
                 </div>
               </div>
 
-              {/* Datas e Forma de Pagamento */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Ajuste de Grid: grid-cols-1 no mobile, grid-cols-2 no desktop */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="start_date">Data Início</Label>
                   <Input 
@@ -360,24 +348,6 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
                     type="date" 
                     {...register('end_date', { required: true })}
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="forma_pagamento">Forma de Pagamento</Label>
-                  <Select 
-                    value={watch('forma_pagamento')} 
-                    onValueChange={(val) => setValue('forma_pagamento', val, { shouldValidate: true })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione a forma" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {paymentMethods.map(method => (
-                        <SelectItem key={method.value} value={method.value}>
-                          {method.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                 </div>
               </div>
             </div>

@@ -34,7 +34,6 @@ interface InventoryItem {
   total_quantity: number;
   active_rentals: number;
   available_quantity: number;
-  valor_reposicao: number; // Adicionado
 }
 
 interface EditProductSheetProps {
@@ -51,7 +50,6 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
     type: 'trackable',
     total_quantity: 1,
     price: 0,
-    valor_reposicao: 0, // Adicionado
   });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -66,7 +64,7 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
           // Busca os dados da view inventory_analytics para ter o active_rentals
           const { data, error } = await supabase
             .from('inventory_analytics')
-            .select('*, valor_reposicao') // Adicionado valor_reposicao
+            .select('*')
             .eq('id', productId)
             .single();
 
@@ -78,7 +76,6 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
             type: data.type,
             total_quantity: data.total_quantity,
             price: Number(data.price),
-            valor_reposicao: Number(data.valor_reposicao || 0), // Lendo o novo campo
           });
           setActiveTab('details'); // Volta para a aba de detalhes ao abrir
         } catch (error: any) {
@@ -98,13 +95,6 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
       ...prev,
       [id]: type === 'number' ? parseFloat(value) || parseInt(value) || 0 : value,
     }));
-    // Se for valor de reposição ou preço, garante que seja positivo
-    if (id === 'price' || id === 'valor_reposicao') {
-      setFormData(prev => ({
-        ...prev,
-        [id]: Math.max(0, parseFloat(value) || 0),
-      }));
-    }
   };
 
   const handleSelectChange = (id: string, value: string) => {
@@ -137,7 +127,6 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
           type: formData.type,
           total_quantity: Number(newTotalQuantity),
           price: Number(formData.price),
-          valor_reposicao: Number(formData.valor_reposicao), // Salvando o novo campo
         })
         .eq('id', productId)
         .select(); // Adiciona .select() para obter o retorno
@@ -247,19 +236,6 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
                       step="0.01"
                       value={formData.price} 
                       onChange={handleChange}
-                    />
-                  </div>
-                  
-                  {/* Novo Campo: Valor de Reposição */}
-                  <div className="space-y-2">
-                    <Label htmlFor="valor_reposicao">Valor de Reposição (R$)</Label>
-                    <Input 
-                      id="valor_reposicao" 
-                      type="number"
-                      step="0.01"
-                      value={formData.valor_reposicao} 
-                      onChange={handleChange}
-                      placeholder="Valor para indenização em caso de perda"
                     />
                   </div>
                 </div>

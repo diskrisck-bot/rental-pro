@@ -22,9 +22,10 @@ import {
   User, 
   History, 
   AlertCircle,
+  Share2,
   MessageCircle,
   Download,
-  Printer
+  Building
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { format, isAfter, parseISO } from 'date-fns';
@@ -35,7 +36,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { generateContractHTML } from '@/utils/contractGenerator'; // Importar o gerador de HTML
 
 interface OrderDetailsSheetProps {
   orderId: string | null;
@@ -49,48 +49,12 @@ interface OwnerProfile {
   business_cnpj: string | null;
   business_address: string | null;
   business_phone: string | null;
-  business_city: string | null; // Novo
-  business_state: string | null; // Novo
   signature_url: string | null;
 }
 
-interface OrderItemProduct {
-  name: string;
-  price: number;
-  type: string;
-  valor_reposicao: number; // Novo
-}
-
-interface OrderItem {
-  quantity: number;
-  products: OrderItemProduct;
-  assets: { serial_number: string } | null;
-}
-
-interface OrderData {
-  id: string;
-  customer_name: string;
-  customer_phone: string;
-  customer_cpf: string;
-  start_date: string;
-  end_date: string;
-  total_amount: number;
-  forma_pagamento: string; // Novo
-  signed_at: string | null;
-  picked_up_at: string | null;
-  returned_at: string | null;
-  signer_ip: string | null;
-  signer_user_agent: string | null;
-  signature_image: string | null;
-  status: string;
-  order_items: OrderItem[];
-  created_by: string; // Adicionado para buscar as configurações da empresa
-}
-
-
 const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: OrderDetailsSheetProps) => {
   const queryClient = useQueryClient();
-  const [order, setOrder] = useState<OrderData | null>(null);
+  const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [isGeneratingContract, setIsGeneratingContract] = useState(false);
@@ -114,7 +78,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
           *,
           order_items (
             quantity,
-            products (name, price, type, valor_reposicao),
+            products (name, price, type),
             assets (serial_number)
           )
         `)
@@ -122,30 +86,22 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
         .single();
 
       if (error) throw error;
-      const orderData = data as OrderData;
-      setOrder(orderData);
+      setOrder(data);
       
-      // 2. Fetch Owner Profile (from dados_locadora using the order creator's ID)
-      if (orderData.created_by) {
+      // 2. Fetch Owner Profile (including signature and business details)
+      // Usamos o ID do usuário logado para buscar o perfil, pois o contrato é gerado por ele.
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
         const { data: profileData, error: profileError } = await supabase
-          .from('dados_locadora') // *** MUDANÇA CRÍTICA AQUI ***
-          .select('nome_fantasia, documento, endereco, telefone, cidade, estado, signature_url')
-          .eq('user_id', orderData.created_by) // Busca o perfil do criador do pedido
+          .from('profiles')
+          .select('business_name, business_cnpj, business_address, business_phone, signature_url')
+          .eq('id', user.id) // Busca o perfil do usuário logado
           .single();
           
         if (profileError && profileError.code !== 'PGRST116') {
-          console.warn("Could not fetch owner company settings:", profileError.message);
-        } else if (profileData) {
-          // Mapeia os campos do DB para a interface do FE
-          setOwnerProfile({
-            business_name: profileData.nome_fantasia,
-            business_cnpj: profileData.documento,
-            business_address: profileData.endereco,
-            business_phone: profileData.telefone,
-            business_city: profileData.cidade,
-            business_state: profileData.estado,
-            signature_url: profileData.signature_url,
-          } as OwnerProfile);
+          console.warn("Could not fetch owner profile details:", profileError.message);
+        } else {
+          setOwnerProfile(profileData as OwnerProfile);
         }
       }
 
@@ -157,7 +113,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
   };
 
   // Função auxiliar para gerar o link do WhatsApp
-  const getWhatsappLink = (order: OrderData | null) => {
+  const getWhatsappLink = (order: any) => {
     if (!order) return '#';
     
     const signLink = `${window.location.origin}/sign/${order.id}`;
@@ -185,13 +141,13 @@ Por favor, acesse e assine digitalmente.
     return `${baseUrl}?text=${encodedMessage}`;
   };
   
+  // FIX: Definindo a função handleShareContract
   const handleShareContract = (e: React.MouseEvent) => {
     // A tag handles the navigation, we just provide feedback
     showSuccess("Link de assinatura copiado e WhatsApp aberto!");
   };
 
-  // Função para gerar PDF (mantida para compatibilidade com contratos assinados)
-  const generatePDF = async (order: OrderData, ownerProfile: OwnerProfile | null, isFinal: boolean) => {
+  const generatePDF = async (order: any, ownerProfile: OwnerProfile | null, isFinal: boolean) => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
@@ -351,61 +307,6 @@ Por favor, acesse e assine digitalmente.
       showError("Erro ao gerar PDF final: " + error.message);
     } finally {
       setIsGeneratingContract(false);
-    }
-  };
-  
-  const handlePrintHTMLContract = () => {
-    if (!order || !ownerProfile) {
-      showError("Dados do pedido ou da locadora incompletos para gerar o contrato.");
-      return;
-    }
-    
-    // Combina os dados do pedido e do perfil do locador para o gerador de HTML
-    const contractData = {
-      ...order,
-      owner_name: ownerProfile.business_name,
-      owner_cnpj: ownerProfile.business_cnpj,
-      owner_address: ownerProfile.business_address,
-      owner_phone: ownerProfile.business_phone,
-      owner_city: ownerProfile.business_city,
-      owner_state: ownerProfile.business_state,
-      // Os itens já estão em order.order_items
-      items: order.order_items.map(item => ({
-        quantity: item.quantity,
-        products: {
-          name: item.products.name,
-          price: item.products.price,
-          valor_reposicao: item.products.valor_reposicao,
-        }
-      }))
-    };
-    
-    const htmlContent = generateContractHTML(contractData);
-    
-    // Abre uma nova janela para impressão
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Contrato de Locação #${order.id.split('-')[0]}</title>
-        </head>
-        <body>
-          ${htmlContent}
-          <script>
-            window.onload = function() {
-              window.print();
-              // Fecha a janela após a impressão (ou cancelamento)
-              setTimeout(() => window.close(), 100); 
-            };
-          </script>
-        </body>
-        </html>
-      `);
-      printWindow.document.close();
-    } else {
-      showError("Não foi possível abrir a janela de impressão. Verifique se o bloqueador de pop-ups está ativo.");
     }
   };
 
@@ -571,7 +472,6 @@ Por favor, acesse e assine digitalmente.
           <div className="bg-blue-600 rounded-xl p-6 text-white shadow-lg shadow-blue-100">
             <p className="text-xs uppercase font-bold opacity-80 mb-1">Valor Total da Locação</p>
             <p className="text-3xl font-bold">R$ {Number(order?.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-            <p className="text-sm mt-2 opacity-90">Pagamento: {order?.forma_pagamento || 'Não definido'}</p>
           </div>
 
           {/* Botão de Enviar Contrato (AGORA É UM LINK <a>) */}
@@ -592,16 +492,6 @@ Por favor, acesse e assine digitalmente.
                 Enviar Link de Assinatura
              </a>
              
-             <Button 
-                onClick={handlePrintHTMLContract} 
-                disabled={loading}
-                variant="outline"
-                className="w-full h-12 border-gray-500 text-gray-600 hover:bg-gray-50"
-              >
-                <Printer className="h-5 w-5 mr-2" />
-                Imprimir Contrato (HTML)
-              </Button>
-             
              {isSigned && (
                 <Button 
                   onClick={handleDownloadFinalPDF} 
@@ -610,7 +500,7 @@ Por favor, acesse e assine digitalmente.
                   className="w-full h-12 border-green-500 text-green-600 hover:bg-green-50"
                 >
                   {isGeneratingContract ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <Download className="h-5 w-5 mr-2" />}
-                  Baixar Contrato Assinado (PDF)
+                  Baixar Contrato Assinado
                 </Button>
              )}
           </div>
@@ -675,9 +565,9 @@ Por favor, acesse e assine digitalmente.
               {order?.order_items.map((item: any, idx: number) => (
                 <div key={idx} className="p-4 flex justify-between items-center">
                   <div className="space-y-1">
-                    <p className="font-medium text-sm">{item.products?.name} x {item.quantity}</p>
+                    <p className="font-medium text-sm">{item.products?.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      Diária: R$ {Number(item.products?.price || 0).toFixed(2)}/dia | Reposição: R$ {Number(item.products?.valor_reposicao || 0).toFixed(2)}
+                      Unitário: R$ {Number(item.products?.price || 0).toFixed(2)}/dia
                     </p>
                   </div>
                   <div className="text-right">

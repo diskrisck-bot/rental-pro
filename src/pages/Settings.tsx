@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Loader2, User, Save, Building, Phone, MapPin, AlertTriangle } from 'lucide-react';
+import { Loader2, User, Save, Building, Phone, MapPin } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { showError, showSuccess } from '@/utils/toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,17 +11,15 @@ import { Label } from '@/components/ui/label';
 import SignaturePad from '@/components/settings/SignaturePad';
 import { Button } from '@/components/ui/button';
 import MaskedInput from 'react-text-mask';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
-// Usamos esta interface para o estado local e para o payload de salvamento
-interface CompanySettings {
-  user_id: string;
+interface Profile {
+  id: string;
+  first_name: string;
+  last_name: string;
   business_name: string;
   business_cnpj: string;
   business_address: string;
   business_phone: string;
-  business_city: string;
-  business_state: string;
   signature_url: string | null;
 }
 
@@ -29,16 +27,15 @@ interface CompanySettings {
 const phoneMask = ['(', /[1-9]/, /\d/, ')', ' ', /\d/, /\d/, /\d/, /\d/, /\d/, '-', /\d/, /\d/, /\d/, /\d/];
 const cnpjMask = [/\d/, /\d/, '.', /\d/, /\d/, /\d/, '.', /\d/, /\d/, /\d/, '/', /\d/, /\d/, /\d/, /\d/, '-', /\d/, /\d/];
 
-// Helper function to fetch the current user's company settings
-const fetchCompanySettings = async (): Promise<CompanySettings | null> => {
+// Helper function to fetch the current user's profile
+const fetchProfile = async (): Promise<Profile | null> => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Usuário não autenticado.");
 
-  // *** MUDANÇA CRÍTICA: Buscando de dados_locadora ***
   const { data, error } = await supabase
-    .from('dados_locadora')
-    .select('user_id, nome_fantasia, documento, endereco, telefone, cidade, estado, signature_url')
-    .eq('user_id', user.id)
+    .from('profiles')
+    .select('id, first_name, last_name, business_name, business_cnpj, business_address, business_phone, signature_url')
+    .eq('id', user.id)
     .single();
 
   // Se o erro for 'não encontrado' (código 406), retornamos um objeto base.
@@ -46,69 +43,49 @@ const fetchCompanySettings = async (): Promise<CompanySettings | null> => {
     throw error;
   }
   
-  const baseSettings: CompanySettings = {
-    user_id: user.id,
+  const baseProfile: Profile = {
+    id: user.id,
+    first_name: '',
+    last_name: '',
     business_name: '',
     business_cnpj: '',
     business_address: '',
     business_phone: '',
-    business_city: '',
-    business_state: '',
     signature_url: null,
   };
 
-  // Mapeia os dados retornados do DB (dados_locadora) para a interface do FE (CompanySettings)
-  if (data) {
-    return {
-      user_id: data.user_id,
-      business_name: data.nome_fantasia || '',
-      business_cnpj: data.documento || '',
-      business_address: data.endereco || '',
-      business_phone: data.telefone || '',
-      business_city: data.cidade || '',
-      business_state: data.estado || '',
-      signature_url: data.signature_url,
-    };
-  }
-
-  return baseSettings;
+  return data ? { ...baseProfile, ...data } : baseProfile;
 };
 
 const Settings = () => {
   const queryClient = useQueryClient();
-  const [formData, setFormData] = useState<Omit<CompanySettings, 'user_id'>>({
+  const [formData, setFormData] = useState<Omit<Profile, 'id' | 'first_name' | 'last_name'>>({
     business_name: '',
     business_cnpj: '',
     business_address: '',
     business_phone: '',
-    business_city: '',
-    business_state: '',
     signature_url: null,
   });
   const [isFormDirty, setIsFormDirty] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
 
-  const { data: settings, isLoading, isError } = useQuery({
-    queryKey: ['companySettings'],
-    queryFn: fetchCompanySettings,
+  const { data: profile, isLoading, isError } = useQuery({
+    queryKey: ['userProfile'],
+    queryFn: fetchProfile,
     staleTime: Infinity,
   });
 
   useEffect(() => {
-    if (settings) {
-      setUserId(settings.user_id);
+    if (profile) {
       setFormData({
-        business_name: settings.business_name || '',
-        business_cnpj: settings.business_cnpj || '',
-        business_address: settings.business_address || '',
-        business_phone: settings.business_phone || '',
-        business_city: settings.business_city || '',
-        business_state: settings.business_state || '',
-        signature_url: settings.signature_url,
+        business_name: profile.business_name || '',
+        business_cnpj: profile.business_cnpj || '',
+        business_address: profile.business_address || '',
+        business_phone: profile.business_phone || '',
+        signature_url: profile.signature_url,
       });
       setIsFormDirty(false);
     }
-  }, [settings]);
+  }, [profile]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
@@ -119,39 +96,25 @@ const Settings = () => {
     setIsFormDirty(true);
   };
 
-  const updateSettingsMutation = useMutation({
-    mutationFn: async (payload: Partial<CompanySettings>) => {
-      // 1. Recuperar a sessão atual de forma robusta
+  const updateProfileMutation = useMutation({
+    mutationFn: async (payload: Partial<Profile>) => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        throw new Error("ID do usuário não encontrado. Por favor, faça login novamente.");
-      }
-      const userId = user.id;
+      if (!user) throw new Error("Usuário não autenticado.");
 
-      // 2. Mapear payload do FE para as colunas do DB (dados_locadora)
-      const dbPayload = {
-        user_id: userId,
-        nome_fantasia: payload.business_name,
-        documento: payload.business_cnpj,
-        endereco: payload.business_address,
-        telefone: payload.business_phone,
-        cidade: payload.business_city,
-        estado: payload.business_state,
-        signature_url: payload.signature_url,
-      };
-      
-      // 3. Executar UPSERT na nova tabela
+      // Usando upsert para garantir que o perfil seja criado se não existir
       const { error } = await supabase
-        .from('dados_locadora')
-        .upsert(dbPayload, { onConflict: 'user_id' });
+        .from('profiles')
+        .upsert({ 
+          id: user.id, 
+          ...payload
+        }, { onConflict: 'id' });
 
       if (error) throw error;
     },
     onSuccess: () => {
       showSuccess("Configurações salvas com sucesso!");
       setIsFormDirty(false);
-      queryClient.invalidateQueries({ queryKey: ['companySettings'] });
-      queryClient.invalidateQueries({ queryKey: ['orderDetails'] }); 
+      queryClient.invalidateQueries({ queryKey: ['userProfile'] });
     },
     onError: (error: any) => {
       showError("Erro ao salvar configurações: " + error.message);
@@ -159,23 +122,22 @@ const Settings = () => {
   });
 
   const handleSaveSignature = (base64Image: string) => {
-    updateSettingsMutation.mutate({ signature_url: base64Image });
+    // Salva apenas a assinatura, mas usa a mutação de perfil
+    updateProfileMutation.mutate({ signature_url: base64Image });
     setFormData(prev => ({ ...prev, signature_url: base64Image }));
   };
   
   const handleSaveDetails = () => {
     if (!isFormDirty) return;
     
-    const payload: Partial<CompanySettings> = {
+    const payload = {
       business_name: formData.business_name,
       business_cnpj: formData.business_cnpj,
       business_address: formData.business_address,
       business_phone: formData.business_phone,
-      business_city: formData.business_city,
-      business_state: formData.business_state,
     };
     
-    updateSettingsMutation.mutate(payload);
+    updateProfileMutation.mutate(payload);
   };
 
   if (isLoading) {
@@ -186,7 +148,11 @@ const Settings = () => {
     );
   }
 
-  const isSaving = updateSettingsMutation.isPending;
+  if (isError || !profile) {
+    return <div className="p-8 text-center text-red-500">Erro ao carregar configurações.</div>;
+  }
+
+  const isSaving = updateProfileMutation.isPending;
 
   return (
     <div className="p-4 md:p-8 space-y-8 max-w-4xl mx-auto">
@@ -194,17 +160,8 @@ const Settings = () => {
         <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Configurações</h1>
         <p className="text-muted-foreground">Gerencie suas preferências e dados de locador.</p>
       </div>
-      
-      {isError && (
-        <Alert variant="destructive" className="rounded-xl">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Erro ao Carregar Dados</AlertTitle>
-          <AlertDescription>
-            Houve uma falha ao buscar as configurações existentes. Por favor, preencha os campos e clique em Salvar para criar o registro.
-          </AlertDescription>
-        </Alert>
-      )}
 
+      {/* Detalhes da Empresa */}
       <Card className="rounded-xl shadow-sm">
         <CardHeader>
           <CardTitle className="text-xl flex items-center gap-2">
@@ -267,29 +224,6 @@ const Settings = () => {
             />
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="business_city">Cidade (Para Cláusula de Foro)</Label>
-              <Input 
-                id="business_city" 
-                value={formData.business_city} 
-                onChange={handleChange}
-                placeholder="Ex: São Paulo"
-                disabled={isSaving}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="business_state">Estado (UF)</Label>
-              <Input 
-                id="business_state" 
-                value={formData.business_state} 
-                onChange={handleChange}
-                placeholder="Ex: SP"
-                disabled={isSaving}
-              />
-            </div>
-          </div>
-          
           <Button 
             onClick={handleSaveDetails} 
             disabled={!isFormDirty || isSaving}
@@ -301,6 +235,7 @@ const Settings = () => {
         </CardContent>
       </Card>
 
+      {/* Assinatura Digital */}
       <Card className="rounded-xl shadow-sm">
         <CardHeader>
           <CardTitle className="text-xl flex items-center gap-2">
