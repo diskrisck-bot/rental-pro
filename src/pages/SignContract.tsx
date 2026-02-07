@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Loader2, CheckCircle, AlertTriangle, Download, MessageCircle } from 'lucide-react';
+import { Loader2, CheckCircle, AlertTriangle, Download, MessageCircle, Building } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -10,10 +10,9 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import SignaturePad from '@/components/settings/SignaturePad';
 import { showError, showSuccess } from '@/utils/toast';
+import { Badge } from '@/components/ui/badge';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Badge } from '@/components/ui/badge'; // Ensure Badge is imported
-import { Building } from 'lucide-react';
 
 interface ProductItem {
   name: string;
@@ -38,16 +37,15 @@ interface ContractData {
   signer_ip: string | null;
   signer_user_agent: string | null;
   status: string;
-  fulfillment_type: 'immediate' | 'reservation'; // Adicionado fulfillment_type
+  fulfillment_type: 'immediate' | 'reservation';
   
-  // Owner Profile Data (from RPC)
+  // Owner Profile Data
   owner_name: string | null;
   owner_cnpj: string | null;
   owner_address: string | null;
   owner_phone: string | null;
   owner_signature: string | null;
 
-  // Items (JSONB from RPC)
   items: OrderItem[];
 }
 
@@ -60,39 +58,78 @@ const SignContract = () => {
   const [customerSignature, setCustomerSignature] = useState<string | null>(null);
   const [agreed, setAgreed] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-  
-  const signaturePadRef = useRef<{ saveSignature: () => void }>(null);
 
   const fetchContractData = async () => {
     if (!orderId) return;
     setLoading(true);
     try {
-      // Usando RPC para buscar dados de forma segura, ignorando RLS
-      const { data: rpcData, error } = await supabase.rpc('get_contract_data', { 
+      // 1. Busca os dados do pedido via RPC (necessário para ignorar RLS e pegar itens)
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_contract_data', { 
         p_order_id: orderId 
       });
 
-      if (error) {
-        console.error('RPC Error:', error);
-        throw new Error(error.message || "Falha ao buscar dados do contrato via RPC.");
-      }
-      
-      if (!rpcData || rpcData.length === 0) {
-        throw new Error("Contrato não encontrado.");
+      if (rpcError) throw rpcError;
+      if (!rpcData || rpcData.length === 0) throw new Error("Contrato não encontrado.");
+
+      const baseContract = rpcData[0];
+
+      // 2. Busca o pedido bruto para pegar o 'user_id' e 'fulfillment_type' (campos às vezes omitidos no RPC)
+      // Nota: Usamos a tabela orders diretamente para garantir que pegamos o dono correto
+      const { data: orderRaw, error: orderError } = await supabase
+        .from('orders')
+        .select('user_id, fulfillment_type')
+        .eq('id', orderId)
+        .single();
+
+      if (orderError) {
+        console.warn("[SignContract] Erro ao buscar user_id do pedido:", orderError.message);
       }
 
-      // O RPC retorna um array, pegamos o primeiro elemento
+      const targetUserId = orderRaw?.user_id || baseContract.user_id;
+
+      // 3. Busca o perfil do DONO do pedido (Locador)
+      // Se o RPC falhou em trazer o dono, tentamos buscar manualmente pelo ID do dono do pedido
+      let ownerInfo = {
+        name: baseContract.owner_name,
+        cnpj: baseContract.owner_cnpj,
+        address: baseContract.owner_address,
+        phone: baseContract.owner_phone,
+        signature: baseContract.owner_signature
+      };
+
+      if (!ownerInfo.name && targetUserId) {
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('business_name, business_cnpj, business_address, business_phone, signature_url')
+          .eq('id', targetUserId)
+          .single();
+        
+        if (!profileError && profileData) {
+          ownerInfo = {
+            name: profileData.business_name,
+            cnpj: profileData.business_cnpj,
+            address: profileData.business_address,
+            phone: profileData.business_phone,
+            signature: profileData.signature_url
+          };
+        }
+      }
+
       const contractData: ContractData = {
-        ...rpcData[0],
-        // Garantindo que fulfillment_type seja mapeado corretamente (se o RPC não o fizer, usaremos um padrão)
-        fulfillment_type: rpcData[0].fulfillment_type || 'reservation', 
+        ...baseContract,
+        fulfillment_type: orderRaw?.fulfillment_type || baseContract.fulfillment_type || 'reservation',
+        owner_name: ownerInfo.name,
+        owner_cnpj: ownerInfo.cnpj,
+        owner_address: ownerInfo.address,
+        owner_phone: ownerInfo.phone,
+        owner_signature: ownerInfo.signature,
       };
       
       setData(contractData);
       setCustomerSignature(contractData.signature_image);
     } catch (error: any) {
       showError(error.message);
-      setData(null); // Garante que o estado de erro seja exibido
+      setData(null);
     } finally {
       setLoading(false);
     }
@@ -111,25 +148,21 @@ const SignContract = () => {
 
     setSigning(true);
     try {
-      // 1. Capturar dados de auditoria
       const ipResponse = await fetch('https://api.ipify.org?format=json');
       const ipData = await ipResponse.json();
       const signer_ip = ipData.ip;
       const signer_user_agent = navigator.userAgent;
       
-      // 2. Determinar o novo status baseado no fulfillment_type
       const newStatus = data.fulfillment_type === 'immediate' ? 'picked_up' : 'reserved';
       
-      // 3. Atualizar o pedido no Supabase
       const updatePayload: any = {
         signed_at: new Date().toISOString(),
         signer_ip: signer_ip,
         signer_user_agent: signer_user_agent,
         signature_image: customerSignature,
-        status: newStatus // Transição de status após a assinatura
+        status: newStatus
       };
       
-      // Se for retirada imediata, registra o picked_up_at agora
       if (newStatus === 'picked_up') {
           updatePayload.picked_up_at = new Date().toISOString();
       }
@@ -141,8 +174,7 @@ const SignContract = () => {
 
       if (error) throw error;
 
-      showSuccess("Contrato assinado com sucesso! O pedido foi atualizado para " + (newStatus === 'picked_up' ? 'Em Andamento' : 'Reservado') + ".");
-      // Força a atualização dos dados para mostrar o estado assinado
+      showSuccess("Contrato assinado com sucesso!");
       fetchContractData(); 
     } catch (error: any) {
       showError("Erro ao assinar contrato: " + error.message);
@@ -158,31 +190,21 @@ const SignContract = () => {
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       
-      // Função para adicionar rodapé com marca d'água
       const addWatermark = (doc: jsPDF, pageNumber: number) => {
         doc.setPage(pageNumber);
         doc.setFontSize(8);
-        doc.setTextColor(150, 150, 150); // Cinza claro
+        doc.setTextColor(150, 150, 150);
         const watermarkText = "Gerado e Assinado digitalmente via RentalPro (rentalpro.com.br)";
         const textWidth = doc.getStringUnitWidth(watermarkText) * doc.getFontSize() / doc.internal.scaleFactor;
         const x = (pageWidth - textWidth) / 2;
         const y = pageHeight - 10;
-        
         doc.text(watermarkText, pageWidth / 2, y, { align: 'center' });
-        
-        // Adicionar link clicável (URL: https://www.dyad.sh/ - usando dyad como placeholder)
-        const linkUrl = "https://www.dyad.sh/"; 
-        doc.link(x, y - 3, textWidth, 5, { url: linkUrl });
       };
       
-      // --- 1. Conteúdo do Contrato (Página 1) ---
-      
-      // Cabeçalho
       doc.setFontSize(20);
-      doc.setTextColor(30, 58, 138); // Blue-900
+      doc.setTextColor(30, 58, 138);
       doc.text("CONTRATO DE LOCAÇÃO", pageWidth / 2, 20, { align: 'center' });
       
-      // Dados do Locador (Empresa)
       doc.setFontSize(12);
       doc.setTextColor(0, 0, 0);
       doc.setFont("helvetica", "bold");
@@ -193,7 +215,6 @@ const SignContract = () => {
       doc.text(`Endereço: ${contractData.owner_address || 'N/A'}`, 14, 56);
       doc.text(`Telefone: ${contractData.owner_phone || 'N/A'}`, 14, 63);
       
-      // Dados do Locatário (Cliente)
       doc.setFont("helvetica", "bold");
       doc.text("LOCATÁRIO (CLIENTE)", pageWidth / 2 + 10, 35);
       doc.setFont("helvetica", "normal");
@@ -201,12 +222,10 @@ const SignContract = () => {
       doc.text(`CPF: ${contractData.customer_cpf || 'N/A'}`, pageWidth / 2 + 10, 49);
       doc.text(`Telefone: ${contractData.customer_phone || 'N/A'}`, pageWidth / 2 + 10, 56);
       
-      // Período e Valor
       doc.setFontSize(12);
       doc.text(`Pedido: #${contractData.order_id.split('-')[0]}`, 14, 75);
       doc.text(`Período: ${format(parseISO(contractData.start_date), "dd/MM/yyyy")} a ${format(parseISO(contractData.end_date), "dd/MM/yyyy")}`, 14, 82);
       
-      // Tabela de Itens
       const tableData = contractData.items.map((item: any) => [
         item.products.name,
         item.quantity,
@@ -217,88 +236,38 @@ const SignContract = () => {
         startY: 90,
         head: [['Produto', 'Qtd', 'Preço/Dia']],
         body: tableData,
-        headStyles: { fillStyle: 'F', fillColor: [37, 99, 235] }, // Blue-600
+        headStyles: { fillStyle: 'F', fillColor: [37, 99, 235] },
       });
 
-      // Total
       const finalY = (doc as any).lastAutoTable.finalY || 120;
       doc.setFontSize(14);
       doc.setFont("helvetica", "bold");
       doc.text(`VALOR TOTAL: R$ ${Number(contractData.total_amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, pageWidth - 14, finalY + 15, { align: 'right' });
 
-      // Assinaturas (Locador e Locatário)
       let currentY = finalY + 40;
-      
-      // Assinatura do Locador (Dono)
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
       doc.text("__________________________________________", pageWidth - 80, currentY);
       doc.text("Assinatura do Locador (RentalPro)", pageWidth - 80, currentY + 5);
       
       if (contractData.owner_signature) {
-        // Desenha a assinatura do Locador
         doc.addImage(contractData.owner_signature, 'PNG', pageWidth - 80, currentY - 25, 60, 25);
-      } else {
-        // Placeholder se não houver assinatura padrão
-        doc.setFontSize(12);
-        doc.setFont("times", "italic");
-        doc.text(contractData.owner_name || 'Locador', pageWidth - 80, currentY - 10);
-        doc.setFont("helvetica", "normal");
       }
 
-      // Assinatura do Locatário (Cliente)
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
       doc.text("__________________________________________", 14, currentY);
       doc.text("Assinatura do Locatário (Cliente)", 14, currentY + 5);
       
       if (contractData.signature_image) {
-        // Desenha a assinatura do Locatário
         doc.addImage(contractData.signature_image, 'PNG', 14, currentY - 25, 60, 25);
-      } else {
-        doc.setFontSize(12);
-        doc.setFont("times", "italic");
-        doc.text("Aguardando Assinatura", 14, currentY - 10);
-        doc.setFont("helvetica", "normal");
       }
       
-      // --- 2. Certificado de Assinatura (Página 2, se assinado) ---
-      if (contractData.signed_at) {
-        doc.addPage();
-        
-        doc.setFontSize(18);
-        doc.setTextColor(30, 58, 138);
-        doc.text("CERTIFICADO DE ASSINATURA ELETRÔNICA", pageWidth / 2, 20, { align: 'center' });
-        
-        doc.setFontSize(12);
-        doc.setTextColor(0, 0, 0);
-        
-        const auditY = 40;
-        
-        doc.text("Este documento foi assinado digitalmente pelo Locatário, conferindo validade jurídica conforme a Medida Provisória nº 2.200-2/2001.", 14, auditY);
-        
-        doc.setFontSize(10);
-        doc.setFont("helvetica", "bold");
-        doc.text("Detalhes da Assinatura:", 14, auditY + 15);
-        
-        doc.setFont("helvetica", "normal");
-        doc.text(`ID do Documento (Hash): ${contractData.order_id}`, 14, auditY + 25);
-        doc.text(`Assinado por: ${contractData.customer_name} (Locatário)`, 14, auditY + 35);
-        doc.text(`Data/Hora da Assinatura: ${format(parseISO(contractData.signed_at), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })}`, 14, auditY + 45);
-        doc.text(`IP de Origem: ${contractData.signer_ip || 'N/A'}`, 14, auditY + 55);
-        doc.text(`Dispositivo (User Agent): ${contractData.signer_user_agent || 'N/A'}`, 14, auditY + 65, { maxWidth: pageWidth - 28 });
-      }
-
-      // Adicionar marca d'água em todas as páginas
       const totalPages = doc.internal.pages.length;
       for (let i = 1; i <= totalPages; i++) {
         addWatermark(doc, i);
       }
 
       doc.save(`contrato-assinado-${contractData.order_id.split('-')[0]}.pdf`);
-      showSuccess("Download do contrato finalizado iniciado.");
     } catch (error: any) {
-      console.error("Erro ao gerar PDF final:", error);
       showError("Erro ao gerar PDF: " + error.message);
     } finally {
       setIsDownloading(false);
@@ -345,15 +314,16 @@ const SignContract = () => {
           )}
         </div>
 
-        {/* Detalhes do Locador */}
+        {/* Detalhes do Locador resolvidos dinamicamente */}
         <div className="border rounded-xl p-4 bg-gray-50 space-y-2">
-          <p className="text-sm font-bold text-gray-700 flex items-center gap-2"><Building className="h-4 w-4"/> Locador (Empresa)</p>
-          <p className="text-sm text-muted-foreground">{data.owner_name || 'Nome da Empresa não configurado.'}</p>
-          <p className="text-xs text-muted-foreground">CNPJ: {data.owner_cnpj || 'N/A'} | Tel: {data.owner_phone || 'N/A'}</p>
-          <p className="text-xs text-muted-foreground">Endereço: {data.owner_address || 'N/A'}</p>
+          <p className="text-sm font-bold text-gray-700 flex items-center gap-2">
+            <Building className="h-4 w-4"/> Locador (Empresa)
+          </p>
+          <p className="text-sm font-semibold text-blue-900">{data.owner_name || 'Nome da Empresa não configurado.'}</p>
+          <p className="text-xs text-muted-foreground">CNPJ/CPF: {data.owner_cnpj || 'N/A'} | Tel: {data.owner_phone || 'N/A'}</p>
+          <p className="text-xs text-muted-foreground">Endereço: {data.owner_address || 'Endereço não informado.'}</p>
         </div>
 
-        {/* Detalhes do Cliente e Período */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-b pb-4">
           <div className="space-y-1">
             <p className="text-sm font-semibold text-muted-foreground">Locatário (Cliente)</p>
@@ -374,7 +344,6 @@ const SignContract = () => {
           </div>
         </div>
 
-        {/* Itens */}
         <div className="space-y-3">
           <h3 className="text-xl font-bold text-gray-700">Itens da Locação</h3>
           <div className="border rounded-lg divide-y bg-gray-50">
@@ -391,13 +360,11 @@ const SignContract = () => {
           </div>
         </div>
         
-        {/* Área de Assinatura */}
         <div className="space-y-4 pt-4 border-t">
           <h3 className="text-xl font-bold text-gray-700">Assinaturas</h3>
           
-          {/* Assinatura do Locador (Dono) */}
           <div className="border rounded-xl p-4 bg-blue-50 border-blue-100">
-            <p className="text-sm font-semibold text-blue-800 mb-2">Locador (RentalPro)</p>
+            <p className="text-sm font-semibold text-blue-800 mb-2">Locador (Digitalmente Assinado)</p>
             <div className="h-[60px] flex items-center justify-center">
               {data.owner_signature ? (
                 <img 
@@ -406,12 +373,11 @@ const SignContract = () => {
                   className="max-h-full max-w-full object-contain"
                 />
               ) : (
-                <p className="text-sm text-muted-foreground italic">{data.owner_name || 'Assinatura Padrão Não Configurada'}</p>
+                <p className="text-sm text-muted-foreground italic font-serif">{data.owner_name || 'Assinatura Padrão'}</p>
               )}
             </div>
           </div>
 
-          {/* Assinatura do Locatário (Cliente) */}
           <div className="border rounded-xl p-4 bg-white shadow-md">
             <p className="text-sm font-semibold text-gray-800 mb-2">Locatário (Sua Assinatura)</p>
             
@@ -433,7 +399,6 @@ const SignContract = () => {
           </div>
         </div>
 
-        {/* Ações */}
         <div className="space-y-4 pt-4 border-t">
           {!isSigned ? (
             <>
