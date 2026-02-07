@@ -25,7 +25,8 @@ import {
   Share2,
   MessageCircle,
   Download,
-  Building
+  Building,
+  AlertTriangle
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { format, isAfter, parseISO } from 'date-fns';
@@ -89,7 +90,6 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
       setOrder(data);
       
       // 2. Fetch Owner Profile (including signature and business details)
-      // Usamos o ID do usuário logado para buscar o perfil, pois o contrato é gerado por ele.
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const { data: profileData, error: profileError } = await supabase
@@ -311,7 +311,16 @@ Por favor, acesse e assine digitalmente.
   };
 
   const updateStatus = async (newStatus: string) => {
-    if (!orderId) return;
+    if (!orderId || !order) return;
+    
+    const isSigned = !!order.signed_at;
+    
+    // 3. Bloqueio de Ação se não estiver assinado e o status for de progressão
+    if (!isSigned && (newStatus === 'reserved' || newStatus === 'picked_up')) {
+      showError("É necessário coletar a assinatura do cliente antes de liberar o pedido.");
+      return;
+    }
+
     try {
       setUpdating(true);
       
@@ -332,12 +341,14 @@ Por favor, acesse e assine digitalmente.
       if (error) throw error;
 
       let successMessage = '';
+      if (newStatus === 'pending_signature') successMessage = 'Status alterado para Aguardando Assinatura.';
       if (newStatus === 'reserved') successMessage = 'Reserva confirmada com sucesso!';
       if (newStatus === 'picked_up') successMessage = 'Retirada registrada com sucesso!';
       if (newStatus === 'returned') successMessage = 'Devolução registrada com sucesso!';
 
       showSuccess(successMessage);
       
+      // Invalidações
       queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] });
       queryClient.invalidateQueries({ queryKey: ['pendingPickups'] });
       queryClient.invalidateQueries({ queryKey: ['pendingReturns'] });
@@ -357,9 +368,10 @@ Por favor, acesse e assine digitalmente.
   const getStatusConfig = (status: string) => {
     switch (status) {
       case 'draft': return { label: 'Rascunho', color: 'bg-gray-100 text-gray-800 border-gray-200' };
-      case 'reserved': return { label: 'Reservado', color: 'bg-yellow-100 text-yellow-800 border-yellow-200' };
-      case 'picked_up': return { label: 'Retirado', color: 'bg-blue-100 text-blue-800 border-blue-200' };
-      case 'returned': return { label: 'Devolvido', color: 'bg-green-100 text-green-800 border-green-200' };
+      case 'pending_signature': return { label: 'Aguardando Assinatura', color: 'bg-yellow-100 text-yellow-800 border-yellow-200' };
+      case 'reserved': return { label: 'Reservado', color: 'bg-blue-50 text-blue-700 border-blue-200' };
+      case 'picked_up': return { label: 'Em Andamento', color: 'bg-blue-100 text-blue-800 border-blue-200' };
+      case 'returned': return { label: 'Concluído', color: 'bg-green-100 text-green-800 border-green-200' };
       default: return { label: status, color: 'bg-gray-100 text-gray-800' };
     }
   };
@@ -377,6 +389,7 @@ Por favor, acesse e assine digitalmente.
   const statusConfig = order ? getStatusConfig(order.status) : { label: '', color: '' };
   const isOverdue = order?.returned_at && order?.end_date && isAfter(parseISO(order.returned_at), parseISO(order.end_date));
   const isSigned = !!order?.signed_at;
+  const isPendingSignature = order?.status === 'pending_signature';
 
   const renderActionButton = () => {
     if (!order) return null;
@@ -386,36 +399,40 @@ Por favor, acesse e assine digitalmente.
       status: '',
       icon: null,
       color: 'bg-blue-600 hover:bg-blue-700',
+      disabled: false,
     };
 
-    switch (order.status) {
-      case 'draft':
+    // Se estiver aguardando assinatura, o botão principal deve ser para confirmar a reserva
+    if (isPendingSignature) {
         buttonProps = {
-          label: 'Confirmar Reserva',
-          status: 'reserved',
-          icon: <CheckCircle className="mr-2 h-5 w-5" />,
-          color: 'bg-green-600 hover:bg-green-700',
+            label: 'Confirmar Reserva',
+            status: 'reserved',
+            icon: <CheckCircle className="mr-2 h-5 w-5" />,
+            color: 'bg-green-600 hover:bg-green-700',
+            disabled: !isSigned, // Bloqueado se não estiver assinado
         };
-        break;
-      case 'reserved':
+    } else if (order.status === 'reserved') {
         buttonProps = {
-          label: 'Registrar Retirada/Check-out',
-          status: 'picked_up',
-          icon: <ClipboardCheck className="mr-2 h-5 w-5" />,
-          color: 'bg-blue-600 hover:bg-blue-700',
+            label: 'Registrar Retirada/Check-out',
+            status: 'picked_up',
+            icon: <ClipboardCheck className="mr-2 h-5 w-5" />,
+            color: 'bg-blue-600 hover:bg-blue-700',
+            disabled: !isSigned, // Bloqueado se não estiver assinado
         };
-        break;
-      case 'picked_up':
+    } else if (order.status === 'picked_up') {
         buttonProps = {
-          label: 'Registrar Devolução/Check-in',
-          status: 'returned',
-          icon: <ArrowRightLeft className="mr-2 h-5 w-5" />,
-          color: 'bg-green-600 hover:bg-green-700',
+            label: 'Registrar Devolução/Check-in',
+            status: 'returned',
+            icon: <ArrowRightLeft className="mr-2 h-5 w-5" />,
+            color: 'bg-green-600 hover:bg-green-700',
+            disabled: false,
         };
-        break;
-      case 'returned':
+    } else if (order.status === 'returned') {
         return null;
-      default:
+    } else if (order.status === 'draft') {
+        // Rascunhos não devem ter botão de ação principal aqui, pois o fluxo é via modal de edição.
+        return null;
+    } else {
         return null;
     }
 
@@ -423,7 +440,7 @@ Por favor, acesse e assine digitalmente.
       <Button 
         className={`w-full h-12 text-base ${buttonProps.color}`} 
         onClick={() => updateStatus(buttonProps.status)}
-        disabled={updating}
+        disabled={updating || buttonProps.disabled}
       >
         {updating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : buttonProps.icon}
         {buttonProps.label}
@@ -439,11 +456,14 @@ Por favor, acesse e assine digitalmente.
             <div>
               <div className="flex items-center gap-2">
                 <SheetTitle className="text-2xl">{order?.customer_name}</SheetTitle>
-                <CreateOrderDialog orderId={orderId || undefined} onOrderCreated={() => { fetchOrderDetails(); onStatusUpdate(); }}>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50">
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                </CreateOrderDialog>
+                {/* Permite editar apenas se for rascunho ou pendente de assinatura */}
+                {(order?.status === 'draft' || isPendingSignature) && (
+                    <CreateOrderDialog orderId={orderId || undefined} onOrderCreated={() => { fetchOrderDetails(); onStatusUpdate(); }}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50">
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    </CreateOrderDialog>
+                )}
               </div>
               <p className="text-xs font-mono text-muted-foreground">ID: #{order?.id.split('-')[0]}</p>
               
@@ -474,6 +494,14 @@ Por favor, acesse e assine digitalmente.
             <p className="text-3xl font-bold">R$ {Number(order?.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
           </div>
 
+          {/* Alerta de Assinatura Pendente */}
+          {!isSigned && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-sm text-yellow-800 flex items-center gap-3">
+              <AlertTriangle className="h-5 w-5 flex-shrink-0" />
+              <p className="font-semibold">Contrato não assinado.</p>
+            </div>
+          )}
+
           {/* Botão de Enviar Contrato (AGORA É UM LINK <a>) */}
           <div className="space-y-3">
              <a 
@@ -489,7 +517,7 @@ Por favor, acesse e assine digitalmente.
                 aria-disabled={loading}
              >
                 <MessageCircle className="h-6 w-6" />
-                Enviar Link de Assinatura
+                {isSigned ? 'Reenviar Contrato Assinado' : 'Enviar Link de Assinatura'}
              </a>
              
              {isSigned && (
@@ -582,6 +610,12 @@ Por favor, acesse e assine digitalmente.
         </div>
 
         <SheetFooter className="mt-auto pt-6 border-t sm:flex-col gap-2">
+          {/* Mensagem de bloqueio se for necessário */}
+          {isPendingSignature && !isSigned && (
+            <div className="text-center text-sm text-red-600 p-2 border border-red-200 rounded-lg bg-red-50">
+              <AlertTriangle className="h-4 w-4 inline mr-1" /> Assinatura pendente para liberar.
+            </div>
+          )}
           {renderActionButton()}
           <Button variant="outline" className="w-full h-12" onClick={() => onOpenChange(false)}>
             Fechar Painel

@@ -38,6 +38,7 @@ interface ContractData {
   signer_ip: string | null;
   signer_user_agent: string | null;
   status: string;
+  fulfillment_type: 'immediate' | 'reservation'; // Adicionado fulfillment_type
   
   // Owner Profile Data (from RPC)
   owner_name: string | null;
@@ -80,7 +81,12 @@ const SignContract = () => {
         throw new Error("Contrato não encontrado.");
       }
 
-      const contractData: ContractData = rpcData[0];
+      // O RPC retorna um array, pegamos o primeiro elemento
+      const contractData: ContractData = {
+        ...rpcData[0],
+        // Garantindo que fulfillment_type seja mapeado corretamente (se o RPC não o fizer, usaremos um padrão)
+        fulfillment_type: rpcData[0].fulfillment_type || 'reservation', 
+      };
       
       setData(contractData);
       setCustomerSignature(contractData.signature_image);
@@ -111,21 +117,31 @@ const SignContract = () => {
       const signer_ip = ipData.ip;
       const signer_user_agent = navigator.userAgent;
       
-      // 2. Atualizar o pedido no Supabase
+      // 2. Determinar o novo status baseado no fulfillment_type
+      const newStatus = data.fulfillment_type === 'immediate' ? 'picked_up' : 'reserved';
+      
+      // 3. Atualizar o pedido no Supabase
+      const updatePayload: any = {
+        signed_at: new Date().toISOString(),
+        signer_ip: signer_ip,
+        signer_user_agent: signer_user_agent,
+        signature_image: customerSignature,
+        status: newStatus // Transição de status após a assinatura
+      };
+      
+      // Se for retirada imediata, registra o picked_up_at agora
+      if (newStatus === 'picked_up') {
+          updatePayload.picked_up_at = new Date().toISOString();
+      }
+      
       const { error } = await supabase
         .from('orders')
-        .update({
-          signed_at: new Date().toISOString(),
-          signer_ip: signer_ip,
-          signer_user_agent: signer_user_agent,
-          signature_image: customerSignature,
-          status: 'reserved' // Mantém como reservado, mas agora assinado
-        })
+        .update(updatePayload)
         .eq('id', orderId);
 
       if (error) throw error;
 
-      showSuccess("Contrato assinado com sucesso!");
+      showSuccess("Contrato assinado com sucesso! O pedido foi atualizado para " + (newStatus === 'picked_up' ? 'Em Andamento' : 'Reservado') + ".");
       // Força a atualização dos dados para mostrar o estado assinado
       fetchContractData(); 
     } catch (error: any) {

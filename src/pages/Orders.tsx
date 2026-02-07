@@ -23,11 +23,18 @@ import { useSearchParams } from 'react-router-dom'; // Import useSearchParams
 
 const getStatusBadge = (status: string) => {
   switch (status) {
-    case 'draft': return <Badge variant="outline" className="bg-gray-100">Rascunho</Badge>;
-    case 'reserved': return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">Reservado</Badge>;
-    case 'picked_up': return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Retirado</Badge>;
-    case 'returned': return <Badge className="bg-green-100 text-green-800 border-green-200">Devolvido</Badge>;
-    default: return <Badge>{status}</Badge>;
+    case 'draft': 
+      return <Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-200">Rascunho</Badge>;
+    case 'pending_signature': 
+      return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">⚠️ Aguardando Assinatura</Badge>;
+    case 'reserved': 
+      return <Badge className="bg-blue-50 text-blue-700 border-blue-200">Reservado</Badge>;
+    case 'picked_up': 
+      return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Em Andamento</Badge>;
+    case 'returned': 
+      return <Badge className="bg-green-100 text-green-800 border-green-200">Concluído</Badge>;
+    default: 
+      return <Badge>{status}</Badge>;
   }
 };
 
@@ -197,7 +204,7 @@ const Orders = () => {
               <TableRow>
                 <TableHead>ID / Assinatura</TableHead>
                 <TableHead>Cliente</TableHead>
-                <TableHead>Tipo</TableHead> {/* NOVA COLUNA */}
+                <TableHead>Tipo</TableHead>
                 <TableHead>Período</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Pagamento</TableHead>
@@ -240,7 +247,7 @@ const Orders = () => {
                         )}
                       </TableCell>
                       <TableCell className="font-medium">{order.customer_name}</TableCell>
-                      <TableCell>{getFulfillmentTypeBadge(order.fulfillment_type)}</TableCell> {/* NOVA CÉLULA */}
+                      <TableCell>{getFulfillmentTypeBadge(order.fulfillment_type)}</TableCell>
                       <TableCell className="text-sm">
                         {format(new Date(order.start_date), 'dd/MM')} - {format(new Date(order.end_date), 'dd/MM')}
                       </TableCell>

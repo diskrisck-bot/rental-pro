@@ -33,11 +33,11 @@ export const fetchDashboardMetrics = async () => {
 
   if (activeRentalsError) throw activeRentalsError;
 
-  // 3. Reservas Futuras: status = 'reserved'
+  // 3. Reservas Futuras: status = 'reserved' OU 'pending_signature'
   const { count: futureReservationsCount, error: futureReservationsError } = await supabase
     .from('orders')
     .select('*', { count: 'exact', head: true })
-    .eq('status', 'reserved');
+    .in('status', ['reserved', 'pending_signature']);
 
   if (futureReservationsError) throw futureReservationsError;
 
@@ -73,7 +73,7 @@ export const fetchPendingPickups = async () => {
   const { start, end } = getTodayRange();
   
   // Filtra pedidos reservados onde a data de início está dentro do intervalo de hoje.
-  // Isso garante que pegamos todos os registros do dia, independentemente da hora.
+  // Apenas status 'reserved' (que já foram assinados e confirmados)
   const { data, error } = await supabase
     .from('orders')
     .select('id, customer_name, start_date')
@@ -125,7 +125,7 @@ export const fetchTimelineData = async () => {
         status
       )
     `)
-    .in('orders.status', ['reserved', 'picked_up']); // Apenas pedidos ativos ou reservados
+    .in('orders.status', ['reserved', 'picked_up', 'pending_signature']); // Inclui pending_signature para bloquear estoque
 
   if (itemsError) throw itemsError;
 

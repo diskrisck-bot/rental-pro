@@ -216,7 +216,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             .select('order_id, orders!inner(start_date, end_date, status)')
             .eq('product_id', item.product_id)
             .neq('order_id', orderId || '00000000-0000-0000-0000-000000000000') // Exclui o pedido atual se estiver editando
-            .in('orders.status', ['reserved', 'picked_up']); 
+            .in('orders.status', ['reserved', 'picked_up', 'pending_signature']); // Inclui pending_signature na verificação de reserva
 
           if (conflictError) throw conflictError;
 
@@ -237,12 +237,9 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
       }
       // --- FIM DA VERIFICAÇÃO DE CONFLITO ---
 
-      // Define o status inicial baseado no fulfillment_type
-      let initialStatus = 'reserved';
-      if (values.fulfillment_type === 'immediate') {
-        // Se for retirada imediata, o status já deve ser 'picked_up'
-        initialStatus = 'picked_up';
-      }
+      // 1. Status Inicial: Sempre 'pending_signature' para novos pedidos.
+      // A transição para 'reserved' ou 'picked_up' ocorrerá após a assinatura.
+      const initialStatus = 'pending_signature';
 
       const orderPayload = {
         customer_name: values.customer_name,
@@ -253,7 +250,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         total_amount: financialSummary.totalAmount,
         payment_method: values.payment_method,
         payment_timing: values.payment_timing,
-        fulfillment_type: values.fulfillment_type, // Novo campo
+        fulfillment_type: values.fulfillment_type,
         status: orderId ? undefined : initialStatus // Novo pedido usa o status inicial
       };
 
@@ -300,7 +297,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
 
       if (itemsError) throw itemsError;
 
-      showSuccess(orderId ? "Pedido atualizado com sucesso!" : "Pedido criado com sucesso!");
+      showSuccess(orderId ? "Pedido atualizado com sucesso!" : "Pedido criado com sucesso! Aguardando assinatura.");
       setOpen(false);
       onOrderCreated();
     } catch (error: any) {
@@ -331,7 +328,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         ) : (
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 py-4">
             
-            {/* NOVO: Tipo de Cumprimento (Fulfillment Type) */}
+            {/* Tipo de Cumprimento (Fulfillment Type) */}
             <div className="space-y-3 border-b pb-4">
               <h3 className="text-base font-semibold flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-blue-600" /> Tipo de Pedido
@@ -362,11 +359,11 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
               <Badge variant="secondary" className="text-xs bg-gray-100 text-gray-600 border-gray-200">
                 <AlertTriangle className="h-3 w-3 mr-1 text-orange-400" />
                 {isImmediate 
-                  ? "O estoque será baixado imediatamente (status: Retirado)." 
-                  : "O estoque será reservado para o período selecionado (status: Reservado)."}
+                  ? "O estoque será baixado imediatamente APÓS a assinatura." 
+                  : "O estoque será reservado para o período selecionado APÓS a assinatura."}
               </Badge>
             </div>
-            {/* FIM NOVO: Tipo de Cumprimento */}
+            {/* FIM Tipo de Cumprimento */}
 
             <div className="grid gap-4">
               <div className="space-y-2">
