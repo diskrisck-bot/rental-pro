@@ -165,3 +165,21 @@ export const fetchAllProducts = async () => {
   if (error) throw error;
   return data;
 };
+
+// NOVO: Função para buscar o nome da empresa do perfil
+export const fetchBusinessName = async (): Promise<string | null> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('business_name')
+    .eq('id', user.id)
+    .single();
+
+  if (error && error.code !== 'PGRST116') {
+    throw error;
+  }
+  
+  return data?.business_name || null;
+};

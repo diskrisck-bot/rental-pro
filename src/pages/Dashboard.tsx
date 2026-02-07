@@ -14,7 +14,8 @@ import { useQuery } from '@tanstack/react-query';
 import { 
   fetchDashboardMetrics, 
   fetchPendingPickups, 
-  fetchPendingReturns 
+  fetchPendingReturns,
+  fetchBusinessName // Importando a nova função
 } from '@/integrations/supabase/queries';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -151,6 +152,12 @@ const Dashboard = () => {
     queryKey: ['dashboardMetrics'],
     queryFn: fetchDashboardMetrics,
   });
+  
+  const { data: businessName, isLoading: isLoadingName } = useQuery({
+    queryKey: ['businessName'],
+    queryFn: fetchBusinessName,
+    staleTime: 1000 * 60 * 5, // Cache por 5 minutos
+  });
 
   const { data: pickups, isLoading: isLoadingPickups } = useQuery({
     queryKey: ['pendingPickups'],
@@ -164,11 +171,15 @@ const Dashboard = () => {
 
   const formatCurrency = (amount: number) => 
     `R$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+    
+  const greetingName = businessName || 'RentalPro';
 
   return (
     <div className="p-4 md:p-8 space-y-8"> {/* Ajuste de padding para mobile */}
       <div>
-        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Bem-vindo, Admin</h1>
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+          Bem-vindo, {isLoadingName ? '...' : greetingName}
+        </h1>
         <p className="text-muted-foreground">Aqui está o que está acontecendo na sua locadora hoje.</p>
       </div>
 
