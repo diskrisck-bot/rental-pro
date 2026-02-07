@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Loader2, Download, MessageCircle, CheckCircle, DollarSign, Clock, Zap, Calendar } from 'lucide-react';
+import { Plus, Search, Loader2, Download, MessageCircle, CheckCircle, DollarSign, Clock, Zap, Calendar, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
@@ -19,7 +19,10 @@ import { ptBR } from 'date-fns/locale';
 import CreateOrderDialog from '@/components/orders/CreateOrderDialog';
 import OrderDetailsSheet from '@/components/orders/OrderDetailsSheet';
 import { showError } from '@/utils/toast';
-import { useSearchParams } from 'react-router-dom'; // Import useSearchParams
+import { useSearchParams, useNavigate } from 'react-router-dom'; // Import useNavigate
+import { useQuery } from '@tanstack/react-query';
+import { fetchBusinessConfig } from '@/integrations/supabase/queries'; // Import new query
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'; // Import Tooltip components
 
 const getStatusBadge = (status: string) => {
   switch (status) {
@@ -118,7 +121,26 @@ const Orders = () => {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   
-  const [searchParams, setSearchParams] = useSearchParams(); // Hook para ler URL params
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate(); // Initialize useNavigate
+
+  // Fetch business configuration for validation
+  const { data: businessConfig, isLoading: isLoadingConfig } = useQuery({
+    queryKey: ['businessConfig'],
+    queryFn: fetchBusinessConfig,
+    staleTime: 1000 * 60 * 5, // Cache por 5 minutos
+  });
+
+  const isConfigIncomplete = !businessConfig?.business_name || !businessConfig?.business_cnpj;
+  const buttonText = isConfigIncomplete ? "Configure a Empresa" : "Novo Pedido";
+
+  const handleRedirectToSettings = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (isConfigIncomplete) {
+      navigate('/settings');
+      showError("Por favor, preencha o Nome e CNPJ da empresa nas Configurações.");
+    }
+  };
 
   const fetchOrders = async () => {
     try {
@@ -182,11 +204,31 @@ const Orders = () => {
           <p className="text-muted-foreground">Acompanhe e gerencie todos os aluguéis.</p>
         </div>
         
-        <CreateOrderDialog onOrderCreated={fetchOrders}>
-          <Button className="bg-blue-600 hover:bg-blue-700 w-full md:w-auto">
-            <Plus className="mr-2 h-4 w-4" /> Novo Pedido
+        {isLoadingConfig ? (
+          <Button disabled className="w-full md:w-auto bg-gray-200 text-gray-600">
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Carregando Config...
           </Button>
-        </CreateOrderDialog>
+        ) : isConfigIncomplete ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button 
+                className="bg-red-600 hover:bg-red-700 w-full md:w-auto"
+                onClick={handleRedirectToSettings}
+              >
+                <AlertTriangle className="mr-2 h-4 w-4" /> {buttonText}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs bg-gray-800 text-white border-none rounded-lg shadow-lg p-3">
+              <p className="text-xs">Vá em Configurações > Empresa para habilitar a emissão de pedidos.</p>
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <CreateOrderDialog onOrderCreated={fetchOrders}>
+            <Button className="bg-blue-600 hover:bg-blue-700 w-full md:w-auto">
+              <Plus className="mr-2 h-4 w-4" /> {buttonText}
+            </Button>
+          </CreateOrderDialog>
+        )}
       </div>
 
       <div className="relative max-w-sm">

@@ -166,7 +166,7 @@ export const fetchAllProducts = async () => {
   return data;
 };
 
-// NOVO: Função para buscar o nome da empresa do perfil
+// Função para buscar o nome da empresa do perfil (usada no Dashboard)
 export const fetchBusinessName = async (): Promise<string | null> => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
@@ -182,4 +182,22 @@ export const fetchBusinessName = async (): Promise<string | null> => {
   }
   
   return data?.business_name || null;
+};
+
+// NOVO: Função para buscar a configuração crítica da empresa (usada para validação de pedidos)
+export const fetchBusinessConfig = async (): Promise<{ business_name: string | null, business_cnpj: string | null } | null> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('business_name, business_cnpj')
+    .eq('id', user.id)
+    .single();
+
+  if (error && error.code !== 'PGRST116') {
+    throw error;
+  }
+  
+  return data || { business_name: null, business_cnpj: null };
 };
