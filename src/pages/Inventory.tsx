@@ -124,23 +124,24 @@ const Inventory = () => {
     name: '', type: 'trackable', total_quantity: 1, price: 0, serial_number: '',
   });
 
-  // 1. Busca todos os produtos ativos
+  // 1. Busca todos os produtos (REMOVIDO O FILTRO 'ACTIVE')
   const { data: rawProducts, isLoading: loadingProducts } = useQuery({
     queryKey: ['allProducts'],
     queryFn: async () => {
-      const { data } = await supabase.from('products').select('*').eq('active', true).order('name');
+      // Correção aqui: removemos .eq('active', true)
+      const { data } = await supabase.from('products').select('*').order('name');
       return data || [];
     }
   });
 
-  // 2. Busca pedidos ativos (Assinados, Reservados ou Na Rua)
+  // 2. Busca pedidos ativos
   const { data: activeOrders, isLoading: loadingOrders } = useQuery({
     queryKey: ['inventoryActiveOrders'],
     queryFn: async () => {
       const { data } = await supabase
         .from('order_items')
         .select('quantity, product_id, orders!inner(status, start_date, end_date)')
-        .in('orders.status', ['signed', 'reserved', 'picked_up']); // AQUI ESTÁ A CORREÇÃO PRINCIPAL
+        .in('orders.status', ['signed', 'reserved', 'picked_up']);
       return data || [];
     }
   });
@@ -171,7 +172,15 @@ const Inventory = () => {
 
     setIsSaving(true);
     try {
-      const productPayload = { name: newProduct.name, type: newProduct.type, total_quantity: newProduct.total_quantity, price: newProduct.price };
+      // Correção: Força active: true na criação
+      const productPayload = { 
+        name: newProduct.name, 
+        type: newProduct.type, 
+        total_quantity: newProduct.total_quantity, 
+        price: newProduct.price,
+        active: true 
+      };
+      
       const { data: productData, error: productError } = await supabase.from('products').insert([productPayload]).select('id').single();
       if (productError) throw productError;
       
@@ -237,7 +246,7 @@ const Inventory = () => {
               </TableHeader>
               <TableBody>
                 {isLoading ? <TableRow><TableCell colSpan={7} className="h-24 text-center"><Loader2 className="animate-spin mx-auto text-blue-600" /></TableCell></TableRow> : 
-                 filteredProducts?.length === 0 ? <TableRow><TableCell colSpan={7} className="text-center h-24">Nenhum produto.</TableCell></TableRow> :
+                 filteredProducts?.length === 0 ? <TableRow><TableCell colSpan={7} className="text-center h-24">Nenhum produto encontrado.</TableCell></TableRow> :
                  filteredProducts?.map((product) => {
                    const { available, rented } = calculateStock(product.id, product.total_quantity || 0);
                    const status = getAvailabilityStatus(available, product.total_quantity || 0);
