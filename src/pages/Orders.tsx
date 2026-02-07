@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Loader2, Download, MessageCircle, CheckCircle, DollarSign, Clock } from 'lucide-react';
+import { Plus, Search, Loader2, Download, MessageCircle, CheckCircle, DollarSign, Clock, Zap, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
@@ -43,6 +43,24 @@ const getPaymentTimingBadge = (timing: string) => {
     return (
       <Badge className="bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100">
         <Clock className="h-3 w-3 mr-1" /> A Pagar (Devolução)
+      </Badge>
+    );
+  }
+  return null;
+};
+
+const getFulfillmentTypeBadge = (type: string) => {
+  if (type === 'immediate') {
+    return (
+      <Badge variant="secondary" className="bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100">
+        <Zap className="h-3 w-3 mr-1" /> Imediata
+      </Badge>
+    );
+  }
+  if (type === 'reservation') {
+    return (
+      <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100">
+        <Calendar className="h-3 w-3 mr-1" /> Reserva
       </Badge>
     );
   }
@@ -179,9 +197,10 @@ const Orders = () => {
               <TableRow>
                 <TableHead>ID / Assinatura</TableHead>
                 <TableHead>Cliente</TableHead>
+                <TableHead>Tipo</TableHead> {/* NOVA COLUNA */}
                 <TableHead>Período</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Pagamento</TableHead> {/* NOVA COLUNA */}
+                <TableHead>Pagamento</TableHead>
                 <TableHead>Total</TableHead>
                 <TableHead className="text-right">Ações Rápidas</TableHead>
               </TableRow>
@@ -189,13 +208,13 @@ const Orders = () => {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center">
+                  <TableCell colSpan={8} className="h-24 text-center">
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-blue-600" />
                   </TableCell>
                 </TableRow>
               ) : filteredOrders.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
                     Nenhum pedido encontrado.
                   </TableCell>
                 </TableRow>
@@ -221,11 +240,12 @@ const Orders = () => {
                         )}
                       </TableCell>
                       <TableCell className="font-medium">{order.customer_name}</TableCell>
+                      <TableCell>{getFulfillmentTypeBadge(order.fulfillment_type)}</TableCell> {/* NOVA CÉLULA */}
                       <TableCell className="text-sm">
                         {format(new Date(order.start_date), 'dd/MM')} - {format(new Date(order.end_date), 'dd/MM')}
                       </TableCell>
                       <TableCell>{getStatusBadge(order.status)}</TableCell>
-                      <TableCell>{getPaymentTimingBadge(order.payment_timing)}</TableCell> {/* NOVA CÉLULA */}
+                      <TableCell>{getPaymentTimingBadge(order.payment_timing)}</TableCell>
                       <TableCell className="font-semibold text-blue-600">
                         R$ {Number(order.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </TableCell>

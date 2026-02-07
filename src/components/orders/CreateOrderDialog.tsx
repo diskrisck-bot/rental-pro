@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Loader2, Wallet, Edit, CreditCard, Clock } from 'lucide-react';
+import { Plus, Trash2, Loader2, Wallet, Edit, CreditCard, Clock, Zap, Calendar, AlertTriangle } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { 
   Dialog, 
@@ -23,12 +23,13 @@ import {
 } from '@/components/ui/select';
 import { supabase } from '@/lib/supabase';
 import { showSuccess, showError } from '@/utils/toast';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, startOfDay } from 'date-fns';
 import { calculateOrderTotal } from '@/utils/financial';
 import MaskedInput from 'react-text-mask';
 import { Phone, User } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAllProducts } from '@/integrations/supabase/queries';
+import { Badge } from '@/components/ui/badge';
 
 interface CreateOrderDialogProps {
   orderId?: string; // Se presente, entra em modo de edição
@@ -65,25 +66,43 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
   
   const productList = products || [];
 
+  const defaultStartDate = format(new Date(), 'yyyy-MM-dd');
+  const defaultEndDate = format(new Date(Date.now() + 86400000), 'yyyy-MM-dd');
+
   const { register, handleSubmit, reset, watch, setValue } = useForm({
     defaultValues: {
       customer_name: '',
       customer_phone: '',
       customer_cpf: '',
-      start_date: format(new Date(), 'yyyy-MM-dd'),
-      end_date: format(new Date(Date.now() + 86400000), 'yyyy-MM-dd'),
+      start_date: defaultStartDate,
+      end_date: defaultEndDate,
       payment_method: 'Pix', // Default value
       payment_timing: 'paid_on_pickup', // Default value
+      fulfillment_type: 'reservation', // Novo campo padrão
     }
   });
 
   const watchDates = watch(['start_date', 'end_date']);
   const watchPaymentMethod = watch('payment_method');
   const watchPaymentTiming = watch('payment_timing');
+  const watchFulfillmentType = watch('fulfillment_type');
 
   const financialSummary = useMemo(() => {
     return calculateOrderTotal(watchDates[0], watchDates[1], selectedItems);
   }, [selectedItems, watchDates]);
+
+  // Efeito para ajustar a data de início quando o tipo de cumprimento muda
+  useEffect(() => {
+    if (watchFulfillmentType === 'immediate') {
+      // Se for imediato, a data de início é HOJE
+      setValue('start_date', format(new Date(), 'yyyy-MM-dd'));
+    } else if (watchFulfillmentType === 'reservation' && !orderId) {
+      // Se for reserva e não for edição, volta para o padrão (hoje)
+      // O usuário deve selecionar uma data futura manualmente
+      setValue('start_date', defaultStartDate);
+    }
+  }, [watchFulfillmentType, setValue, orderId]);
+
 
   // Exibe erro se o carregamento de produtos falhar
   useEffect(() => {
@@ -118,6 +137,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             setValue('end_date', format(parseISO(orderData.end_date), 'yyyy-MM-dd'));
             setValue('payment_method', orderData.payment_method || 'Pix');
             setValue('payment_timing', orderData.payment_timing || 'paid_on_pickup');
+            setValue('fulfillment_type', orderData.fulfillment_type || 'reservation'); // Carrega fulfillment_type
             
             const existingItems = orderData.order_items.map((item: any) => ({
               product_id: item.product_id,
@@ -133,10 +153,11 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             customer_name: '',
             customer_phone: '',
             customer_cpf: '',
-            start_date: format(new Date(), 'yyyy-MM-dd'),
-            end_date: format(new Date(Date.now() + 86400000), 'yyyy-MM-dd'),
+            start_date: defaultStartDate,
+            end_date: defaultEndDate,
             payment_method: 'Pix',
             payment_timing: 'paid_on_pickup',
+            fulfillment_type: 'reservation',
           });
           setSelectedItems([]);
         }
@@ -216,6 +237,13 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
       }
       // --- FIM DA VERIFICAÇÃO DE CONFLITO ---
 
+      // Define o status inicial baseado no fulfillment_type
+      let initialStatus = 'reserved';
+      if (values.fulfillment_type === 'immediate') {
+        // Se for retirada imediata, o status já deve ser 'picked_up'
+        initialStatus = 'picked_up';
+      }
+
       const orderPayload = {
         customer_name: values.customer_name,
         customer_phone: values.customer_phone,
@@ -223,11 +251,10 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         start_date: newStart.toISOString(),
         end_date: newEnd.toISOString(),
         total_amount: financialSummary.totalAmount,
-        // NOVOS CAMPOS DE PAGAMENTO
         payment_method: values.payment_method,
         payment_timing: values.payment_timing,
-        // FIM NOVOS CAMPOS
-        status: orderId ? undefined : 'reserved' // Novo pedido começa como 'reserved'
+        fulfillment_type: values.fulfillment_type, // Novo campo
+        status: orderId ? undefined : initialStatus // Novo pedido usa o status inicial
       };
 
       let currentOrderId = orderId;
@@ -284,6 +311,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
   };
 
   const isDataLoading = fetchingData || isProductsLoading;
+  const isImmediate = watchFulfillmentType === 'immediate';
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -302,6 +330,44 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
           </div>
         ) : (
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 py-4">
+            
+            {/* NOVO: Tipo de Cumprimento (Fulfillment Type) */}
+            <div className="space-y-3 border-b pb-4">
+              <h3 className="text-base font-semibold flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-blue-600" /> Tipo de Pedido
+              </h3>
+              <Select 
+                value={watchFulfillmentType} 
+                onValueChange={(val) => setValue('fulfillment_type', val as 'immediate' | 'reservation')}
+                disabled={!!orderId} // Desabilita a mudança de tipo após a criação
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecione o tipo de pedido" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="immediate">
+                    <div className="flex items-center gap-2">
+                      <Zap className="h-4 w-4 text-orange-500" /> Retirada Imediata
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="reservation">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-blue-500" /> Reserva Futura
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              
+              {/* Alerta de Estoque */}
+              <Badge variant="secondary" className="text-xs bg-gray-100 text-gray-600 border-gray-200">
+                <AlertTriangle className="h-3 w-3 mr-1 text-orange-400" />
+                {isImmediate 
+                  ? "O estoque será baixado imediatamente (status: Retirado)." 
+                  : "O estoque será reservado para o período selecionado (status: Reservado)."}
+              </Badge>
+            </div>
+            {/* FIM NOVO: Tipo de Cumprimento */}
+
             <div className="grid gap-4">
               <div className="space-y-2">
                 <Label htmlFor="customer_name">Nome do Cliente</Label>
@@ -349,7 +415,11 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
                     id="start_date" 
                     type="date" 
                     {...register('start_date', { required: true })}
+                    disabled={isImmediate && !orderId} // Desabilita se for imediato e não for edição
                   />
+                  {isImmediate && !orderId && (
+                    <p className="text-xs text-muted-foreground">Data de início definida para hoje (Retirada Imediata).</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="end_date">Data Fim</Label>
@@ -431,7 +501,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
               </div>
             </div>
 
-            {/* NOVO: Seção de Pagamento */}
+            {/* Seção de Pagamento */}
             <div className="border-t pt-4 space-y-4">
               <h3 className="text-base font-semibold flex items-center gap-2">
                 <CreditCard className="h-4 w-4 text-blue-600" /> Detalhes do Pagamento
@@ -476,7 +546,6 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
                 </div>
               </div>
             </div>
-            {/* FIM NOVO: Seção de Pagamento */}
 
             <div className="bg-blue-50 border border-blue-100 rounded-xl p-6 space-y-3">
               <div className="flex items-center gap-2 text-blue-800 font-semibold mb-2">
