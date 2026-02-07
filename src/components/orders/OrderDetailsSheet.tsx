@@ -45,65 +45,38 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
   const [ownerProfile, setOwnerProfile] = useState<OwnerProfile | null>(null);
 
   useEffect(() => {
-    if (open && orderId) {
-      fetchOrderDetails();
-    }
+    if (open && orderId) { fetchOrderDetails(); }
   }, [open, orderId]);
 
   const fetchOrderDetails = async () => {
     if (!orderId) return;
     try {
       setLoading(true);
-      
-      const { data, error } = await supabase
-        .from('orders')
-        .select(`
-          *,
-          order_items (
-            quantity,
-            products (name, price, replacement_value),
-            assets (serial_number)
-          )
-        `)
-        .eq('id', orderId)
-        .single();
-
+      const { data, error } = await supabase.from('orders').select(`*, order_items (quantity, products (name, price, replacement_value), assets (serial_number))`).eq('id', orderId).single();
       if (error) throw error;
       setOrder(data);
-      
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('business_name, business_cnpj, business_address, business_phone, business_city, signature_url')
-          .eq('id', user.id)
-          .single();
-          
-        if (!profileError) {
-          setOwnerProfile(profileData as OwnerProfile);
-        }
+        const { data: profileData } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+        if (profileData) setOwnerProfile(profileData as OwnerProfile);
       }
-
-    } catch (error: any) {
-      showError("Erro ao carregar detalhes.");
-    } finally {
-      setLoading(false);
-    }
+    } catch (error: any) { showError("Erro ao carregar detalhes."); } finally { setLoading(false); }
   };
 
   const getWhatsappLink = (order: any) => {
     if (!order) return '#';
     const signLink = `${window.location.origin}/contract/${order.id}`;
-    const messageText = `Olá ${order.customer_name}! 📦\nSegue o link do seu contrato de locação #${order.id.split('-')[0]}:\n${signLink}\n\nFavor assinar digitalmente.`;
-    const encodedMessage = encodeURIComponent(messageText);
-    let phone = order.customer_phone ? order.customer_phone.replace(/\D/g, '') : '';
-    if (phone.length >= 10) phone = `55${phone}`;
-    return `https://wa.me/${phone}?text=${encodedMessage}`;
+    const messageText = `Olá ${order.customer_name}! 📄\nSegue o link do seu contrato de locação #${order.id.split('-')[0]}:\n${signLink}\n\nFavor assinar digitalmente.`;
+    return `https://wa.me/${order.customer_phone?.replace(/\D/g, '')}?text=${encodeURIComponent(messageText)}`;
   };
 
-  // --- GERADOR DE PDF PROFISSIONAL (Com Assinaturas Visuais) ---
+  // --- GERADOR DE PDF "ADVOGADO PREMIUM" ---
   const generatePDF = async (order: any, owner: OwnerProfile | null) => {
     const doc = new jsPDF({ format: 'a4', unit: 'mm' });
+    
+    // Cores e Fontes
+    const primaryColor = [30, 58, 138]; // Navy Blue Profissional
+    const lightGray = [245, 245, 245];
     
     const locador = {
       name: owner?.business_name || "Locadora",
@@ -116,100 +89,143 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     const formatMoney = (val: any) => Number(val).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     
     const listaItens = order.order_items.map((i: any) => 
-      `• ${i.quantity}x ${i.products?.name} (Reposição: ${formatMoney(i.products?.replacement_value || 0)})`
+      `• ${i.quantity}x ${i.products?.name} (Valor de Reposição: ${formatMoney(i.products?.replacement_value || 0)})`
     ).join('\n');
 
-    const header = "CONTRATO DE LOCAÇÃO DE BENS MÓVEIS";
-    const intro = `LOCADOR: ${locador.name}, CNPJ ${locador.cnpj}, com sede em ${locador.address}.\n\nLOCATÁRIO: ${order.customer_name}, CPF/CNPJ ${order.customer_cpf || 'Não informado'}, residente em ${order.customer_address || 'Endereço não informado'}.`;
-    
-    const clauses = [
-      { title: "1. DO OBJETO", text: `Locação dos bens: \n${listaItens}` },
-      { title: "2. DO PRAZO", text: `Vigência de ${dias} dias: Início ${format(parseISO(order.start_date), "dd/MM/yyyy")} e Término ${format(parseISO(order.end_date), "dd/MM/yyyy")}.` },
-      { title: "3. DO VALOR", text: `Total: ${formatMoney(order.total_amount)}. Pagamento via: ${order.payment_method || 'A combinar'}.` },
-      { title: "4. REPOSIÇÃO", text: `Em caso de dano ou perda, o LOCATÁRIO indenizará o LOCADOR nos valores de reposição citados na Cláusula 1.` },
-      { title: "5. DO FORO", text: `Eleito o foro de ${locador.city} para dirimir quaisquer dúvidas.` }
-    ];
-
-    const footer = `${locador.city}, ${format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}.`;
-
+    // Layout
     const margin = 20;
     const pageWidth = 210;
     const maxLineWidth = pageWidth - (margin * 2);
     let currentY = 20;
 
-    const printText = (text: string, size = 10, style = "normal", align = "left") => {
-      doc.setFont("helvetica", style);
-      doc.setFontSize(size);
-      const lines = doc.splitTextToSize(text, maxLineWidth);
-      if (currentY + (lines.length * 5) > 280) { doc.addPage(); currentY = 20; }
-      doc.text(lines, align === "center" ? pageWidth / 2 : margin, currentY, { align: align as any });
-      currentY += (lines.length * 4) + 4;
+    const printTitle = (text: string) => {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.text(text, pageWidth / 2, currentY, { align: "center" });
+      doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.setLineWidth(0.5);
+      doc.line(margin + 20, currentY + 2, pageWidth - 40, currentY + 2); // Linha decorativa
+      currentY += 15;
     };
 
-    printText(header, 14, "bold", "center");
-    currentY += 5;
-    printText(intro, 10, "normal", "justify");
-    currentY += 5;
+    const printSectionTitle = (text: string) => {
+      if (currentY > 260) { doc.addPage(); currentY = 20; }
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.text(text.toUpperCase(), margin, currentY);
+      currentY += 6;
+    };
 
-    clauses.forEach(c => {
-      printText(c.title, 10, "bold", "left");
-      printText(c.text, 10, "normal", "left");
-      currentY += 2;
-    });
+    const printBody = (text: string, isBold = false) => {
+      doc.setFont("times", isBold ? "bold" : "normal"); // Fonte Serifada (Jurídica)
+      doc.setFontSize(11);
+      doc.setTextColor(0, 0, 0);
+      const lines = doc.splitTextToSize(text, maxLineWidth);
+      if (currentY + (lines.length * 5) > 275) { doc.addPage(); currentY = 20; }
+      doc.text(lines, margin, currentY);
+      currentY += (lines.length * 5) + 3;
+    };
 
-    currentY += 5;
-    printText(footer, 10, "normal", "left");
-
-    // --- ÁREA DE ASSINATURAS (Página 1) ---
-    currentY += 30; // Espaço maior para as imagens
-    if (currentY > 250) { doc.addPage(); currentY = 40; }
+    // --- CONTEÚDO ---
     
-    const yLinha = currentY;
-    const yImagem = currentY - 25; // Posição da imagem acima da linha
+    // 1. Título
+    printTitle("CONTRATO DE LOCAÇÃO DE BENS MÓVEIS");
 
-    // Assinatura do Locador (Dono)
+    // 2. Quadro Resumo das Partes (Visual Box)
+    doc.setFillColor(lightGray[0], lightGray[1], lightGray[2]);
+    doc.setDrawColor(200, 200, 200);
+    doc.rect(margin, currentY, maxLineWidth, 35, 'FD'); // Box Fundo Cinza
+    
+    const startBoxY = currentY + 6;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(0,0,0);
+    doc.text("LOCADOR (PROPRIETÁRIO)", margin + 5, startBoxY);
+    doc.setFont("times", "normal"); doc.setFontSize(10);
+    doc.text(`${locador.name}`, margin + 5, startBoxY + 5);
+    doc.text(`CNPJ: ${locador.cnpj}`, margin + 5, startBoxY + 10);
+    doc.text(`${locador.address}`, margin + 5, startBoxY + 15);
+    doc.text(`${locador.city}`, margin + 5, startBoxY + 20);
+
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+    doc.text("LOCATÁRIO (CLIENTE)", margin + 90, startBoxY);
+    doc.setFont("times", "normal"); doc.setFontSize(10);
+    doc.text(`${order.customer_name}`, margin + 90, startBoxY + 5);
+    doc.text(`CPF/CNPJ: ${order.customer_cpf || '---'}`, margin + 90, startBoxY + 10);
+    doc.text(`${order.customer_address || 'Endereço não informado'}`, margin + 90, startBoxY + 15);
+    doc.text(`Tel: ${order.customer_phone || '---'}`, margin + 90, startBoxY + 20);
+    
+    currentY += 45;
+
+    // 3. Cláusulas
+    printSectionTitle("1. DO OBJETO DA LOCAÇÃO");
+    printBody(`O presente instrumento tem como objeto o aluguel dos seguintes bens de propriedade do LOCADOR, entregues em perfeito estado de conservação:\n${listaItens}`);
+
+    printSectionTitle("2. VIGÊNCIA E PRAZOS");
+    printBody(`A locação terá a duração de ${dias} diária(s), iniciando-se em ${format(parseISO(order.start_date), "dd/MM/yyyy")} e encerrando-se impreterivelmente em ${format(parseISO(order.end_date), "dd/MM/yyyy")}. O atraso na devolução implicará em cobrança de novas diárias.`);
+
+    printSectionTitle("3. VALOR E FORMA DE PAGAMENTO");
+    printBody(`Pela locação, o LOCATÁRIO pagará a importância total de ${formatMoney(order.total_amount)}, através de ${order.payment_method || 'meio a combinar'}.`);
+
+    printSectionTitle("4. RESPONSABILIDADE E INDENIZAÇÃO");
+    printBody("O LOCATÁRIO assume total responsabilidade pela guarda e uso dos bens. Em caso de perda, roubo, furto ou dano, obriga-se a indenizar o LOCADOR pelo VALOR DE REPOSIÇÃO descrito na Cláusula 1, além das diárias decorrentes do tempo de inatividade do bem.");
+
+    printSectionTitle("5. DO FORO");
+    printBody(`Fica eleito o foro da Comarca de ${locador.city} para dirimir quaisquer controvérsias oriundas deste contrato.`);
+
+    currentY += 5;
+    doc.setFont("times", "italic");
+    doc.text(`${locador.city}, ${format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}.`, margin, currentY);
+
+    // 4. Assinaturas
+    currentY += 25;
+    if (currentY > 240) { doc.addPage(); currentY = 40; }
+    
+    const yAssin = currentY;
+    const yImg = yAssin - 25;
+
+    // Assinatura Locador
     if (owner?.signature_url) {
-      try {
-        doc.addImage(owner.signature_url, 'PNG', margin + 5, yImagem, 50, 25);
-      } catch (e) { console.error("Erro na assinatura do locador", e); }
+      try { doc.addImage(owner.signature_url, 'PNG', margin + 10, yImg, 40, 20); } catch (e) {}
     }
-    doc.line(margin, yLinha, margin + 70, yLinha);
-    doc.setFontSize(8); doc.text("LOCADOR", margin, yLinha + 5);
-    
-    // Assinatura do Locatário (Cliente)
-    if (order.signature_image) {
-        doc.addImage(order.signature_image, 'PNG', 120 + 5, yImagem, 50, 25);
-    }
-    doc.line(120, yLinha, 190, yLinha);
-    doc.text("LOCATÁRIO", 120, yLinha + 5);
+    doc.setDrawColor(0,0,0); doc.line(margin, yAssin, margin + 70, yAssin);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.text("ASSINATURA DO LOCADOR", margin, yAssin + 5);
 
-    // --- PÁGINA 2: AUDITORIA ---
+    // Assinatura Locatário
+    if (order.signature_image) {
+      try { doc.addImage(order.signature_image, 'PNG', 120 + 10, yImg, 40, 20); } catch (e) {}
+    }
+    doc.line(120, yAssin, 190, yAssin);
+    doc.text("ASSINATURA DO LOCATÁRIO", 120, yAssin + 5);
+
+    // PÁGINA 2: Auditoria
     if (order.signed_at) {
       doc.addPage();
       currentY = 20;
-      printText("CERTIFICADO DE ASSINATURA DIGITAL", 14, "bold", "center");
-      currentY += 10;
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(14);
+      doc.text("CERTIFICADO DE ASSINATURA DIGITAL", pageWidth/2, currentY, {align: 'center'});
       
-      doc.setDrawColor(200);
-      doc.setFillColor(245, 245, 245);
+      currentY += 20;
+      doc.setFillColor(lightGray[0], lightGray[1], lightGray[2]);
       doc.rect(margin, currentY, maxLineWidth, 60, 'FD');
-      currentY += 10;
       
+      currentY += 10;
+      doc.setTextColor(0,0,0);
       const addLog = (l: string, v: string) => {
-        doc.setFont("courier", "bold"); doc.text(l, margin + 5, currentY);
-        doc.setFont("courier", "normal"); doc.text(v, margin + 45, currentY);
-        currentY += 7;
+        doc.setFont("courier", "bold"); doc.setFontSize(9); doc.text(l, margin + 5, currentY);
+        doc.setFont("courier", "normal"); doc.text(v, margin + 40, currentY);
+        currentY += 8;
       };
-
-      addLog("ID:", order.id);
-      addLog("Data:", format(parseISO(order.signed_at), "dd/MM/yyyy HH:mm:ss"));
-      addLog("IP:", order.signer_ip || "N/A");
-      addLog("Agent:", (order.signer_user_agent || "N/A").substring(0, 30) + "...");
-
+      addLog("ID do Documento:", order.id);
+      addLog("Assinado em:", format(parseISO(order.signed_at), "dd/MM/yyyy 'às' HH:mm:ss"));
+      addLog("IP de Origem:", order.signer_ip || "N/A");
+      addLog("Dispositivo:", (order.signer_user_agent || "N/A").substring(0, 35) + "...");
+      
       if (order.signature_image) {
         currentY += 5;
-        doc.text("Rubrica:", margin + 5, currentY);
-        doc.addImage(order.signature_image, 'PNG', margin + 5, currentY + 5, 40, 20);
+        doc.text("Rubrica Capturada:", margin + 5, currentY);
+        doc.addImage(order.signature_image, 'PNG', margin + 5, currentY + 5, 30, 15);
       }
     }
 
@@ -218,155 +234,54 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
 
   const handleDownloadFinalPDF = async () => {
     if (!order) return;
-    try {
-      setIsGeneratingContract(true);
-      const doc = await generatePDF(order, ownerProfile);
-      doc.save(`Contrato-${order.id.split('-')[0]}.pdf`);
-      showSuccess("Download iniciado.");
-    } catch (error: any) {
-      showError("Erro ao gerar PDF.");
-    } finally {
-      setIsGeneratingContract(false);
-    }
+    try { setIsGeneratingContract(true); const doc = await generatePDF(order, ownerProfile); doc.save(`Contrato-${order.id.split('-')[0]}.pdf`); showSuccess("Download iniciado."); } catch (e: any) { showError("Erro ao gerar PDF."); } finally { setIsGeneratingContract(false); }
   };
 
   const updateStatus = async (newStatus: string) => {
     if (!orderId) return;
-    
-    if (newStatus !== 'canceled' && !order.signed_at && newStatus !== 'pending_signature') {
-      showError("Assinatura obrigatória para avançar.");
-      return;
-    }
-
+    if (newStatus !== 'canceled' && !order.signed_at && newStatus !== 'pending_signature') { showError("Assinatura obrigatória."); return; }
     try {
-      setUpdating(true);
-      const payload: any = { status: newStatus };
-      const now = new Date().toISOString();
-      if (newStatus === 'picked_up') payload.picked_up_at = now;
-      if (newStatus === 'returned') payload.returned_at = now;
-
-      const { error } = await supabase.from('orders').update(payload).eq('id', orderId);
-      if (error) throw error;
-
-      showSuccess("Status atualizado!");
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
-      fetchOrderDetails();
-      onStatusUpdate();
-    } catch (e: any) {
-      showError(e.message);
-    } finally {
-      setUpdating(false);
-    }
+      setUpdating(true); const p: any = { status: newStatus };
+      if (newStatus === 'picked_up') p.picked_up_at = new Date().toISOString();
+      if (newStatus === 'returned') p.returned_at = new Date().toISOString();
+      await supabase.from('orders').update(p).eq('id', orderId);
+      showSuccess("Atualizado!"); queryClient.invalidateQueries({ queryKey: ['orders'] }); fetchOrderDetails(); onStatusUpdate();
+    } catch (e: any) { showError(e.message); } finally { setUpdating(false); }
   };
   
-  const handleCancelOrder = async () => {
-    if (window.confirm("Deseja cancelar este pedido?")) {
-      await updateStatus('canceled');
-      onOpenChange(false);
-    }
-  };
+  const handleCancelOrder = async () => { if (window.confirm("Cancelar pedido?")) { await updateStatus('canceled'); onOpenChange(false); } };
 
-  const getStatusConfig = (status: string) => {
-    switch (status) {
-      case 'draft': return { label: 'Rascunho', color: 'bg-gray-100 text-gray-800' };
-      case 'pending_signature': return { label: 'Aguardando Assinatura', color: 'bg-yellow-100 text-yellow-800' };
-      case 'reserved': return { label: 'Reservado', color: 'bg-blue-50 text-blue-700' };
-      case 'picked_up': return { label: 'Em Andamento', color: 'bg-blue-100 text-blue-800' };
-      case 'returned': return { label: 'Concluído', color: 'bg-green-100 text-green-800' };
-      case 'canceled': return { label: 'Cancelado', color: 'bg-red-50 text-red-700' };
-      default: return { label: status, color: 'bg-gray-100' };
-    }
-  };
-
-  if (!order && loading) return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="flex items-center justify-center"><Loader2 className="animate-spin" /></SheetContent>
-    </Sheet>
-  );
-
-  const statusConfig = order ? getStatusConfig(order.status) : { label: '', color: '' };
+  if (!order && loading) return <Sheet open={open} onOpenChange={onOpenChange}><SheetContent><Loader2 className="animate-spin" /></SheetContent></Sheet>;
   const isSigned = !!order?.signed_at;
-
+  
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="sm:max-w-md flex flex-col h-full">
         <SheetHeader>
-          <div className="flex justify-between items-start">
-            <div>
-              <SheetTitle className="text-xl">{order?.customer_name}</SheetTitle>
-              <p className="text-xs text-muted-foreground font-mono">#{order?.id.split('-')[0]}</p>
-            </div>
-            <Badge className={statusConfig.color}>{statusConfig.label}</Badge>
+          <div className="flex justify-between">
+            <SheetTitle>{order?.customer_name}</SheetTitle>
+            <Badge>{order?.status}</Badge>
           </div>
         </SheetHeader>
-
         <div className="flex-1 overflow-y-auto py-6 space-y-6">
-          <div className="bg-blue-600 rounded-xl p-6 text-white shadow">
-            <p className="text-xs font-bold opacity-80 mb-1">Total da Locação</p>
-            <p className="text-3xl font-bold">R$ {Number(order?.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+          <div className="bg-blue-600 rounded-xl p-6 text-white shadow"><p className="text-xs font-bold opacity-80 mb-1">Total</p><p className="text-3xl font-bold">R$ {Number(order?.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p></div>
+          
+          <div className="space-y-3">
+             <a href={getWhatsappLink(order)} target="_blank" rel="noopener noreferrer" className="w-full h-12 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow"><MessageCircle className="h-5 w-5" /> {isSigned ? 'Reenviar Contrato' : 'Link de Assinatura'}</a>
+             {isSigned && <Button onClick={handleDownloadFinalPDF} disabled={isGeneratingContract} variant="outline" className="w-full h-12 border-green-500 text-green-600">{isGeneratingContract ? <Loader2 className="animate-spin mr-2" /> : <Download className="mr-2" />} Baixar PDF Profissional</Button>}
           </div>
 
-          {!isSigned && order?.status !== 'canceled' && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-sm text-yellow-800 flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4" /> Contrato pendente de assinatura.
-            </div>
-          )}
-
-          {order?.status !== 'canceled' && (
-            <div className="space-y-3">
-               <a 
-                 href={getWhatsappLink(order)}
-                 target="_blank" rel="noopener noreferrer"
-                 className="w-full h-12 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow transition-all"
-               >
-                 <MessageCircle className="h-5 w-5" />
-                 {isSigned ? 'Reenviar Contrato' : 'Enviar Link de Assinatura'}
-               </a>
-               
-               {isSigned && (
-                 <Button onClick={handleDownloadFinalPDF} disabled={isGeneratingContract} variant="outline" className="w-full h-12 border-green-500 text-green-600">
-                   {isGeneratingContract ? <Loader2 className="animate-spin mr-2" /> : <Download className="mr-2" />}
-                   Baixar PDF Assinado
-                 </Button>
-               )}
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold flex items-center gap-2"><Package className="h-4 w-4" /> Itens</h3>
-            <div className="border rounded-lg bg-white divide-y">
-              {order?.order_items.map((item: any, idx: number) => (
-                <div key={idx} className="p-3 flex justify-between">
-                  <span className="text-sm">{item.products?.name}</span>
-                  <Badge variant="secondary">x{item.quantity}</Badge>
-                </div>
-              ))}
-            </div>
+          <div className="border rounded-lg bg-white divide-y">
+            {order?.order_items.map((item: any, idx: number) => (
+              <div key={idx} className="p-3 flex justify-between"><span className="text-sm">{item.products?.name}</span><Badge variant="secondary">x{item.quantity}</Badge></div>
+            ))}
           </div>
         </div>
-
         <SheetFooter className="mt-auto pt-4 border-t flex-col gap-2">
-           {order?.status === 'pending_signature' && (
-             <Button className="w-full bg-green-600" onClick={() => updateStatus('reserved')} disabled={!isSigned}>
-               <CheckCircle className="mr-2 h-4 w-4" /> Confirmar Reserva
-             </Button>
-           )}
-           {order?.status === 'reserved' && (
-             <Button className="w-full bg-blue-600" onClick={() => updateStatus('picked_up')} disabled={!isSigned}>
-               <ClipboardCheck className="mr-2 h-4 w-4" /> Registrar Saída
-             </Button>
-           )}
-           {order?.status === 'picked_up' && (
-             <Button className="w-full bg-indigo-600" onClick={() => updateStatus('returned')}>
-               <ArrowRightLeft className="mr-2 h-4 w-4" /> Registrar Devolução
-             </Button>
-           )}
-           
-           {order?.status !== 'returned' && order?.status !== 'canceled' && (
-             <Button variant="ghost" className="w-full text-red-600" onClick={handleCancelOrder}>
-               <XCircle className="mr-2 h-4 w-4" /> Cancelar Pedido
-             </Button>
-           )}
+           {order?.status === 'pending_signature' && <Button className="w-full bg-green-600" onClick={() => updateStatus('reserved')} disabled={!isSigned}><CheckCircle className="mr-2 h-4 w-4" /> Confirmar Reserva</Button>}
+           {order?.status === 'reserved' && <Button className="w-full bg-blue-600" onClick={() => updateStatus('picked_up')} disabled={!isSigned}><ClipboardCheck className="mr-2 h-4 w-4" /> Registrar Saída</Button>}
+           {order?.status === 'picked_up' && <Button className="w-full bg-indigo-600" onClick={() => updateStatus('returned')}><ArrowRightLeft className="mr-2 h-4 w-4" /> Registrar Devolução</Button>}
+           {order?.status !== 'returned' && order?.status !== 'canceled' && <Button variant="ghost" className="w-full text-red-600" onClick={handleCancelOrder}><XCircle className="mr-2 h-4 w-4" /> Cancelar Pedido</Button>}
         </SheetFooter>
       </SheetContent>
     </Sheet>
