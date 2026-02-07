@@ -110,6 +110,13 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
     const newTotalQuantity = formData.total_quantity;
     const activeRentals = productData.active_rentals;
 
+    // 1. Captura do Usuário Atual
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      showError("Sessão expirada. Faça login novamente.");
+      return;
+    }
+
     // 4. Tratamento de Erro: Validação de estoque
     if (newTotalQuantity < activeRentals) {
       showError(`Não é possível reduzir o estoque total para ${newTotalQuantity}, pois ${activeRentals} unidades estão alugadas no momento.`);
@@ -127,6 +134,7 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
           type: formData.type,
           total_quantity: Number(newTotalQuantity),
           price: Number(formData.price),
+          user_id: user.id, // INCLUSÃO OBRIGATÓRIA (Garante que o RLS de UPDATE funcione corretamente)
         })
         .eq('id', productId)
         .select(); // Adiciona .select() para obter o retorno

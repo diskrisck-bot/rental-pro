@@ -158,12 +158,17 @@ const Inventory = () => {
 
     setIsSaving(true);
     try {
+      // 1. Captura do Usuário Atual
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuário não autenticado");
+
       // Passo A: Insira o produto na tabela 'products'
       const productPayload = {
         name: newProduct.name,
         type: newProduct.type,
         total_quantity: newProduct.total_quantity,
         price: newProduct.price,
+        user_id: user.id, // INCLUSÃO OBRIGATÓRIA
       };
       
       const { data: productData, error: productError } = await supabase
@@ -183,6 +188,7 @@ const Inventory = () => {
           .insert({
             product_id: createdProductId,
             serial_number: newProduct.serial_number.trim(),
+            user_id: user.id, // INCLUSÃO OBRIGATÓRIA
           });
           
         if (assetError) throw assetError;
