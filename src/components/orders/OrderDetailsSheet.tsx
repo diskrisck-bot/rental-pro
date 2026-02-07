@@ -32,7 +32,7 @@ interface OwnerProfile {
   business_cnpj: string | null;
   business_address: string | null;
   business_phone: string | null;
-  business_city: string | null; // Adicionado campo de cidade
+  business_city: string | null;
   signature_url: string | null;
 }
 
@@ -55,7 +55,6 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     try {
       setLoading(true);
       
-      // 1. Buscar Dados do Pedido
       const { data, error } = await supabase
         .from('orders')
         .select(`
@@ -72,7 +71,6 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
       if (error) throw error;
       setOrder(data);
       
-      // 2. Buscar Perfil do Dono (Incluindo Cidade para o Foro)
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const { data: profileData, error: profileError } = await supabase
@@ -95,7 +93,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
 
   const getWhatsappLink = (order: any) => {
     if (!order) return '#';
-    const signLink = `${window.location.origin}/contract/${order.id}`; // Ajustado para rota /contract/
+    const signLink = `${window.location.origin}/contract/${order.id}`;
     const messageText = `Olá ${order.customer_name}! 📦\nSegue o link do seu contrato de locação #${order.id.split('-')[0]}:\n${signLink}\n\nFavor assinar digitalmente.`;
     const encodedMessage = encodeURIComponent(messageText);
     let phone = order.customer_phone ? order.customer_phone.replace(/\D/g, '') : '';
@@ -103,11 +101,10 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     return `https://wa.me/${phone}?text=${encodedMessage}`;
   };
 
-  // --- NOVA LÓGICA DE PDF (MODELO JURÍDICO A4) ---
+  // --- GERADOR DE PDF PROFISSIONAL (Com Assinaturas Visuais) ---
   const generatePDF = async (order: any, owner: OwnerProfile | null) => {
     const doc = new jsPDF({ format: 'a4', unit: 'mm' });
     
-    // Dados Tratados
     const locador = {
       name: owner?.business_name || "Locadora",
       cnpj: owner?.business_cnpj || "CNPJ n/a",
@@ -118,12 +115,10 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     const dias = differenceInDays(parseISO(order.end_date), parseISO(order.start_date)) || 1;
     const formatMoney = (val: any) => Number(val).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     
-    // Lista de Itens formatada para texto
     const listaItens = order.order_items.map((i: any) => 
       `• ${i.quantity}x ${i.products?.name} (Reposição: ${formatMoney(i.products?.replacement_value || 0)})`
     ).join('\n');
 
-    // Textos das Cláusulas
     const header = "CONTRATO DE LOCAÇÃO DE BENS MÓVEIS";
     const intro = `LOCADOR: ${locador.name}, CNPJ ${locador.cnpj}, com sede em ${locador.address}.\n\nLOCATÁRIO: ${order.customer_name}, CPF/CNPJ ${order.customer_cpf || 'Não informado'}, residente em ${order.customer_address || 'Endereço não informado'}.`;
     
@@ -137,7 +132,6 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
 
     const footer = `${locador.city}, ${format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}.`;
 
-    // Configuração de Layout
     const margin = 20;
     const pageWidth = 210;
     const maxLineWidth = pageWidth - (margin * 2);
@@ -152,7 +146,6 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
       currentY += (lines.length * 4) + 4;
     };
 
-    // --- Renderização ---
     printText(header, 14, "bold", "center");
     currentY += 5;
     printText(intro, 10, "normal", "justify");
@@ -167,20 +160,30 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     currentY += 5;
     printText(footer, 10, "normal", "left");
 
-    // Assinaturas
-    currentY += 20;
-    if (currentY > 250) { doc.addPage(); currentY = 30; }
+    // --- ÁREA DE ASSINATURAS (Página 1) ---
+    currentY += 30; // Espaço maior para as imagens
+    if (currentY > 250) { doc.addPage(); currentY = 40; }
     
-    // Linha Locador
-    doc.line(margin, currentY, margin + 70, currentY);
-    doc.setFontSize(8);
-    doc.text("LOCADOR", margin, currentY + 5);
-    
-    // Linha Locatário
-    doc.line(120, currentY, 190, currentY);
-    doc.text("LOCATÁRIO", 120, currentY + 5);
+    const yLinha = currentY;
+    const yImagem = currentY - 25; // Posição da imagem acima da linha
 
-    // Auditoria (Página 2)
+    // Assinatura do Locador (Dono)
+    if (owner?.signature_url) {
+      try {
+        doc.addImage(owner.signature_url, 'PNG', margin + 5, yImagem, 50, 25);
+      } catch (e) { console.error("Erro na assinatura do locador", e); }
+    }
+    doc.line(margin, yLinha, margin + 70, yLinha);
+    doc.setFontSize(8); doc.text("LOCADOR", margin, yLinha + 5);
+    
+    // Assinatura do Locatário (Cliente)
+    if (order.signature_image) {
+        doc.addImage(order.signature_image, 'PNG', 120 + 5, yImagem, 50, 25);
+    }
+    doc.line(120, yLinha, 190, yLinha);
+    doc.text("LOCATÁRIO", 120, yLinha + 5);
+
+    // --- PÁGINA 2: AUDITORIA ---
     if (order.signed_at) {
       doc.addPage();
       currentY = 20;
@@ -230,7 +233,6 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
   const updateStatus = async (newStatus: string) => {
     if (!orderId) return;
     
-    // Bloqueio de segurança
     if (newStatus !== 'canceled' && !order.signed_at && newStatus !== 'pending_signature') {
       showError("Assinatura obrigatória para avançar.");
       return;
@@ -247,8 +249,8 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
       if (error) throw error;
 
       showSuccess("Status atualizado!");
-      queryClient.invalidateQueries({ queryKey: ['orders'] }); // Atualiza a lista
-      fetchOrderDetails(); // Atualiza o modal atual
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      fetchOrderDetails();
       onStatusUpdate();
     } catch (e: any) {
       showError(e.message);
@@ -344,7 +346,6 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
         </div>
 
         <SheetFooter className="mt-auto pt-4 border-t flex-col gap-2">
-           {/* Botões de Ação de Status (simplificados para brevidade, mantendo lógica original) */}
            {order?.status === 'pending_signature' && (
              <Button className="w-full bg-green-600" onClick={() => updateStatus('reserved')} disabled={!isSigned}>
                <CheckCircle className="mr-2 h-4 w-4" /> Confirmar Reserva
