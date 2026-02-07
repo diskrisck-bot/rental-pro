@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Loader2, Download, MessageCircle, CheckCircle } from 'lucide-react';
+import { Plus, Search, Loader2, Download, MessageCircle, CheckCircle, DollarSign, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
@@ -29,6 +29,24 @@ const getStatusBadge = (status: string) => {
     case 'returned': return <Badge className="bg-green-100 text-green-800 border-green-200">Devolvido</Badge>;
     default: return <Badge>{status}</Badge>;
   }
+};
+
+const getPaymentTimingBadge = (timing: string) => {
+  if (timing === 'paid_on_pickup') {
+    return (
+      <Badge className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100">
+        <DollarSign className="h-3 w-3 mr-1" /> Pago (Retirada)
+      </Badge>
+    );
+  }
+  if (timing === 'pay_on_return') {
+    return (
+      <Badge className="bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100">
+        <Clock className="h-3 w-3 mr-1" /> A Pagar (Devolução)
+      </Badge>
+    );
+  }
+  return null;
 };
 
 // Função auxiliar para gerar o link do WhatsApp (copiada de OrderDetailsSheet)
@@ -163,6 +181,7 @@ const Orders = () => {
                 <TableHead>Cliente</TableHead>
                 <TableHead>Período</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Pagamento</TableHead> {/* NOVA COLUNA */}
                 <TableHead>Total</TableHead>
                 <TableHead className="text-right">Ações Rápidas</TableHead>
               </TableRow>
@@ -206,6 +225,7 @@ const Orders = () => {
                         {format(new Date(order.start_date), 'dd/MM')} - {format(new Date(order.end_date), 'dd/MM')}
                       </TableCell>
                       <TableCell>{getStatusBadge(order.status)}</TableCell>
+                      <TableCell>{getPaymentTimingBadge(order.payment_timing)}</TableCell> {/* NOVA CÉLULA */}
                       <TableCell className="font-semibold text-blue-600">
                         R$ {Number(order.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </TableCell>

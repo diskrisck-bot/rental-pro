@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Loader2, Wallet, Edit } from 'lucide-react';
+import { Plus, Trash2, Loader2, Wallet, Edit, CreditCard, Clock } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { 
   Dialog, 
@@ -72,10 +72,14 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
       customer_cpf: '',
       start_date: format(new Date(), 'yyyy-MM-dd'),
       end_date: format(new Date(Date.now() + 86400000), 'yyyy-MM-dd'),
+      payment_method: 'Pix', // Default value
+      payment_timing: 'paid_on_pickup', // Default value
     }
   });
 
   const watchDates = watch(['start_date', 'end_date']);
+  const watchPaymentMethod = watch('payment_method');
+  const watchPaymentTiming = watch('payment_timing');
 
   const financialSummary = useMemo(() => {
     return calculateOrderTotal(watchDates[0], watchDates[1], selectedItems);
@@ -112,6 +116,8 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             setValue('customer_cpf', orderData.customer_cpf || '');
             setValue('start_date', format(parseISO(orderData.start_date), 'yyyy-MM-dd'));
             setValue('end_date', format(parseISO(orderData.end_date), 'yyyy-MM-dd'));
+            setValue('payment_method', orderData.payment_method || 'Pix');
+            setValue('payment_timing', orderData.payment_timing || 'paid_on_pickup');
             
             const existingItems = orderData.order_items.map((item: any) => ({
               product_id: item.product_id,
@@ -129,6 +135,8 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             customer_cpf: '',
             start_date: format(new Date(), 'yyyy-MM-dd'),
             end_date: format(new Date(Date.now() + 86400000), 'yyyy-MM-dd'),
+            payment_method: 'Pix',
+            payment_timing: 'paid_on_pickup',
           });
           setSelectedItems([]);
         }
@@ -214,9 +222,11 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         customer_cpf: values.customer_cpf,
         start_date: newStart.toISOString(),
         end_date: newEnd.toISOString(),
-        // --- 1. MÓDULO FINANCEIRO (CÁLCULO OBRIGATÓRIO) ---
         total_amount: financialSummary.totalAmount,
-        // --- FIM DO CÁLCULO ---
+        // NOVOS CAMPOS DE PAGAMENTO
+        payment_method: values.payment_method,
+        payment_timing: values.payment_timing,
+        // FIM NOVOS CAMPOS
         status: orderId ? undefined : 'reserved' // Novo pedido começa como 'reserved'
       };
 
@@ -420,6 +430,53 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
                 )}
               </div>
             </div>
+
+            {/* NOVO: Seção de Pagamento */}
+            <div className="border-t pt-4 space-y-4">
+              <h3 className="text-base font-semibold flex items-center gap-2">
+                <CreditCard className="h-4 w-4 text-blue-600" /> Detalhes do Pagamento
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Forma de Pagamento */}
+                <div className="space-y-2">
+                  <Label>Forma de Pagamento</Label>
+                  <Select 
+                    value={watchPaymentMethod} 
+                    onValueChange={(val) => setValue('payment_method', val)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a forma" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Pix">Pix</SelectItem>
+                      <SelectItem value="Cartão de Crédito">Cartão de Crédito</SelectItem>
+                      <SelectItem value="Cartão de Débito">Cartão de Débito</SelectItem>
+                      <SelectItem value="Dinheiro">Dinheiro</SelectItem>
+                      <SelectItem value="Boleto / Outros">Boleto / Outros</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                {/* Momento do Pagamento */}
+                <div className="space-y-2">
+                  <Label>Momento do Pagamento</Label>
+                  <Select 
+                    value={watchPaymentTiming} 
+                    onValueChange={(val) => setValue('payment_timing', val)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o momento" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="paid_on_pickup">✅ Pago na Retirada</SelectItem>
+                      <SelectItem value="pay_on_return">⏳ Pagar na Devolução</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+            {/* FIM NOVO: Seção de Pagamento */}
 
             <div className="bg-blue-50 border border-blue-100 rounded-xl p-6 space-y-3">
               <div className="flex items-center gap-2 text-blue-800 font-semibold mb-2">
