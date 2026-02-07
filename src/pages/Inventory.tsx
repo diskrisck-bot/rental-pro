@@ -128,14 +128,16 @@ const Inventory = () => {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   
   const [newProduct, setNewProduct] = useState({
     name: '',
     type: 'trackable',
     total_quantity: 1,
-    price: 0
+    price: 0,
+    serial_number: '', // Novo campo para o serial
   });
 
   const { data: products, isLoading, isError } = useQuery<InventoryItem[]>({
@@ -144,23 +146,60 @@ const Inventory = () => {
   });
 
   const handleCreateProduct = async () => {
+    if (newProduct.type === 'trackable' && !newProduct.serial_number.trim()) {
+      showError("Produtos rastreáveis requerem um Número de Série inicial.");
+      return;
+    }
+    
+    if (newProduct.type === 'trackable' && newProduct.total_quantity !== 1) {
+        showError("Para produtos rastreáveis, a Quantidade Total deve ser 1 ao cadastrar o primeiro item. Use a aba 'Ativos' para adicionar mais seriais.");
+        return;
+    }
+
+    setIsSaving(true);
     try {
-      // A inserção deve ocorrer na tabela 'products'
-      const { error } = await supabase
+      // Passo A: Insira o produto na tabela 'products'
+      const productPayload = {
+        name: newProduct.name,
+        type: newProduct.type,
+        total_quantity: newProduct.total_quantity,
+        price: newProduct.price,
+      };
+      
+      const { data: productData, error: productError } = await supabase
         .from('products')
-        .insert([newProduct]);
+        .insert([productPayload])
+        .select('id')
+        .single();
 
-      if (error) throw error;
+      if (productError) throw productError;
+      
+      const createdProductId = productData.id;
 
-      showSuccess("Produto criado com sucesso!");
+      // Passo C: SE for rastreável, insira o ativo na tabela 'assets'
+      if (newProduct.type === 'trackable' && newProduct.serial_number.trim()) {
+        const { error: assetError } = await supabase
+          .from('assets')
+          .insert({
+            product_id: createdProductId,
+            serial_number: newProduct.serial_number.trim(),
+          });
+          
+        if (assetError) throw assetError;
+      }
+
+      showSuccess("Produto e Ativo inicial criados com sucesso!");
       setIsAddModalOpen(false);
       
       // Invalida a query da view para forçar a atualização dos dados
       queryClient.invalidateQueries({ queryKey: ['inventoryAnalytics'] });
+      queryClient.invalidateQueries({ queryKey: ['allProducts'] }); // Atualiza lista de produtos para pedidos
       
-      setNewProduct({ name: '', type: 'trackable', total_quantity: 1, price: 0 });
+      setNewProduct({ name: '', type: 'trackable', total_quantity: 1, price: 0, serial_number: '' });
     } catch (error: any) {
       showError("Erro ao criar produto: " + error.message);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -172,6 +211,8 @@ const Inventory = () => {
   if (isError) {
     return <div className="p-8 text-center text-red-500">Erro ao carregar dados do inventário.</div>;
   }
+  
+  const isTrackable = newProduct.type === 'trackable';
 
   return (
     <div className="p-4 md:p-8 space-y-6">
@@ -208,7 +249,15 @@ const Inventory = () => {
                   <Label>Tipo</Label>
                   <Select 
                     value={newProduct.type} 
-                    onValueChange={(val) => setNewProduct({...newProduct, type: val as 'trackable' | 'bulk'})}
+                    onValueChange={(val) => {
+                        const type = val as 'trackable' | 'bulk';
+                        setNewProduct(prev => ({
+                            ...prev, 
+                            type: type,
+                            // Se mudar para rastreável, força quantidade para 1
+                            total_quantity: type === 'trackable' ? 1 : prev.total_quantity
+                        }));
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -224,12 +273,34 @@ const Inventory = () => {
                   <Input 
                     id="quantity" 
                     type="number"
-                    min="1"
+                    min={isTrackable ? "1" : "0"} // Mínimo 1 se for rastreável
                     value={newProduct.total_quantity} 
                     onChange={(e) => setNewProduct({...newProduct, total_quantity: parseInt(e.target.value) || 1})}
+                    disabled={isTrackable} // Desabilita se for rastreável (força 1)
                   />
                 </div>
               </div>
+              
+              {/* Campo de Número de Série Condicional */}
+              {isTrackable && (
+                <div className="space-y-2">
+                  <Label htmlFor="serial_number">Número de Série / Patrimônio</Label>
+                  <Input 
+                    id="serial_number" 
+                    value={newProduct.serial_number} 
+                    onChange={(e) => setNewProduct({...newProduct, serial_number: e.target.value})}
+                    placeholder="Ex: SN-A7III-001"
+                    required
+                  />
+                  {newProduct.total_quantity > 1 && (
+                    <p className="text-xs text-orange-600 flex items-center gap-1 mt-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        Para itens rastreáveis, a quantidade é forçada para 1. Adicione mais seriais na tela de edição.
+                    </p>
+                  )}
+                </div>
+              )}
+              
               <div className="space-y-2">
                 <Label htmlFor="price">Preço da Diária (R$)</Label>
                 <Input 
@@ -242,8 +313,11 @@ const Inventory = () => {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsAddModalOpen(false)}>Cancelar</Button>
-              <Button onClick={handleCreateProduct} className="bg-blue-600 hover:bg-blue-700">Salvar Produto</Button>
+              <Button variant="outline" onClick={() => setIsAddModalOpen(false)} disabled={isSaving}>Cancelar</Button>
+              <Button onClick={handleCreateProduct} className="bg-blue-600 hover:bg-blue-700" disabled={isSaving}>
+                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                Salvar Produto
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
