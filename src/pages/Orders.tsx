@@ -23,37 +23,43 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchBusinessConfig, fetchProductCount } from '@/integrations/supabase/queries';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 
+// AJUSTE 1: Status do Pedido com visual profissional
 const getStatusBadge = (status: string) => {
   switch (status) {
+    case 'pending':
     case 'draft': 
-      return <Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-200">Rascunho</Badge>;
-    case 'pending_signature': 
-      return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">⚠️ Aguardando Assinatura</Badge>;
-    case 'reserved': 
-      return <Badge className="bg-blue-50 text-blue-700 border-blue-200">Reservado</Badge>;
+      return <Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-200 uppercase text-[10px]">Rascunho</Badge>;
+    case 'signed': 
+      return (
+        <Badge className="bg-green-100 text-green-700 border-green-200 uppercase text-[10px] flex items-center gap-1 w-fit">
+          <div className="w-1 h-1 rounded-full bg-green-500 animate-pulse" />
+          Assinado
+        </Badge>
+      );
     case 'picked_up': 
-      return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Em Andamento</Badge>;
+      return <Badge className="bg-blue-100 text-blue-800 border-blue-200 uppercase text-[10px]">Em Andamento</Badge>;
     case 'returned': 
-      return <Badge className="bg-green-100 text-green-800 border-green-200">Concluído</Badge>;
+      return <Badge className="bg-indigo-100 text-indigo-800 border-indigo-200 uppercase text-[10px]">Concluído</Badge>;
     case 'canceled': 
-      return <Badge className="bg-red-50 text-red-700 border-red-200">Cancelado</Badge>;
+      return <Badge className="bg-red-50 text-red-700 border-red-200 uppercase text-[10px]">Cancelado</Badge>;
     default: 
-      return <Badge>{status}</Badge>;
+      return <Badge className="uppercase text-[10px]">{status}</Badge>;
   }
 };
 
 const getPaymentTimingBadge = (timing: string) => {
   if (timing === 'paid_on_pickup') {
     return (
-      <Badge className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100">
+      <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 text-[10px]">
         <DollarSign className="h-3 w-3 mr-1" /> Pago (Retirada)
       </Badge>
     );
   }
   if (timing === 'pay_on_return') {
     return (
-      <Badge className="bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100">
+      <Badge className="bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 text-[10px]">
         <Clock className="h-3 w-3 mr-1" /> A Pagar (Devolução)
       </Badge>
     );
@@ -64,14 +70,14 @@ const getPaymentTimingBadge = (timing: string) => {
 const getFulfillmentTypeBadge = (type: string) => {
   if (type === 'immediate') {
     return (
-      <Badge variant="secondary" className="bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100">
+      <Badge variant="secondary" className="bg-orange-50 text-orange-700 border-orange-200 text-[10px]">
         <Zap className="h-3 w-3 mr-1" /> Imediata
       </Badge>
     );
   }
   if (type === 'reservation') {
     return (
-      <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100">
+      <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-200 text-[10px]">
         <Calendar className="h-3 w-3 mr-1" /> Reserva
       </Badge>
     );
@@ -81,16 +87,15 @@ const getFulfillmentTypeBadge = (type: string) => {
 
 const getWhatsappLink = (order: any, isSigned: boolean) => {
     if (!order) return '#';
-    const signLink = `${window.location.origin}/sign/${order.id}`;
+    const signLink = `${window.location.origin}/contract/${order.id}`; // Ajustado para a rota correta de contrato
     let messageText = isSigned 
-      ? `Olá ${order.customer_name}! ✅\nAqui está sua via do contrato assinado #${order.id.split('-')[0]}:\n${signLink}\n`
-      : `Olá ${order.customer_name}! 📦\nAqui está o link para visualizar e assinar seu contrato de locação #${order.id.split('-')[0]}:\n${signLink}\n\nPor favor, acesse e assine digitalmente.`;
+      ? `Olá ${order.customer_name}! ✅\nAqui está sua via do contrato assinado #${order.id.split('-')[0]}:\n${signLink}`
+      : `Olá ${order.customer_name}! 📦\nAqui está o link para visualizar e assinar seu contrato de locação #${order.id.split('-')[0]}:\n${signLink}\n\nPor favor, acesse e realize a assinatura digital.`;
 
     const encodedMessage = encodeURIComponent(messageText);
     let phone = order.customer_phone ? order.customer_phone.replace(/\D/g, '') : '';
     if (phone.length === 10 || phone.length === 11) phone = `55${phone}`;
-    const baseUrl = phone ? `https://wa.me/${phone}` : `https://wa.me/`;
-    return `${baseUrl}?text=${encodedMessage}`;
+    return `https://wa.me/${phone}?text=${encodedMessage}`;
 };
 
 const Orders = () => {
@@ -114,7 +119,7 @@ const Orders = () => {
     staleTime: 0,
   });
 
-  const isCompanyConfigured = !!(businessConfig?.business_name?.trim() && businessConfig?.business_cnpj?.trim());
+  const isCompanyConfigured = !!(businessConfig?.business_name?.trim());
   const hasProducts = (productCount || 0) > 0;
 
   const fetchOrders = async () => {
@@ -127,7 +132,7 @@ const Orders = () => {
       if (error) throw error;
       setOrders(data || []);
     } catch (error: any) {
-      showError("Erro ao carregar pedidos: " + error.message);
+      showError("Erro ao carregar pedidos.");
     } finally {
       setLoading(false);
     }
@@ -155,62 +160,18 @@ const Orders = () => {
     const searchTerm = search.toLowerCase();
     return (
       order.customer_name?.toLowerCase().includes(searchTerm) ||
-      order.id?.toLowerCase().includes(searchTerm) ||
-      order.customer_cpf?.includes(searchTerm) ||
-      order.customer_phone?.includes(searchTerm)
+      order.id?.toLowerCase().includes(searchTerm)
     );
   });
 
   const isGlobalLoading = isLoadingConfig || isLoadingProducts;
 
   const renderHeaderButton = () => {
-    if (isGlobalLoading) {
-      return (
-        <Button disabled className="w-full md:w-auto bg-gray-100 text-gray-400">
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verificando Dados...
-        </Button>
-      );
-    }
-
-    if (!isCompanyConfigured) {
-      return (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button 
-              className="bg-orange-600 hover:bg-orange-700 w-full md:w-auto shadow-lg"
-              onClick={() => navigate('/settings')}
-            >
-              <AlertTriangle className="mr-2 h-4 w-4" /> Configure a Empresa
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent className="max-w-xs bg-gray-800 text-white p-3 rounded-lg">
-            <p className="text-xs">Vá em Configurações &gt; Empresa para habilitar a emissão de pedidos.</p>
-          </TooltipContent>
-        </Tooltip>
-      );
-    }
-
-    if (!hasProducts) {
-      return (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button 
-              className="bg-indigo-600 hover:bg-indigo-700 text-white w-full md:w-auto shadow-lg"
-              onClick={() => navigate('/inventory')}
-            >
-              <Package className="mr-2 h-4 w-4" /> Cadastre um Produto
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent className="max-w-xs bg-gray-800 text-white p-3 rounded-lg">
-            <p className="text-xs">Você precisa ter itens no inventário para criar um pedido.</p>
-          </TooltipContent>
-        </Tooltip>
-      );
-    }
-
+    if (isGlobalLoading) return <Button disabled><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Carregando...</Button>;
+    if (!isCompanyConfigured) return <Button className="bg-orange-600" onClick={() => navigate('/settings')}><AlertTriangle className="mr-2 h-4 w-4" /> Configurar Empresa</Button>;
     return (
       <CreateOrderDialog onOrderCreated={fetchOrders}>
-        <Button className="bg-blue-600 hover:bg-blue-700 w-full md:w-auto shadow-lg shadow-blue-100">
+        <Button className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100">
           <Plus className="mr-2 h-4 w-4" /> Novo Pedido
         </Button>
       </CreateOrderDialog>
@@ -218,11 +179,11 @@ const Orders = () => {
   };
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="p-4 md:p-8 space-y-6 bg-gray-50/50 min-h-screen">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Pedidos</h1>
-          <p className="text-muted-foreground">Acompanhe e gerencie todos os aluguéis.</p>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gray-900">Pedidos</h1>
+          <p className="text-muted-foreground">Gerenciamento de contratos e locações.</p>
         </div>
         {renderHeaderButton()}
       </div>
@@ -230,71 +191,69 @@ const Orders = () => {
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
         <Input 
-          placeholder="Buscar por cliente, ID, CPF ou Telefone..." 
-          className="pl-10" 
+          placeholder="Buscar cliente ou ID..." 
+          className="pl-10 bg-white" 
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
       </div>
 
-      <div className="border rounded-xl bg-white overflow-hidden shadow-sm">
+      <div className="border rounded-xl bg-white overflow-hidden shadow-sm border-gray-200">
         <div className="overflow-x-auto">
           <Table>
-            <TableHeader>
+            <TableHeader className="bg-gray-50">
               <TableRow>
-                <TableHead>ID / Assinatura</TableHead>
+                <TableHead className="w-[180px]">Contrato</TableHead>
                 <TableHead>Cliente</TableHead>
-                <TableHead>Tipo</TableHead>
                 <TableHead>Período</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Pagamento</TableHead>
                 <TableHead>Total</TableHead>
-                <TableHead className="text-right">Ações Rápidas</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="h-24 text-center">
-                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-blue-600" />
-                  </TableCell>
-                </TableRow>
+                <TableRow><TableCell colSpan={7} className="h-32 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-blue-600" /></TableCell></TableRow>
               ) : filteredOrders.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
-                    Nenhum pedido encontrado.
-                  </TableCell>
-                </TableRow>
+                <TableRow><TableCell colSpan={7} className="h-32 text-center text-gray-500">Nenhum pedido encontrado.</TableCell></TableRow>
               ) : (
                 filteredOrders.map((order) => {
                   const isSigned = !!order.signed_at;
                   const whatsappLink = getWhatsappLink(order, isSigned);
                   return (
-                    <TableRow key={order.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => handleViewDetails(order.id)}>
-                      <TableCell className="font-medium">
-                        <div className="font-mono text-[10px] text-gray-400 mb-1">#{order.id.split('-')[0]}</div>
-                        {isSigned ? (
-                          <Badge className="bg-green-100 text-green-800 border-green-200"><CheckCircle className="h-3 w-3 mr-1" /> Assinado</Badge>
-                        ) : (
-                          <Badge className="bg-orange-100 text-orange-800 border-orange-200">Aguardando Assinatura</Badge>
-                        )}
+                    <TableRow key={order.id} className="hover:bg-gray-50/80 transition-colors cursor-pointer" onClick={() => handleViewDetails(order.id)}>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          <span className="font-mono text-[10px] text-gray-400 font-bold uppercase tracking-tighter">#{order.id.split('-')[0]}</span>
+                          {isSigned ? (
+                            <div className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded border border-green-100 w-fit uppercase">
+                               <CheckCircle className="h-3 w-3" /> Assinado
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-100 w-fit uppercase">
+                               <Clock className="h-3 w-3" /> Aguardando
+                            </div>
+                          )}
+                        </div>
                       </TableCell>
-                      <TableCell className="font-medium">{order.customer_name}</TableCell>
-                      <TableCell>{getFulfillmentTypeBadge(order.fulfillment_type)}</TableCell>
-                      <TableCell className="text-sm">{format(new Date(order.start_date), 'dd/MM')} - {format(new Date(order.end_date), 'dd/MM')}</TableCell>
+                      <TableCell className="font-semibold text-gray-700">{order.customer_name}</TableCell>
+                      <TableCell className="text-xs text-gray-500">
+                        {format(new Date(order.start_date), 'dd/MM')} — {format(new Date(order.end_date), 'dd/MM')}
+                      </TableCell>
                       <TableCell>{getStatusBadge(order.status)}</TableCell>
                       <TableCell>{getPaymentTimingBadge(order.payment_timing)}</TableCell>
-                      <TableCell className="font-semibold text-blue-600">R$ {Number(order.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="font-bold text-blue-600">
+                        R$ {Number(order.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </TableCell>
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end gap-2">
-                          {isSigned ? (
-                            <>
-                              <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleViewDetails(order.id); }} className="text-green-600 border-green-200 hover:bg-green-50"><Download className="h-4 w-4" /></Button>
-                              <a href={whatsappLink} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}><Button variant="ghost" size="sm" className="text-green-600 hover:bg-green-50"><MessageCircle className="h-4 w-4" /></Button></a>
-                            </>
-                          ) : (
-                            <a href={whatsappLink} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}><Button variant="secondary" size="sm" className="bg-blue-50 text-blue-600 hover:bg-blue-100"><MessageCircle className="h-4 w-4 mr-1" /> Enviar</Button></a>
-                          )}
+                          <Button variant="ghost" size="sm" onClick={() => handleViewDetails(order.id)} className="h-8 w-8 p-0"><Download className="h-4 w-4 text-gray-500" /></Button>
+                          <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
+                            <Button size="sm" className={cn("h-8 px-3 text-xs font-bold", isSigned ? "bg-green-500 hover:bg-green-600" : "bg-blue-600 hover:bg-blue-700")}>
+                              <MessageCircle className="h-3.5 w-3.5 mr-1" /> {isSigned ? 'Enviar Via' : 'Enviar Link'}
+                            </Button>
+                          </a>
                         </div>
                       </TableCell>
                     </TableRow>
