@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Users, 
   Box, 
@@ -16,14 +16,13 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { 
-  fetchDashboardMetrics, 
   fetchPendingPickups, 
   fetchPendingReturns,
   fetchBusinessName,
   fetchBusinessConfig,
   fetchProductCount
 } from '@/integrations/supabase/queries';
-import { format } from 'date-fns';
+import { format, isAfter, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { 
   Tooltip, 
@@ -35,6 +34,8 @@ import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import CreateOrderDialog from '@/components/orders/CreateOrderDialog';
+import { supabase } from '@/lib/supabase'; // Import direto para garantir os dados
+import { showError } from '@/utils/toast';
 
 const DashboardCard = ({ title, value, icon: Icon, description, isLoading, tooltipContent, subValue }: any) => {
   const isMobile = useIsMobile();
@@ -114,12 +115,77 @@ const TaskListCard = ({ title, data, dateKey, emptyMessage, isLoading, tooltipCo
 const Dashboard = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { data: metrics, isLoading: isLoadingMetrics } = useQuery({ queryKey: ['dashboardMetrics'], queryFn: fetchDashboardMetrics });
+  
+  // --- SUBTITUIÇÃO DO FETCH ANTIGO POR ESTADO LOCAL CALCULADO ---
+  const [metrics, setMetrics] = useState({
+    totalRevenue: 0,
+    pipelineRevenue: 0,
+    activeRentals: 0,
+    futureReservations: 0,
+    newClients: 0
+  });
+  const [loadingMetrics, setLoadingMetrics] = useState(true);
+
+  // Calcula métricas em tempo real no frontend para garantir precisão
+  const calculateMetrics = async () => {
+    setLoadingMetrics(true);
+    try {
+        const { data: orders, error } = await supabase
+            .from('orders')
+            .select('*')
+            .neq('status', 'canceled'); // Pega tudo menos cancelados
+
+        if (error) throw error;
+
+        if (orders) {
+            // 1. Receita (Tudo que não é rascunho e não é cancelado)
+            const revenue = orders
+                .filter(o => o.status !== 'draft')
+                .reduce((acc, curr) => acc + (Number(curr.total_amount) || 0), 0);
+
+            // 2. Pipeline (Opcional: Valor estimado dos rascunhos)
+            const pipeline = orders
+                .filter(o => o.status === 'draft')
+                .reduce((acc, curr) => acc + (Number(curr.total_amount) || 0), 0);
+
+            // 3. Ativos (AQUI ESTÁ A CORREÇÃO: Signed + Reserved + Picked_up)
+            const active = orders.filter(o => 
+                ['signed', 'reserved', 'picked_up'].includes(o.status)
+            ).length;
+
+            // 4. Reservas Futuras (Ativos com data de início > hoje)
+            const today = startOfDay(new Date());
+            const future = orders.filter(o => {
+                const start = new Date(o.start_date);
+                return ['signed', 'reserved'].includes(o.status) && isAfter(start, today);
+            }).length;
+
+            // 5. Clientes Únicos
+            const clients = new Set(orders.filter(o => o.status !== 'draft').map(o => o.customer_cpf)).size;
+
+            setMetrics({
+                totalRevenue: revenue,
+                pipelineRevenue: pipeline,
+                activeRentals: active,
+                futureReservations: future,
+                newClients: clients
+            });
+        }
+    } catch (e) {
+        console.error(e);
+        showError("Erro ao calcular métricas.");
+    } finally {
+        setLoadingMetrics(false);
+    }
+  };
+
+  // Chama o cálculo ao montar
+  useEffect(() => { calculateMetrics(); }, []);
+
   const { data: businessName, isLoading: isLoadingName } = useQuery({ queryKey: ['businessName'], queryFn: fetchBusinessName, staleTime: 1000 * 60 * 5 });
   const { data: pickups, isLoading: isLoadingPickups } = useQuery({ queryKey: ['pendingPickups'], queryFn: fetchPendingPickups });
   const { data: returns, isLoading: isLoadingReturns } = useQuery({ queryKey: ['pendingReturns'], queryFn: fetchPendingReturns });
   
-  // Cascading logic queries
   const { data: businessConfig, isLoading: isLoadingConfig } = useQuery({ queryKey: ['businessConfig'], queryFn: fetchBusinessConfig, staleTime: 0 });
   const { data: productCount, isLoading: isLoadingProducts } = useQuery({ queryKey: ['productCount'], queryFn: fetchProductCount, staleTime: 0 });
 
@@ -143,7 +209,7 @@ const Dashboard = () => {
       </Button>
     );
     return (
-      <CreateOrderDialog onOrderCreated={() => queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] })}>
+      <CreateOrderDialog onOrderCreated={() => { calculateMetrics(); queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] }); }}>
         <Button className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100">
           <Plus className="mr-2 h-4 w-4" /> Novo Pedido
         </Button>
@@ -164,16 +230,37 @@ const Dashboard = () => {
       <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
         <DashboardCard 
             title="Faturamento Total" 
-            value={formatCurrency(metrics?.totalRevenue || 0)} 
+            value={formatCurrency(metrics.totalRevenue)} 
             icon={DollarSign} 
             description="contratos assinados e válidos" 
-            subValue={metrics?.pipelineRevenue > 0 ? formatCurrency(metrics.pipelineRevenue) : null}
-            isLoading={isLoadingMetrics} 
-            tooltipContent="Soma financeira de pedidos com assinatura confirmada. Ignora orçamentos pendentes." 
+            subValue={metrics.pipelineRevenue > 0 ? formatCurrency(metrics.pipelineRevenue) : null}
+            isLoading={loadingMetrics} 
+            tooltipContent="Soma financeira de pedidos com assinatura confirmada." 
         />
-        <DashboardCard title="Contratos Ativos" value={metrics?.activeRentals.toLocaleString('pt-BR') || '0'} icon={Box} description="pedidos atualmente com clientes" isLoading={isLoadingMetrics} tooltipContent="Quantidade de pedidos com status 'Retirado'." />
-        <DashboardCard title="Reservas Futuras" value={metrics?.futureReservations.toLocaleString('pt-BR') || '0'} icon={FileText} description="pedidos reservados" isLoading={isLoadingMetrics} tooltipContent="Número total de pedidos 'Reservados'." />
-        <DashboardCard title="Clientes Únicos" value={metrics?.newClients.toLocaleString('pt-BR') || '0'} icon={Users} description="total de clientes únicos" isLoading={isLoadingMetrics} tooltipContent="Número de clientes que realizaram pelo menos um pedido." />
+        <DashboardCard 
+            title="Contratos Ativos" 
+            value={metrics.activeRentals.toLocaleString('pt-BR')} 
+            icon={Box} 
+            description="assinados, reservados ou na rua" 
+            isLoading={loadingMetrics} 
+            tooltipContent="Soma de pedidos Assinados, Reservados ou Em Andamento." 
+        />
+        <DashboardCard 
+            title="Reservas Futuras" 
+            value={metrics.futureReservations.toLocaleString('pt-BR')} 
+            icon={FileText} 
+            description="pedidos agendados" 
+            isLoading={loadingMetrics} 
+            tooltipContent="Pedidos ativos com data de início maior que hoje." 
+        />
+        <DashboardCard 
+            title="Clientes Únicos" 
+            value={metrics.newClients.toLocaleString('pt-BR')} 
+            icon={Users} 
+            description="total de clientes na base" 
+            isLoading={loadingMetrics} 
+            tooltipContent="Número de clientes cadastrados via pedidos." 
+        />
       </div>
       
       <div className="grid gap-6 lg:grid-cols-3">
