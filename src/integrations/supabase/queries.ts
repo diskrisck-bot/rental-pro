@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { startOfDay, endOfDay, formatISO, format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
+import { startOfDay, endOfDay, formatISO, format, subMonths, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 
 // Helper para definir o intervalo de busca para 'Hoje'
 const getTodayRange = () => {
@@ -35,12 +35,23 @@ export const fetchDashboardMetrics = async () => {
 
   if (futureReservationsError) throw futureReservationsError;
 
+  // Busca todos os pedidos não cancelados para calcular receita
   const { data: revenueData, error: revenueError } = await supabase
     .from('orders')
-    .select('total_amount');
+    .select('total_amount, status')
+    .neq('status', 'canceled');
     
   if (revenueError) throw revenueError;
-  const totalRevenue = revenueData.reduce((sum, order) => sum + (Number(order.total_amount) || 0), 0);
+
+  // REGRA DE NEGÓCIO: Faturamento Real (Apenas contratos assinados/ativos)
+  const totalRevenue = revenueData
+    .filter(order => order.status !== 'pending_signature' && order.status !== 'draft')
+    .reduce((sum, order) => sum + (Number(order.total_amount) || 0), 0);
+
+  // REGRA DE NEGÓCIO: Pipeline (Aguardando assinatura)
+  const pipelineRevenue = revenueData
+    .filter(order => order.status === 'pending_signature')
+    .reduce((sum, order) => sum + (Number(order.total_amount) || 0), 0);
 
   const { data: clientData, error: clientError } = await supabase
     .from('orders')
@@ -54,6 +65,7 @@ export const fetchDashboardMetrics = async () => {
     activeRentals: activeRentalsCount || 0,
     futureReservations: futureReservationsCount || 0,
     totalRevenue: totalRevenue,
+    pipelineRevenue: pipelineRevenue, // Novo campo
     newClients: uniqueClients, 
   };
 };
@@ -189,7 +201,7 @@ export const fetchMonthlyRevenue = async () => {
   
   const { data, error } = await supabase
     .from('orders')
-    .select('total_amount, created_at')
+    .select('total_amount, created_at, status')
     .neq('status', 'canceled')
     .gte('created_at', formatISO(startOfPeriod));
 
@@ -206,6 +218,9 @@ export const fetchMonthlyRevenue = async () => {
   }
 
   data.forEach(order => {
+    // REGRA DE NEGÓCIO: O gráfico de receita também deve ignorar pendentes para ser fiel ao faturamento real
+    if (order.status === 'pending_signature' || order.status === 'draft') return;
+
     const monthKey = format(parseISO(order.created_at), 'MMM');
     const amount = Number(order.total_amount) || 0;
     

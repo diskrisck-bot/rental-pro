@@ -10,7 +10,8 @@ import {
   Info,
   Plus,
   AlertTriangle,
-  Package
+  Package,
+  TrendingUp
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -35,7 +36,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import CreateOrderDialog from '@/components/orders/CreateOrderDialog';
 
-const DashboardCard = ({ title, value, icon: Icon, description, isLoading, tooltipContent }: any) => {
+const DashboardCard = ({ title, value, icon: Icon, description, isLoading, tooltipContent, subValue }: any) => {
   const isMobile = useIsMobile();
   return (
     <Card className="rounded-xl shadow-sm hover:shadow-md transition-shadow">
@@ -56,7 +57,14 @@ const DashboardCard = ({ title, value, icon: Icon, description, isLoading, toolt
       </CardHeader>
       <CardContent>
         {isLoading ? <div className="h-8 flex items-center"><Loader2 className="h-5 w-5 animate-spin text-blue-400" /></div> : <div className="text-2xl font-bold">{value}</div>}
-        <p className="text-xs text-muted-foreground mt-1">{description}</p>
+        <div className="flex flex-col mt-1">
+            <p className="text-xs text-muted-foreground">{description}</p>
+            {subValue && (
+                <p className="text-[10px] font-semibold text-orange-600 mt-1 flex items-center gap-1">
+                    <TrendingUp className="h-3 w-3" /> Pipeline: {subValue}
+                </p>
+            )}
+        </div>
       </CardContent>
     </Card>
   );
@@ -154,7 +162,15 @@ const Dashboard = () => {
       </div>
 
       <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
-        <DashboardCard title="Faturamento Total" value={formatCurrency(metrics?.totalRevenue || 0)} icon={DollarSign} description="valor total de todos os pedidos" isLoading={isLoadingMetrics} tooltipContent="Soma do valor financeiro de todos os pedidos registrados." />
+        <DashboardCard 
+            title="Faturamento Total" 
+            value={formatCurrency(metrics?.totalRevenue || 0)} 
+            icon={DollarSign} 
+            description="contratos assinados e válidos" 
+            subValue={metrics?.pipelineRevenue > 0 ? formatCurrency(metrics.pipelineRevenue) : null}
+            isLoading={isLoadingMetrics} 
+            tooltipContent="Soma financeira de pedidos com assinatura confirmada. Ignora orçamentos pendentes." 
+        />
         <DashboardCard title="Contratos Ativos" value={metrics?.activeRentals.toLocaleString('pt-BR') || '0'} icon={Box} description="pedidos atualmente com clientes" isLoading={isLoadingMetrics} tooltipContent="Quantidade de pedidos com status 'Retirado'." />
         <DashboardCard title="Reservas Futuras" value={metrics?.futureReservations.toLocaleString('pt-BR') || '0'} icon={FileText} description="pedidos reservados" isLoading={isLoadingMetrics} tooltipContent="Número total de pedidos 'Reservados'." />
         <DashboardCard title="Clientes Únicos" value={metrics?.newClients.toLocaleString('pt-BR') || '0'} icon={Users} description="total de clientes únicos" isLoading={isLoadingMetrics} tooltipContent="Número de clientes que realizaram pelo menos um pedido." />
