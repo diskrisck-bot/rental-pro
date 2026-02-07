@@ -9,6 +9,7 @@ ALTER TABLE public.orders
 ADD COLUMN IF NOT EXISTS forma_pagamento TEXT DEFAULT 'Pix';
 
 -- 3. Add all required business fields to profiles table (for contract and settings)
+-- NOTE: Using business_cnpj to match frontend implementation.
 ALTER TABLE public.profiles
 ADD COLUMN IF NOT EXISTS business_name TEXT;
 
