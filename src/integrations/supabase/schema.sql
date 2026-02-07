@@ -1,4 +1,4 @@
--- SQL Migration for Contract Feature
+-- SQL Migration for Contract Feature and Settings
 
 -- 1. Add valor_reposicao to products table
 ALTER TABLE public.products

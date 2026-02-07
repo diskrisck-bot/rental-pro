@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Loader2, User, Save, Building, Phone, MapPin } from 'lucide-react';
+import { Loader2, User, Save, Building, Phone, MapPin, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { showError, showSuccess } from '@/utils/toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import SignaturePad from '@/components/settings/SignaturePad';
 import { Button } from '@/components/ui/button';
 import MaskedInput from 'react-text-mask';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface Profile {
   id: string;
@@ -41,7 +42,9 @@ const fetchProfile = async (): Promise<Profile | null> => {
     .single();
 
   // Se o erro for 'não encontrado' (código 406), retornamos um objeto base.
+  // Isso permite que o formulário abra em branco para o primeiro preenchimento (UPSERT).
   if (error && error.code !== 'PGRST116') {
+    // Se for qualquer outro erro (RLS, schema, etc.), lançamos o erro para o useQuery
     throw error;
   }
   
@@ -137,6 +140,7 @@ const Settings = () => {
   };
   
   const handleSaveDetails = () => {
+    // Se o formulário não estiver sujo, mas a assinatura foi alterada, a mutação de assinatura já cuidou disso.
     if (!isFormDirty) return;
     
     const payload = {
@@ -159,10 +163,6 @@ const Settings = () => {
     );
   }
 
-  if (isError || !profile) {
-    return <div className="p-8 text-center text-red-500">Erro ao carregar configurações.</div>;
-  }
-
   const isSaving = updateProfileMutation.isPending;
 
   return (
@@ -171,6 +171,17 @@ const Settings = () => {
         <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Configurações</h1>
         <p className="text-muted-foreground">Gerencie suas preferências e dados de locador.</p>
       </div>
+      
+      {/* Aviso de Erro Suave (se houver falha crítica na busca) */}
+      {isError && (
+        <Alert variant="destructive" className="rounded-xl">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Erro ao Carregar Dados</AlertTitle>
+          <AlertDescription>
+            Houve uma falha ao buscar as configurações existentes. Por favor, preencha os campos e clique em Salvar para criar o registro.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Detalhes da Empresa */}
       <Card className="rounded-xl shadow-sm">
@@ -261,7 +272,7 @@ const Settings = () => {
           
           <Button 
             onClick={handleSaveDetails} 
-            disabled={!isFormDirty || isSaving}
+            disabled={!isFormDirty && !isSaving}
             className="w-full h-12 bg-blue-600 hover:bg-blue-700 mt-4"
           >
             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
