@@ -77,9 +77,9 @@ const Timeline = () => {
     }
 
     switch (status) {
-      case 'signed': return { bg: 'bg-green-600', border: 'border-green-700', text: 'text-white', label: 'ASSINADO' };
+      case 'signed': return { bg: 'bg-success', border: 'border-success/80', text: 'text-white', label: 'ASSINADO' };
       case 'picked_up': return { bg: 'bg-primary', border: 'border-primary/80', text: 'text-white', label: 'NA RUA' };
-      case 'reserved': return { bg: 'bg-secondary', border: 'border-secondary/80', text: 'text-white', label: 'RESERVADO' };
+      case 'reserved': return { bg: 'bg-secondary', border: 'border-secondary/80', text: 'text-foreground', label: 'RESERVADO' };
       default: return { bg: 'bg-gray-400', border: 'border-gray-500', text: 'text-gray-900', label: status };
     }
   };
@@ -93,10 +93,10 @@ const Timeline = () => {
         </div>
         
         <div className="flex items-center gap-2 bg-card border border-border rounded-[var(--radius)] p-1 shadow-sm">
-          <Button variant="ghost" size="icon" onClick={() => setViewStartDay(d => addDays(d, -15))}><ChevronLeft className="h-5 w-5 text-secondary" /></Button>
+          <Button variant="ghost" size="icon" onClick={() => setViewStartDay(d => addDays(d, -15))}><ChevronLeft className="h-5 w-5 text-foreground" /></Button>
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant={"outline"} className={cn("w-[180px] justify-start text-left font-bold text-secondary border-border")}>
+              <Button variant={"outline"} className={cn("w-[180px] justify-start text-left font-bold text-foreground border-border")}>
                 <CalendarIcon className="mr-2 h-4 w-4" />{selectedDate ? format(selectedDate, "MMMM yyyy", { locale: ptBR }) : <span>Selecione</span>}
               </Button>
             </PopoverTrigger>
@@ -104,16 +104,16 @@ const Timeline = () => {
               <Calendar mode="single" selected={selectedDate} onSelect={handleDateSelect} initialFocus locale={ptBR} />
             </PopoverContent>
           </Popover>
-          <Button variant="ghost" size="icon" onClick={() => setViewStartDay(d => addDays(d, 15))}><ChevronRight className="h-5 w-5 text-secondary" /></Button>
+          <Button variant="ghost" size="icon" onClick={() => setViewStartDay(d => addDays(d, 15))}><ChevronRight className="h-5 w-5 text-foreground" /></Button>
         </div>
       </div>
 
-      <div className="flex-1 bg-card border border-border rounded-[var(--radius)] overflow-hidden relative shadow-hard">
+      <div className="flex-1 bg-card border border-border rounded-[var(--radius)] overflow-hidden relative shadow-custom">
         <div className="overflow-x-auto h-full">
           <div className="inline-block min-w-full">
             {/* Header Dias */}
             <div className="flex sticky top-0 z-20 bg-muted border-b border-border shadow-sm">
-              <div className="w-72 p-4 border-r border-border font-extrabold text-secondary bg-muted sticky left-0 z-30 uppercase tracking-wide flex items-center gap-2">
+              <div className="w-72 p-4 border-r border-border font-extrabold text-foreground bg-muted sticky left-0 z-30 uppercase tracking-wide flex items-center gap-2">
                 <User className="h-4 w-4" /> Cliente / Contrato
               </div>
               {days.map((day) => (
@@ -125,7 +125,7 @@ const Timeline = () => {
             </div>
 
             {/* Linhas dos Contratos */}
-            {isLoading ? <div className="flex justify-center p-20"><Loader2 className="animate-spin h-8 w-8 text-secondary"/></div> : 
+            {isLoading ? <div className="flex justify-center p-20"><Loader2 className="animate-spin h-8 w-8 text-primary"/></div> : 
              orders?.length === 0 ? <div className="p-10 text-center text-muted-foreground font-medium">Nenhum contrato ativo neste período.</div> : 
              orders?.map((order: any) => {
                const position = getBlockPosition(order.start_date, order.end_date, days);
@@ -135,7 +135,7 @@ const Timeline = () => {
                  <div key={order.id} className="flex border-b border-border/50 last:border-b-0 hover:bg-muted/50 transition-colors group h-16 relative">
                    {/* Coluna Fixa do Cliente */}
                    <div className="w-72 p-3 border-r border-border bg-card sticky left-0 z-10 group-hover:bg-muted/50 flex flex-col justify-center shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
-                     <span className="font-bold text-secondary truncate" title={order.customer_name}>{order.customer_name}</span>
+                     <span className="font-bold text-foreground truncate" title={order.customer_name}>{order.customer_name}</span>
                      <span className="text-xs text-muted-foreground font-medium">#{order.id.split('-')[0]}</span>
                    </div>
                    
@@ -160,7 +160,7 @@ const Timeline = () => {
                                {style.label}
                              </Link>
                            </TooltipTrigger>
-                           <TooltipContent className="bg-secondary text-white border-none p-4 rounded-lg shadow-xl">
+                           <TooltipContent className="bg-foreground text-white border-none p-4 rounded-lg shadow-xl">
                              <div className="font-bold mb-2 text-lg border-b border-primary/50 pb-1">{order.customer_name}</div>
                              <div className="text-xs text-muted-foreground mb-2 font-mono">
                                {format(parseISO(order.start_date), 'dd/MM')} até {format(parseISO(order.end_date), 'dd/MM')}

@@ -3,65 +3,97 @@
 @tailwind utilities;
 
 @layer base {
+  /* --- TEMA PADRÃO (:root) - 'RENTALPRO SIGNATURE EDITION' (Clean/Stripe) --- */
   :root {
-    /* Industrial High-Impact Theme */
-    --background: 220 14.3% 97.8%; /* #F4F5F7 (Concrete Grey) */
-    --foreground: 235 66% 30%; /* #1A237E (Legal Blue) */
+    --background: 210 36% 98%; /* #F6F9FC (Apple Grey Surface) */
+    --foreground: 222 22% 18%; /* #1e293b (Slate 800 - Contraste suave) */
 
     --card: 0 0% 100%; /* #FFFFFF */
-    --card-foreground: 235 66% 30%; /* #1A237E */
+    --card-foreground: 222 22% 18%;
 
-    --popover: 0 0% 100%; /* #FFFFFF */
-    --popover-foreground: 235 66% 30%; /* #1A237E */
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 22% 18%;
 
-    --primary: 30 100% 48%; /* #F57C00 (Safety Orange) */
-    --primary-foreground: 0 0% 100%; /* #FFFFFF */
+    --primary: 243 100% 69%; /* #635BFF (Stripe Indigo) */
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 235 66% 30%; /* #1A237E (Legal Blue) */
-    --secondary-foreground: 0 0% 100%; /* #FFFFFF */
+    --secondary: 0 0% 100%; /* #FFFFFF (Botões secundários brancos com borda) */
+    --secondary-foreground: 222 22% 18%;
 
-    --muted: 214 25% 91%; /* #E2E8F0 */
+    --muted: 210 20% 96%; /* #F1F5F9 */
+    --muted-foreground: 215 14% 53%; /* #64748b */
+
+    --accent: 210 20% 96%;
+    --accent-foreground: 222 22% 18%;
+
+    --destructive: 0 84.2% 60.2%; /* #ef4444 */
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 165 100% 42%; /* #00D68F (Emerald Clean) */
+
+    --border: 210 20% 91%; /* #E6EBF1 */
+    --input: 210 20% 91%;
+    --ring: 243 100% 69%;
+
+    --radius: 0.75rem; /* 12px */
+    --shadow-custom: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03); /* Soft Shadow */
+  }
+
+  /* --- TEMA INDUSTRIAL ([data-theme="industrial"]) --- */
+  [data-theme="industrial"] {
+    --background: 220 14.3% 97.8%; /* #F4F5F7 */
+    --foreground: 235 66% 30%; /* Legal Blue */
+
+    --card: 0 0% 100%;
+    --card-foreground: 235 66% 30%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 235 66% 30%;
+
+    --primary: 30 100% 48%; /* Safety Orange */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 235 66% 30%; /* Legal Blue */
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 214 25% 91%;
     --muted-foreground: 215.4 16.3% 46.9%;
 
-    --accent: 214 25% 91%; /* #E2E8F0 */
-    --accent-foreground: 235 66% 30%; /* #1A237E */
+    --accent: 214 25% 91%;
+    --accent-foreground: 235 66% 30%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 214 25% 88%; /* #CBD5E1 */
-    --input: 0 0% 100%; /* #FFFFFF (Input Background) */
-    --ring: 30 100% 48%; /* #F57C00 */
+    --success: 142 76% 36%; /* Green 600 */
 
-    --radius: 0.5rem; /* 8px base */
+    --border: 214 25% 88%;
+    --input: 0 0% 100%;
+    --ring: 30 100% 48%;
+
+    --radius: 0.25rem; /* 4px */
+    --shadow-custom: 4px 4px 0px 0px rgba(0,0,0,0.2); /* Hard Shadow */
   }
 
   .dark {
-    /* Simple Dark Mode Inversion */
+    /* Dark mode kept for compatibility */
     --background: 235 66% 15%;
     --foreground: 210 40% 98%;
-
     --card: 235 66% 15%;
     --card-foreground: 210 40% 98%;
-
     --popover: 235 66% 15%;
     --popover-foreground: 210 40% 98%;
-
     --primary: 30 100% 48%;
     --primary-foreground: 0 0% 100%;
-
     --secondary: 235 66% 30%;
     --secondary-foreground: 0 0% 100%;
-
     --muted: 217.2 32.6% 17.5%;
     --muted-foreground: 215 20.2% 65.1%;
-
     --accent: 217.2 32.6% 17.5%;
     --accent-foreground: 210 40% 98%;
-
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
-
+    --success: 142 76% 36%;
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 30 100% 48%;
@@ -74,10 +106,17 @@
   }
 
   body {
-    @apply bg-background text-foreground font-sans;
+    @apply bg-background text-foreground font-sans tracking-tight; /* Adicionado tracking-tight */
   }
   
   h1, h2, h3, h4, h5, h6 {
     @apply font-heading;
+  }
+}
+
+@layer utilities {
+  /* Atualizado para usar a nova variável */
+  .shadow-custom {
+    box-shadow: var(--shadow-custom);
   }
 }

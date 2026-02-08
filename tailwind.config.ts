@@ -40,6 +40,10 @@ export default {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",
         },
+        success: { // Novo campo de cor
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--primary-foreground))",
+        },
         muted: {
           DEFAULT: "hsl(var(--muted))",
           foreground: "hsl(var(--muted-foreground))",
@@ -58,12 +62,12 @@ export default {
         },
       },
       borderRadius: {
-        lg: "0.75rem", // 12px max
-        md: "var(--radius)", // 8px
-        sm: "calc(var(--radius) - 2px)", // 6px
+        lg: "var(--radius)", // Usando variável CSS
+        md: "var(--radius)", // Usando variável CSS
+        sm: "calc(var(--radius) - 2px)",
       },
       boxShadow: {
-        'hard-shadow': '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1)',
+        'custom': 'var(--shadow-custom)', // Novo nome para a sombra
       },
       keyframes: {
         "accordion-down": {
