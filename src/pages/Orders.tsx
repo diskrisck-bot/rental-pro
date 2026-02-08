@@ -32,33 +32,33 @@ const getStatusBadge = (status: string) => {
       return <Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-200 uppercase text-[10px]">Rascunho</Badge>;
     case 'pending_signature': 
       return (
-        <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 uppercase text-[10px] flex items-center gap-1 w-fit">
+        <Badge variant="pending" className="uppercase text-[10px] flex items-center gap-1 w-fit">
            <Clock className="w-3 h-3" /> Aguardando Assinatura
         </Badge>
       );
     case 'signed': 
       return (
-        <Badge className="bg-green-100 text-green-700 border-green-200 uppercase text-[10px] flex items-center gap-1 w-fit">
-          <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+        <Badge variant="signed" className="uppercase text-[10px] flex items-center gap-1 w-fit">
+          <div className="w-1.5 h-1.5 rounded-full bg-white/80 animate-pulse" />
           Assinado
         </Badge>
       );
     case 'reserved': 
-      return <Badge className="bg-secondary/10 text-secondary border-secondary/20 uppercase text-[10px]">Reservado</Badge>;
+      return <Badge variant="pending" className="uppercase text-[10px]">Reservado</Badge>;
     case 'picked_up': 
-      return <Badge className="bg-purple-100 text-purple-800 border-purple-200 uppercase text-[10px]">Em Andamento</Badge>;
+      return <Badge variant="signed" className="bg-purple-600 uppercase text-[10px]">Em Andamento</Badge>; // Mantendo roxo para 'Na Rua'
     case 'returned': 
-      return <Badge className="bg-green-100 text-green-800 border-green-200 uppercase text-[10px]">Concluído</Badge>;
+      return <Badge variant="signed" className="uppercase text-[10px]">Concluído</Badge>;
     case 'canceled': 
-      return <Badge className="bg-red-50 text-red-700 border-red-200 uppercase text-[10px]">Cancelado</Badge>;
+      return <Badge variant="overdue" className="uppercase text-[10px]">Cancelado</Badge>;
     default: 
       return <Badge className="bg-gray-100 text-gray-800 uppercase text-[10px]">{status}</Badge>;
   }
 };
 
 const getPaymentTimingBadge = (timing: string) => {
-  if (timing === 'paid_on_pickup') return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]"><DollarSign className="h-3 w-3 mr-1" /> Pago (Retirada)</Badge>;
-  if (timing === 'pay_on_return') return <Badge className="bg-orange-50 text-orange-700 border-orange-200 text-[10px]"><Clock className="h-3 w-3 mr-1" /> A Pagar (Devolução)</Badge>;
+  if (timing === 'paid_on_pickup') return <Badge variant="signed" className="bg-emerald-700 text-[10px]"><DollarSign className="h-3 w-3 mr-1" /> Pago (Retirada)</Badge>;
+  if (timing === 'pay_on_return') return <Badge variant="pending" className="text-[10px]"><Clock className="h-3 w-3 mr-1" /> A Pagar (Devolução)</Badge>;
   return null;
 };
 

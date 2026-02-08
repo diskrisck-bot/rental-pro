@@ -40,11 +40,12 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
   };
 
   return (
-    <div className="w-64 bg-white border-r h-screen flex flex-col md:fixed left-0 top-0">
+    <div className="w-64 bg-secondary border-r h-screen flex flex-col md:fixed left-0 top-0">
       <div className="p-6">
-        <h1 className="text-2xl font-heading font-extrabold text-secondary flex items-center gap-2">
-          <Package className="w-8 h-8" />
-          RentalPro
+        <h1 className="text-2xl font-heading font-extrabold flex items-center gap-2">
+          <Package className="w-8 h-8 text-white" />
+          <span className="text-white">Rental</span>
+          <span className="text-primary italic">PRO</span>
         </h1>
       </div>
       
@@ -57,36 +58,36 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
               to={item.path}
               onClick={onLinkClick}
               className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors border-l-4",
                 isActive 
-                  ? "bg-secondary/10 text-secondary" 
-                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                  ? "bg-primary text-white border-primary/80" 
+                  : "text-gray-200 border-transparent hover:bg-secondary/80 hover:text-white"
               )}
             >
-              <item.icon className={cn("w-5 h-5", isActive ? "text-secondary" : "text-gray-400")} />
+              <item.icon className={cn("w-5 h-5", isActive ? "text-white" : "text-gray-400")} />
               {item.label}
             </Link>
           );
         })}
       </nav>
 
-      <div className="p-4 border-t space-y-1">
+      <div className="p-4 border-t border-secondary/80 space-y-1">
         <Link
           to="/settings"
           onClick={onLinkClick}
           className={cn(
-            "flex items-center gap-3 px-3 py-2 w-full rounded-md text-sm font-medium transition-colors",
+            "flex items-center gap-3 px-3 py-2 w-full rounded-md text-sm font-medium transition-colors border-l-4",
             location.pathname === '/settings' 
-              ? "bg-secondary/10 text-secondary" 
-              : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+              ? "bg-primary text-white border-primary/80" 
+              : "text-gray-200 border-transparent hover:bg-secondary/80 hover:text-white"
           )}
         >
-          <Settings className={cn("w-5 h-5", location.pathname === '/settings' ? "text-secondary" : "text-gray-400")} />
+          <Settings className={cn("w-5 h-5", location.pathname === '/settings' ? "text-white" : "text-gray-400")} />
           Configurações
         </Link>
         <button 
           onClick={handleLogout}
-          className="flex items-center gap-3 px-3 py-2 w-full rounded-md text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+          className="flex items-center gap-3 px-3 py-2 w-full rounded-md text-sm font-medium text-red-300 hover:bg-secondary/80 transition-colors"
         >
           <LogOut className="w-5 h-5 text-red-400" />
           Sair

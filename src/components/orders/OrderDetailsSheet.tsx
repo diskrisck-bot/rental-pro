@@ -192,11 +192,11 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
   // Renderização do Status Visual
   const getStatusBadge = () => {
       switch(status) {
-          case 'pending_signature': return <Badge className="bg-yellow-100 text-yellow-800">Aguardando Assinatura</Badge>;
-          case 'reserved': return <Badge className="bg-secondary/10 text-secondary">Reservado</Badge>;
-          case 'picked_up': return <Badge className="bg-purple-100 text-purple-800">Em Andamento (Na Rua)</Badge>; // Keeping purple for high contrast status
-          case 'returned': return <Badge className="bg-green-100 text-green-800">Concluído</Badge>;
-          case 'canceled': return <Badge className="bg-red-100 text-red-800">Cancelado</Badge>;
+          case 'pending_signature': return <Badge variant="pending">Aguardando Assinatura</Badge>;
+          case 'reserved': return <Badge variant="pending">Reservado</Badge>;
+          case 'picked_up': return <Badge variant="signed" className="bg-purple-600">Em Andamento (Na Rua)</Badge>; 
+          case 'returned': return <Badge variant="signed">Concluído</Badge>;
+          case 'canceled': return <Badge variant="overdue">Cancelado</Badge>;
           default: return <Badge>{status}</Badge>;
       }
   };

@@ -96,9 +96,12 @@ const Timeline = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'signed': return { bg: 'bg-green-500/90', border: 'border-green-600', text: 'text-white', label: 'ASSINADO' };
-      case 'picked_up': return { bg: 'bg-purple-500/90', border: 'border-purple-600', text: 'text-white', label: 'NA RUA' };
-      case 'reserved': return { bg: 'bg-secondary/90', border: 'border-secondary', text: 'text-white', label: 'RESERVADO' };
+      case 'signed': 
+      case 'picked_up': 
+        return { bg: 'bg-[#10B981]', border: 'border-[#059669]', text: 'text-white', label: 'ASSINADO/NA RUA' };
+      case 'reserved': 
+      case 'pending_signature':
+        return { bg: 'bg-primary', border: 'border-primary/80', text: 'text-white', label: 'RESERVADO/PENDENTE' };
       default: return { bg: 'bg-gray-400/90', border: 'border-gray-500', text: 'text-gray-900', label: 'RASCUNHO' };
     }
   };

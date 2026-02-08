@@ -3,13 +3,14 @@
 import React from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Sidebar from "./Sidebar";
-import MobileHeader from "./MobileHeader"; // Importando o novo componente
+import MobileHeader from "./MobileHeader"; 
 import Dashboard from "@/pages/Dashboard";
 import Inventory from "@/pages/Inventory";
 import Orders from "@/pages/Orders";
 import Timeline from "@/pages/Timeline";
 import Settings from "@/pages/Settings"; 
 import NotFound from "@/pages/NotFound";
+import ZapFlowButton from './ZapFlowButton'; // Importando o novo botão
 
 const MainLayout = () => (
   <div className="flex min-h-screen w-full bg-gray-50">
@@ -37,6 +38,9 @@ const MainLayout = () => (
         </Routes>
       </main>
     </div>
+    
+    {/* 3. BOTÃO FLUTUANTE DE AÇÃO RÁPIDA */}
+    <ZapFlowButton />
   </div>
 );
 
