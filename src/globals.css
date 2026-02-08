@@ -30,7 +30,7 @@
     --destructive-foreground: 210 40% 98%;
 
     --border: 214 25% 88%; /* #CBD5E1 */
-    --input: 214 25% 88%; /* #CBD5E1 */
+    --input: 0 0% 100%; /* #FFFFFF (Input Background) */
     --ring: 30 100% 48%; /* #F57C00 */
 
     --radius: 0.5rem; /* 8px base */
