@@ -29,7 +29,8 @@ import MaskedInput from 'react-text-mask';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAllProducts } from '@/integrations/supabase/queries';
 import { Badge } from '@/components/ui/badge';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'; // Import RadioGroup
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { cn } from '@/lib/utils'; // <-- IMPORT CORRIGIDA AQUI
 
 interface CreateOrderDialogProps {
   orderId?: string; // Se presente, entra em modo de edição
