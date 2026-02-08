@@ -16,8 +16,8 @@ const badgeVariants = cva(
           "border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/80",
         outline: "text-foreground",
         
-        // --- STATUS DE ALTO CONTRASTE ---
-        // Assinado/Concluído (Esmeralda)
+        // --- STATUS DE ALTO CONTRASTE (Canteiro de Obras) ---
+        // Assinado/Concluído (Verde Esmeralda)
         signed: "border-transparent bg-[#10B981] text-white shadow-sm",
         // Atrasado/Esgotado (Vermelho)
         overdue: "border-transparent bg-[#D32F2F] text-white shadow-sm",
