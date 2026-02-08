@@ -200,6 +200,8 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
   
   const isSigned = !!order?.signed_at;
   const status = order?.status;
+  const isFinalized = status === 'returned' || status === 'canceled';
+  const showWhatsappButton = !isSigned && !isFinalized;
 
   const getStatusBadge = () => {
       switch(status) {
@@ -234,10 +236,10 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
           </div>
           
           {/* Ações Documentais */}
-          <div className={cn("grid gap-3", isSigned ? "grid-cols-1" : "grid-cols-2")}>
+          <div className={cn("grid gap-3", showWhatsappButton ? "grid-cols-2" : "grid-cols-1")}>
              
-             {/* 1. BOTÃO WHATSAPP (SÓ SE NÃO ESTIVER ASSINADO) */}
-             {!isSigned && (
+             {/* 1. BOTÃO WHATSAPP (SÓ SE NÃO ESTIVER ASSINADO E NÃO FINALIZADO) */}
+             {showWhatsappButton && (
                 <a href={getWhatsappLink(order)} target="_blank" rel="noopener noreferrer" className="w-full">
                     <Button variant="outline" className="w-full h-12 border-green-500 text-green-700 hover:bg-green-50 font-bold">
                         <MessageCircle className="h-4 w-4 mr-2" /> Enviar Link (WA)
@@ -245,15 +247,15 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
                 </a>
              )}
 
-             {/* 2. BOTÃO PDF (Sempre visível, mas com destaque se assinado) */}
+             {/* 2. BOTÃO PDF */}
              <Button 
                 onClick={handleDownloadFinalPDF} 
                 disabled={isGeneratingContract} 
                 variant={isSigned ? "default" : "outline"} 
-                className={cn("w-full h-12 font-bold", isSigned ? "bg-secondary hover:bg-secondary/90" : "border-[#1A237E] text-[#1A237E]")}
+                className={cn("w-full h-12 font-bold", isSigned ? "bg-secondary hover:bg-secondary/90" : "border-[#1A237E] text-[#1A237E]", !showWhatsappButton && "col-span-full")}
              >
                 {isGeneratingContract ? <Loader2 className="animate-spin mr-2" /> : <Download className="mr-2 h-4 w-4" />} 
-                {isSigned ? 'Baixar PDF Assinado' : 'Baixar Rascunho PDF'}
+                {isSigned ? 'Baixar Contrato Assinado' : 'Baixar Rascunho PDF'}
              </Button>
           </div>
 
