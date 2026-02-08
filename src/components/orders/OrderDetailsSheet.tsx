@@ -217,8 +217,10 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
   
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-md flex flex-col h-full bg-[#F4F5F7]">
-        <SheetHeader className="mb-4">
+      <SheetContent className="sm:max-w-md flex flex-col h-full p-0 gap-0 bg-[#F4F5F7]">
+        
+        {/* HEADER FIXO */}
+        <SheetHeader className="px-6 py-4 border-b border-gray-100 bg-white">
           <div className="flex justify-between items-start">
             <div>
                 <SheetTitle className="text-[#1A237E] font-extrabold text-xl uppercase">{order?.customer_name}</SheetTitle>
@@ -228,9 +230,11 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
           </div>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto space-y-6">
+        {/* CORPO COM SCROLL */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-[#F4F5F7]">
+          
           {/* Valor Total */}
-          <div className="bg-[#1A237E] rounded-xl p-6 text-white shadow-hard text-center">
+          <div className="bg-[#1A237E] rounded-2xl p-6 text-white shadow-md text-center">
             <p className="text-xs font-bold opacity-80 uppercase tracking-widest mb-1">Valor do Contrato</p>
             <p className="text-4xl font-black">R$ {Number(order?.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
           </div>
@@ -273,13 +277,13 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
           </div>
         </div>
 
-        {/* --- FOOTER OPERACIONAL --- */}
-        <SheetFooter className="mt-auto pt-4 border-t border-gray-200 flex flex-col gap-3 bg-white -mx-6 px-6 pb-6">
+        {/* FOOTER FIXO */}
+        <SheetFooter className="p-6 border-t border-gray-200 bg-white mt-auto flex flex-col gap-3">
            
-           {/* Cenário A: Assinado (Vai direto para Devolvido) */}
+           {/* AÇÃO PRINCIPAL (Retirada / Devolução) */}
            {status === 'signed' && (
              <Button 
-                className="w-full h-14 bg-[#10B981] hover:bg-green-600 text-white font-bold uppercase tracking-wide text-lg shadow-hard" 
+                className="w-full h-14 bg-[#10B981] hover:bg-green-600 text-white font-bold uppercase tracking-wide text-lg shadow-lg" 
                 onClick={() => updateStatus('returned')}
                 disabled={updating}
              >
@@ -288,10 +292,9 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
              </Button>
            )}
 
-           {/* Cenário B: Reservado (Vai para Retirada) */}
            {status === 'reserved' && (
              <Button 
-                className="w-full h-14 bg-[#F57C00] hover:bg-orange-600 text-white font-bold uppercase tracking-wide text-lg shadow-hard" 
+                className="w-full h-14 bg-[#F57C00] hover:bg-orange-600 text-white font-bold uppercase tracking-wide text-lg shadow-lg" 
                 onClick={() => updateStatus('picked_up')}
                 disabled={updating}
              >
@@ -300,10 +303,9 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
              </Button>
            )}
 
-           {/* Cenário C: Na Rua (Vai para Devolvido) */}
            {status === 'picked_up' && (
              <Button 
-                className="w-full h-14 bg-[#10B981] hover:bg-green-600 text-white font-bold uppercase tracking-wide text-lg shadow-hard" 
+                className="w-full h-14 bg-[#10B981] hover:bg-green-600 text-white font-bold uppercase tracking-wide text-lg shadow-lg" 
                 onClick={() => updateStatus('returned')}
                 disabled={updating}
              >
@@ -312,16 +314,21 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
              </Button>
            )}
 
-           {/* MENSAGEM DE SUCESSO */}
-           {status === 'returned' && (
+           {/* MENSAGEM DE SUCESSO (Se finalizado) */}
+           {isFinalized && (
                <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-center justify-center gap-2 text-green-700 font-bold">
                    <CheckCircle className="h-5 w-5" /> Contrato Finalizado
                </div>
            )}
 
-           {/* CANCELAR */}
-           {status !== 'returned' && status !== 'canceled' && (
-             <Button variant="ghost" className="w-full text-red-500 hover:text-red-700 hover:bg-red-50 font-bold uppercase text-xs" onClick={handleCancelOrder} disabled={updating}>
+           {/* CANCELAR (Abaixo da ação principal, se não estiver finalizado) */}
+           {!isFinalized && (
+             <Button 
+                variant="ghost" 
+                className="w-full text-red-500 hover:text-red-700 hover:bg-red-50 font-bold uppercase text-xs mt-2" 
+                onClick={handleCancelOrder} 
+                disabled={updating}
+             >
                <XCircle className="mr-2 h-4 w-4" /> Cancelar Pedido
              </Button>
            )}
