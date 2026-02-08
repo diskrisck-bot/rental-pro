@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Loader2, Wallet, Edit, CreditCard, Clock, Zap, Calendar, AlertTriangle } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Plus, Trash2, Loader2, Wallet, Edit, CreditCard, Clock, Zap, Calendar, AlertTriangle, Package, AlertCircle } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { 
   Dialog, 
@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/select';
 import { supabase } from '@/lib/supabase';
 import { showSuccess, showError } from '@/utils/toast';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isBefore, isAfter, startOfDay } from 'date-fns';
 import { calculateOrderTotal } from '@/utils/financial';
 import MaskedInput from 'react-text-mask';
 import { useQuery } from '@tanstack/react-query';
@@ -43,6 +43,14 @@ interface OrderItem {
   daily_price: number;
 }
 
+interface ProductData {
+  id: string;
+  name: string;
+  price: number;
+  type: 'trackable' | 'bulk';
+  total_quantity: number;
+}
+
 // Máscaras
 const phoneMask = ['(', /[1-9]/, /\d/, ')', ' ', /\d/, /\d/, /\d/, /\d/, /\d/, '-', /\d/, /\d/, /\d/, /\d/];
 const cpfMask = [/\d/, /\d/, /\d/, '.', /\d/, /\d/, /\d/, '.', /\d/, /\d/, /\d/, '-', /\d/, /\d/];
@@ -55,9 +63,10 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
   
   const [currentProductId, setCurrentProductId] = useState("");
   const [currentQuantity, setCurrentQuantity] = useState(1);
+  const [currentAvailability, setCurrentAvailability] = useState<number | null>(null);
 
   // Fetch products using useQuery
-  const { data: products, isLoading: isProductsLoading, isError: isProductsError } = useQuery({
+  const { data: products, isLoading: isProductsLoading, isError: isProductsError } = useQuery<ProductData[]>({
     queryKey: ['allProducts'],
     queryFn: fetchAllProducts,
     enabled: open, // Only fetch when dialog is open
@@ -85,10 +94,11 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
   const watchPaymentMethod = watch('payment_method');
   const watchPaymentTiming = watch('payment_timing');
   const watchFulfillmentType = watch('fulfillment_type');
+  const [startDateStr, endDateStr] = watchDates;
 
   const financialSummary = useMemo(() => {
-    return calculateOrderTotal(watchDates[0], watchDates[1], selectedItems);
-  }, [selectedItems, watchDates]);
+    return calculateOrderTotal(startDateStr, endDateStr, selectedItems);
+  }, [selectedItems, startDateStr, endDateStr]);
 
   // Efeito para ajustar a data de início quando o tipo de cumprimento muda
   useEffect(() => {
@@ -106,6 +116,71 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
       showError("Erro ao carregar a lista de produtos.");
     }
   }, [isProductsError]);
+
+  // Lógica de verificação de disponibilidade
+  const checkAvailability = useCallback(async (productId: string, start: string, end: string): Promise<number> => {
+    const product = productList.find(p => p.id === productId);
+    if (!product) return 0;
+
+    const totalQuantity = product.total_quantity || 0;
+    
+    // Se for produto rastreável, a quantidade total é 1, e a lógica de colisão é mais simples
+    if (product.type === 'trackable') {
+        // Para produtos rastreáveis, se houver qualquer colisão, a disponibilidade é 0
+        const { count, error } = await supabase
+            .from('order_items')
+            .select('order_id', { count: 'exact', head: true })
+            .eq('product_id', productId)
+            .neq('order_id', orderId || '00000000-0000-0000-0000-000000000000') 
+            .in('orders.status', ['signed', 'reserved', 'picked_up'])
+            .lte('orders.start_date', `${end}T23:59:59.999Z`) // OrderStart <= SelectedEnd
+            .gte('orders.end_date', `${start}T00:00:00.000Z`); // OrderEnd >= SelectedStart
+
+        if (error) throw error;
+        
+        // Se count > 0, está ocupado. Disponibilidade é 1 - count.
+        return Math.max(0, totalQuantity - (count || 0));
+    }
+
+    // Lógica para produtos de Granel (Bulk)
+    const { data: conflictingItems, error: conflictError } = await supabase
+        .from('order_items')
+        .select(`
+            quantity,
+            orders!inner (
+                status,
+                start_date,
+                end_date
+            )
+        `)
+        .eq('product_id', productId)
+        .neq('order_id', orderId || '00000000-0000-0000-0000-000000000000') 
+        .in('orders.status', ['signed', 'reserved', 'picked_up'])
+        .lte('orders.start_date', `${end}T23:59:59.999Z`) // OrderStart <= SelectedEnd
+        .gte('orders.end_date', `${start}T00:00:00.000Z`); // OrderEnd >= SelectedStart
+
+    if (conflictError) throw conflictError;
+
+    const occupiedQuantity = conflictingItems.reduce((sum, item: any) => sum + item.quantity, 0);
+    
+    return Math.max(0, totalQuantity - occupiedQuantity);
+  }, [productList, orderId]);
+
+  // Efeito para atualizar a disponibilidade na UI
+  useEffect(() => {
+    if (currentProductId && startDateStr && endDateStr) {
+      setCurrentAvailability(null);
+      checkAvailability(currentProductId, startDateStr, endDateStr)
+        .then(setCurrentAvailability)
+        .catch((e) => {
+          console.error("Erro ao verificar disponibilidade:", e);
+          setCurrentAvailability(0);
+        });
+    } else {
+      setCurrentAvailability(null);
+    }
+  }, [currentProductId, startDateStr, endDateStr, checkAvailability]);
+
 
   // Carrega dados do pedido (se for edição) e inicializa o formulário
   useEffect(() => {
@@ -164,19 +239,50 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
     }
   }, [open, orderId, setValue, reset, isProductsLoading]);
 
-  const addItem = () => {
+  const addItem = async () => {
+    // 1. PRÉ-REQUISITO DE DATA
+    if (!startDateStr || !endDateStr) {
+        showError("Selecione o período do evento para verificar a disponibilidade.");
+        return;
+    }
     if (!currentProductId || currentQuantity < 1) return;
+    
     const product = productList.find(p => p.id === currentProductId);
     if (!product) return;
 
-    const existingItem = selectedItems.find(item => item.product_id === currentProductId);
+    // 2. LÓGICA DE VERIFICAÇÃO DE ESTOQUE (Anti-Overselling)
     
-    if (existingItem) {
-        // Se já existe, apenas incrementa a quantidade visualmente ou substitui (depende da sua regra)
-        // Aqui vamos somar para evitar duplicatas na lista visual
-        const updatedItems = selectedItems.map(item => 
-            item.product_id === currentProductId 
-                ? { ...item, quantity: item.quantity + currentQuantity }
+    // Soma a quantidade já selecionada no carrinho local para este produto
+    const quantityInCart = selectedItems
+        .filter(item => item.product_id === currentProductId)
+        .reduce((sum, item) => sum + item.quantity, 0);
+
+    const requestedQuantity = currentQuantity;
+    const totalRequested = quantityInCart + requestedQuantity;
+
+    try {
+        setLoading(true); // Bloqueia o botão de adicionar enquanto verifica
+        const availableQuantity = await checkAvailability(currentProductId, startDateStr, endDateStr);
+        
+        if (totalRequested > availableQuantity) {
+            showError(`Estoque insuficiente para este período. Disponível: ${availableQuantity}, Solicitado: ${totalRequested}`);
+            return;
+        }
+    } catch (error: any) {
+        showError("Erro ao verificar estoque: " + error.message);
+        return;
+    } finally {
+        setLoading(false);
+    }
+
+    // 3. Se passou na validação, adiciona/atualiza o item
+    const existingItemIndex = selectedItems.findIndex(item => item.product_id === currentProductId);
+    
+    if (existingItemIndex !== -1) {
+        // Se já existe, atualiza a quantidade (já validamos o totalRequested)
+        const updatedItems = selectedItems.map((item, index) => 
+            index === existingItemIndex 
+                ? { ...item, quantity: totalRequested }
                 : item
         );
         setSelectedItems(updatedItems);
@@ -192,6 +298,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
 
     setCurrentProductId("");
     setCurrentQuantity(1);
+    setCurrentAvailability(null);
   };
 
   const removeItem = (index: number) => {
@@ -214,31 +321,17 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
       const newEnd = new Date(`${values.end_date}T12:00:00`);
 
       // --- 3. MÓDULO DE ESTOQUE E CONFLITOS (ANTIDUPLICIDADE) ---
+      // Revalidação final de estoque antes de salvar (para garantir que as datas não mudaram)
       for (const item of selectedItems) {
         const product = productList.find(p => p.id === item.product_id);
         
-        if (product && product.type === 'trackable') {
-          const { data: conflictingItems, error: conflictError } = await supabase
-            .from('order_items')
-            .select('order_id, orders!inner(start_date, end_date, status)')
-            .eq('product_id', item.product_id)
-            .neq('order_id', orderId || '00000000-0000-0000-0000-000000000000') 
-            .in('orders.status', ['reserved', 'picked_up', 'pending_signature']); 
-
-          if (conflictError) throw conflictError;
-
-          const collision = conflictingItems.some((ci: any) => {
-            const existingStart = new Date(ci.orders.start_date);
-            const existingEnd = new Date(ci.orders.end_date);
-            // Verifica colisão usando os objetos Date corrigidos
-            return newStart <= existingEnd && existingStart <= newEnd;
-          });
-
-          if (collision) {
-            showError(`O item rastreável "${product.name}" já está reservado ou alugado no período selecionado.`);
-            setLoading(false);
-            return; 
-          }
+        if (product) {
+            const available = await checkAvailability(product.id, values.start_date, values.end_date);
+            if (item.quantity > available) {
+                showError(`Falha na validação final: O item "${product.name}" excede o estoque disponível (${available} un) para o período selecionado.`);
+                setLoading(false);
+                return;
+            }
         }
       }
 
@@ -267,6 +360,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         
         if (updateError) throw updateError;
 
+        // Deleta itens antigos antes de inserir os novos
         const { error: deleteError } = await supabase
           .from('order_items')
           .delete()
@@ -308,6 +402,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
 
   const isDataLoading = fetchingData || isProductsLoading;
   const isImmediate = watchFulfillmentType === 'immediate';
+  const isAddButtonDisabled = !currentProductId || currentQuantity < 1 || loading || !startDateStr || !endDateStr;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -457,10 +552,23 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
                     onChange={(e) => setCurrentQuantity(parseInt(e.target.value) || 1)} 
                   />
                 </div>
-                <Button type="button" onClick={addItem} variant="secondary" disabled={isProductsLoading || isProductsError} className="w-full md:w-auto">
-                  <Plus className="h-4 w-4 mr-2" /> Incluir
+                <Button type="button" onClick={addItem} variant="secondary" disabled={isAddButtonDisabled} className="w-full md:w-auto">
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />} Incluir
                 </Button>
               </div>
+              
+              {/* Feedback de Disponibilidade */}
+              {currentProductId && startDateStr && endDateStr && (
+                <div className="mt-2 flex items-center gap-2 text-sm">
+                    {currentAvailability === null ? (
+                        <span className="text-muted-foreground flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Verificando disponibilidade...</span>
+                    ) : currentAvailability > 0 ? (
+                        <span className="text-success flex items-center gap-1 font-semibold"><CheckCircle className="h-3 w-3" /> Disponível para o período: {currentAvailability} un.</span>
+                    ) : (
+                        <span className="text-destructive flex items-center gap-1 font-semibold"><AlertCircle className="h-3 w-3" /> Esgotado para o período.</span>
+                    )}
+                </div>
+              )}
 
               <div className="mt-4 space-y-2">
                 {selectedItems.length > 0 ? (
