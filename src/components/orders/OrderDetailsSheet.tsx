@@ -52,6 +52,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     if (!orderId) return;
     try {
       setLoading(true);
+      // Certifique-se de que delivery_address está sendo selecionado
       const { data, error } = await supabase.from('orders').select(`*, order_items (quantity, products (name, price, replacement_value), assets (serial_number))`).eq('id', orderId).single();
       if (error) throw error;
       setOrder(data);
@@ -143,7 +144,13 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     doc.text(`Nome: ${order.customer_name}`, margin + 90, startBoxY + 5); 
     doc.text(`CPF/CNPJ: ${order.customer_cpf || '---'}`, margin + 90, startBoxY + 10);
     doc.text(`Telefone: ${order.customer_phone || '---'}`, margin + 90, startBoxY + 15);
-    doc.text(`Endereço: ${order.customer_address || '---'}`, margin + 90, startBoxY + 20);
+    
+    // Adiciona o endereço de entrega se for delivery
+    if (order.delivery_method === 'delivery' && order.delivery_address) {
+        doc.text(`Endereço de Entrega: ${order.delivery_address}`, margin + 90, startBoxY + 20);
+    } else {
+        doc.text(`Endereço: ${order.customer_address || '---'}`, margin + 90, startBoxY + 20);
+    }
     
     currentY += 55; // Espaço após o quadro
 
@@ -205,8 +212,6 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     doc.line(120, yAssin, 190, yAssin); 
     doc.text("LOCATÁRIO", 120, yAssin + 5);
     
-    // REMOÇÃO DE TESTEMUNHAS: Não adicionamos mais espaço para testemunhas.
-
     // Certificado Digital (Se assinado)
     if (order.signed_at) {
       doc.addPage(); currentY = 20;
@@ -236,13 +241,9 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
       setUpdating(true); 
       const p: any = { status: newStatus };
       
-      // LÓGICA: Atualiza datas para controle de inventário
       if (newStatus === 'picked_up') p.picked_up_at = new Date().toISOString(); 
       if (newStatus === 'returned') p.returned_at = new Date().toISOString(); 
       
-      // Cenário A: Se o status atual for 'signed', e o novo for 'returned', 
-      // precisamos garantir que o picked_up_at seja definido para hoje, 
-      // pois estamos pulando a etapa 'picked_up'.
       if (order?.status === 'signed' && newStatus === 'returned') {
           p.picked_up_at = new Date().toISOString();
       }
@@ -324,6 +325,14 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
                   </p>
               </div>
           </div>
+          
+          {/* Endereço de Entrega (Se for delivery) */}
+          {isDelivery && order?.delivery_address && (
+              <div className="bg-card rounded-[var(--radius)] border border-gray-200 p-4 shadow-custom">
+                  <h4 className="text-xs font-bold text-gray-500 uppercase mb-2 flex items-center gap-2"><MapPin className="h-4 w-4"/> Local de Entrega</h4>
+                  <p className="text-sm font-medium text-foreground whitespace-pre-wrap">{order.delivery_address}</p>
+              </div>
+          )}
 
           {/* Ações Documentais */}
           <div className={cn("grid gap-3", showWhatsappButton ? "grid-cols-2" : "grid-cols-1")}>
@@ -345,7 +354,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
                 className={cn(
                     "w-full h-12 font-bold", 
                     isSigned 
-                        ? "bg-secondary hover:bg-secondary/90 text-white" // CORREÇÃO APLICADA AQUI: Forçando text-white
+                        ? "bg-secondary hover:bg-secondary/90 text-white" 
                         : "border-foreground text-foreground", 
                     !showWhatsappButton && "col-span-full"
                 )}
@@ -377,7 +386,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
                 {status === 'signed' && (
                     <Button 
                         className="w-full h-14 bg-success hover:bg-success/90 text-white font-bold uppercase text-lg shadow-lg" 
-                        onClick={() => updateStatus('picked_up')} // Corrigido para 'picked_up'
+                        onClick={() => updateStatus('picked_up')} 
                         disabled={updating}
                     >
                         {updating ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <Truck className="mr-2 h-6 w-6" />} 

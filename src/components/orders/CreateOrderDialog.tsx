@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Plus, Trash2, Loader2, Wallet, Edit, CreditCard, Clock, Zap, Calendar, AlertTriangle, Package, AlertCircle, CheckCircle, Truck, Store } from 'lucide-react';
+import { Plus, Trash2, Loader2, Wallet, Edit, CreditCard, Clock, Zap, Calendar, AlertTriangle, Package, AlertCircle, CheckCircle, Truck, Store, MapPin } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { 
   Dialog, 
@@ -30,7 +30,8 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchAllProducts } from '@/integrations/supabase/queries';
 import { Badge } from '@/components/ui/badge';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { cn } from '@/lib/utils'; // <-- IMPORT CORRIGIDA AQUI
+import { cn } from '@/lib/utils';
+import { Textarea } from '@/components/ui/textarea'; // Import Textarea
 
 interface CreateOrderDialogProps {
   orderId?: string; // Se presente, entra em modo de edição
@@ -55,7 +56,6 @@ interface ProductData {
 
 // Máscaras
 const phoneMask = ['(', /[1-9]/, /\d/, ')', ' ', /\d/, /\d/, /\d/, /\d/, /\d/, '-', /\d/, /\d/, /\d/, /\d/];
-// Removendo cpfMask, pois usaremos lógica customizada para CPF/CNPJ
 
 const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDialogProps) => {
   const [open, setOpen] = useState(false);
@@ -67,8 +67,8 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
   const [currentQuantity, setCurrentQuantity] = useState(1);
   const [currentAvailability, setCurrentAvailability] = useState<number | null>(null);
   
-  // Novo estado para gerenciar o valor formatado do documento (CPF/CNPJ)
   const [customerDocument, setCustomerDocument] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState(''); // NOVO ESTADO
 
   // Fetch products using useQuery
   const { data: products, isLoading: isProductsLoading, isError: isProductsError } = useQuery<ProductData[]>({
@@ -86,21 +86,19 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
     defaultValues: {
       customer_name: '',
       customer_phone: '',
-      customer_cpf: '', // Este campo será preenchido pelo estado local
+      customer_cpf: '', 
       start_date: defaultStartDate,
       end_date: defaultEndDate,
-      payment_method: 'Pix', // Default value
-      payment_timing: 'paid_on_pickup', // Default value
-      fulfillment_type: 'reservation', // Novo campo padrão
-      delivery_method: 'pickup', // NOVO CAMPO PADRÃO
+      payment_method: 'Pix', 
+      payment_timing: 'paid_on_pickup', 
+      fulfillment_type: 'reservation', 
+      delivery_method: 'pickup', 
     }
   });
 
   const watchDates = watch(['start_date', 'end_date']);
-  const watchPaymentMethod = watch('payment_method');
-  const watchPaymentTiming = watch('payment_timing');
   const watchFulfillmentType = watch('fulfillment_type');
-  const watchDeliveryMethod = watch('delivery_method'); // NOVO WATCH
+  const watchDeliveryMethod = watch('delivery_method'); 
   const [startDateStr, endDateStr] = watchDates;
 
   const financialSummary = useMemo(() => {
@@ -109,29 +107,21 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
 
   // Lógica de Máscara Dinâmica
   const handleDocumentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // 1. Remove tudo que não é número
     let value = e.target.value.replace(/\D/g, '');
-    
-    // 2. Limita a 14 números (CNPJ)
     if (value.length > 14) value = value.slice(0, 14);
 
-    // 3. Aplica a Máscara
     if (value.length <= 11) {
-      // Máscara CPF: 000.000.000-00
       value = value.replace(/(\d{3})(\d)/, '$1.$2');
       value = value.replace(/(\d{3})(\d)/, '$1.$2');
       value = value.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
     } else {
-      // Máscara CNPJ: 00.000.000/0000-00
       value = value.replace(/^(\d{2})(\d)/, '$1.$2');
       value = value.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
       value = value.replace(/\.(\d{3})(\d)/, '.$1/$2');
       value = value.replace(/(\d{4})(\d)/, '$1-$2');
     }
 
-    // 4. Atualiza o estado
     setCustomerDocument(value);
-    // Atualiza o valor no React Hook Form para submissão
     setValue('customer_cpf', value, { shouldValidate: true });
   };
 
@@ -153,12 +143,10 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
   }, [isProductsError]);
 
   // Lógica de verificação de disponibilidade (Peak Demand Algorithm)
-  // Esta função agora é apenas para feedback visual e não para a validação final
   const checkAvailabilityForUI = useCallback(async (productId: string, start: string, end: string): Promise<number> => {
     const product = productList.find(p => p.id === productId);
     if (!product) return 0;
 
-    // 1. Busca Fresca do Total
     const { data: productData, error: prodError } = await supabase
       .from('products')
       .select('total_quantity')
@@ -171,7 +159,6 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
     }
     const totalEstoque = Number(productData.total_quantity) || 0;
 
-    // 2. Busca Ocupação
     const newOrderStartDate = `${start}T12:00:00.000Z`;
     const newOrderEndDate = `${end}T12:00:00.000Z`;
 
@@ -192,24 +179,18 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         return 0;
     }
 
-    // 3. Algoritmo de Pico Diário (Daily Peak)
     let maxUsage = 0;
     const startDay = parseISO(start);
     const endDay = parseISO(end);
 
-    // Loop dia a dia
     for (let d = startDay; d <= endDay; d = addDays(d, 1)) {
       const currentDayStr = format(d, 'yyyy-MM-dd');
 
       const usageOnThisDay = (activeRentals || []).reduce((acc, item) => {
-        // Garantia numérica
         const itemQuantity = Number(item.quantity) || 0;
-        
-        // Usamos split('T')[0] para garantir que a comparação seja apenas por data (YYYY-MM-DD)
         const itemStart = item.orders.start_date.split('T')[0];
         const itemEnd = item.orders.end_date.split('T')[0];
 
-        // Se o dia 'd' está dentro do período do aluguel existente
         if (currentDayStr >= itemStart && currentDayStr <= itemEnd) {
           return acc + itemQuantity;
         }
@@ -270,11 +251,11 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             setValue('payment_method', orderData.payment_method || 'Pix');
             setValue('payment_timing', orderData.payment_timing || 'paid_on_pickup');
             setValue('fulfillment_type', orderData.fulfillment_type || 'reservation');
-            setValue('delivery_method', orderData.delivery_method || 'pickup'); // CARREGA NOVO CAMPO
+            setValue('delivery_method', orderData.delivery_method || 'pickup'); 
             
-            // Inicializa o estado local do documento
             setCustomerDocument(orderData.customer_cpf || '');
             setValue('customer_cpf', orderData.customer_cpf || '');
+            setDeliveryAddress(orderData.delivery_address || ''); // CARREGA NOVO CAMPO
             
             const existingItems = orderData.order_items.map((item: any) => ({
               product_id: item.product_id,
@@ -294,9 +275,10 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             payment_method: 'Pix',
             payment_timing: 'paid_on_pickup',
             fulfillment_type: 'reservation',
-            delivery_method: 'pickup', // RESET NOVO CAMPO
+            delivery_method: 'pickup', 
           });
           setCustomerDocument('');
+          setDeliveryAddress(''); // RESET NOVO CAMPO
           setSelectedItems([]);
         }
         setFetchingData(false);
@@ -309,7 +291,6 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
   }, [open, orderId, setValue, reset, isProductsLoading]);
 
   const addItem = async () => {
-    // 1. PRÉ-REQUISITO DE DATA
     if (!startDateStr || !endDateStr) {
         showError("Selecione o período do evento para verificar a disponibilidade.");
         return;
@@ -326,13 +307,11 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
     setLoading(true);
 
     try {
-        // --- 1. ETAPA DE SEGURANÇA (Data Fetching Dedicado) ---
         const selectedProductId = currentProductId;
         const newOrderStartDate = startDateStr;
         const newOrderEndDate = endDateStr;
         const quantityInput = currentQuantity;
 
-        // 1. Busca Fresca do Total
         const { data: productData, error: prodError } = await supabase
           .from('products')
           .select('total_quantity')
@@ -344,10 +323,8 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
           return;
         }
         
-        // GARANTIA NUMÉRICA: Força conversão para Number e fallback para 0
         const totalEstoque = Number(productData.total_quantity) || 0;
 
-        // 2. Busca Ocupação
         const startBoundary = `${newOrderStartDate}T12:00:00.000Z`;
         const endBoundary = `${newOrderEndDate}T12:00:00.000Z`;
 
@@ -365,27 +342,21 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
 
         if (conflictError) throw conflictError;
 
-        // 3. Algoritmo de Pico Diário (Daily Peak)
         let maxUsage = 0;
         let peakDate = newOrderStartDate;
         
-        // Usando new Date() para garantir que a iteração funcione corretamente
         const start = parseISO(newOrderStartDate);
         const end = parseISO(newOrderEndDate);
 
-        // Loop dia a dia
         for (let d = start; d <= end; d = addDays(d, 1)) {
           const currentDayStr = format(d, 'yyyy-MM-dd');
 
           const usageOnThisDay = (activeRentals || []).reduce((acc: number, item: any) => {
-            // GARANTIA NUMÉRICA
             const itemQuantity = Number(item.quantity) || 0;
             
-            // Usamos split('T')[0] para garantir que a comparação seja apenas por data (YYYY-MM-DD)
             const itemStart = item.orders.start_date.split('T')[0];
             const itemEnd = item.orders.end_date.split('T')[0];
 
-            // Se o dia 'd' está dentro do período do aluguel existente
             if (currentDayStr >= itemStart && currentDayStr <= itemEnd) {
               return acc + itemQuantity;
             }
@@ -400,7 +371,6 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
 
         const disponivel = totalEstoque - maxUsage;
         
-        // DEBUG OBRIGATÓRIO
         console.log('DEBUG ESTOQUE:', { 
             total: totalEstoque, 
             activeRentalsCount: activeRentals?.length, 
@@ -409,10 +379,8 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             peakDate: peakDate
         });
 
-        // 4. VALIDAÇÃO
         const qtdSolicitada = Number(quantityInput) || 0;
         
-        // Soma a quantidade já selecionada no carrinho local para este produto
         const quantityInCart = selectedItems
             .filter(item => item.product_id === currentProductId)
             .reduce((sum, item) => sum + item.quantity, 0);
@@ -421,10 +389,9 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
 
         if (totalRequested > disponivel) {
             showError(`Estoque insuficiente para o período. Máximo disponível: ${disponivel} un. Ocupado no pico (${format(parseISO(peakDate), 'dd/MM')}): ${maxUsage} un.`);
-            return; // Bloqueia adição
+            return; 
         }
 
-        // 5. Se passou na validação, adiciona/atualiza o item
         const existingItemIndex = selectedItems.findIndex(item => item.product_id === currentProductId);
         
         if (existingItemIndex !== -1) {
@@ -464,21 +431,24 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
       showError("Adicione pelo menos um item ao pedido");
       return;
     }
+    
+    // VALIDAÇÃO CRÍTICA DO ENDEREÇO
+    if (values.delivery_method === 'delivery' && !deliveryAddress.trim()) {
+        showError("Informe o endereço de entrega, pois o método 'Entrega pela Locadora' foi selecionado.");
+        return;
+    }
 
     try {
       setLoading(true);
 
-      // --- CORREÇÃO DE FUSO HORÁRIO ---
       const newStart = new Date(`${values.start_date}T12:00:00`);
       const newEnd = new Date(`${values.end_date}T12:00:00`);
 
       // --- 3. MÓDULO DE ESTOQUE E CONFLITOS (Revalidação Final) ---
-      // Revalidação final de estoque antes de salvar (para garantir que as datas não mudaram)
       for (const item of selectedItems) {
         const product = productList.find(p => p.id === item.product_id);
         
         if (product) {
-            // 1. Busca Fresca do Total
             const { data: productData, error: prodError } = await supabase
               .from('products')
               .select('total_quantity')
@@ -492,7 +462,6 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             }
             const totalEstoque = Number(productData.total_quantity) || 0;
 
-            // 2. Busca Ocupação
             const startBoundary = `${values.start_date}T12:00:00.000Z`;
             const endBoundary = `${values.end_date}T12:00:00.000Z`;
 
@@ -510,7 +479,6 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
 
             if (conflictError) throw conflictError;
 
-            // 3. Algoritmo de Pico Diário (Daily Peak)
             let maxUsage = 0;
             const start = parseISO(values.start_date);
             const end = parseISO(values.end_date);
@@ -548,13 +516,14 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         customer_name: values.customer_name,
         customer_phone: values.customer_phone,
         customer_cpf: values.customer_cpf,
-        start_date: newStart.toISOString(), // Salva a data segura (12:00)
-        end_date: newEnd.toISOString(),     // Salva a data segura (12:00)
+        start_date: newStart.toISOString(), 
+        end_date: newEnd.toISOString(),     
         total_amount: financialSummary.totalAmount,
         payment_method: values.payment_method,
         payment_timing: values.payment_timing,
         fulfillment_type: values.fulfillment_type,
-        delivery_method: values.delivery_method, // SALVA NOVO CAMPO
+        delivery_method: values.delivery_method, 
+        delivery_address: deliveryAddress.trim() || null, // SALVA NOVO CAMPO
         status: orderId ? undefined : initialStatus 
       };
 
@@ -568,7 +537,6 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         
         if (updateError) throw updateError;
 
-        // Deleta itens antigos antes de inserir os novos
         const { error: deleteError } = await supabase
           .from('order_items')
           .delete()
@@ -611,6 +579,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
   const isDataLoading = fetchingData || isProductsLoading;
   const isImmediate = watchFulfillmentType === 'immediate';
   const isAddButtonDisabled = !currentProductId || currentQuantity < 1 || loading || !startDateStr || !endDateStr || isBefore(parseISO(endDateStr), parseISO(startDateStr));
+  const isDelivery = watchDeliveryMethod === 'delivery'; // NOVO
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -727,7 +696,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
               </div>
             </div>
             
-            {/* NOVO CAMPO: MÉTODO DE ENTREGA */}
+            {/* CAMPO: RESPONSABILIDADE LOGÍSTICA */}
             <div className="border-t pt-4 space-y-3">
                 <Label className="text-base font-semibold flex items-center gap-2">
                     <Truck className="h-4 w-4 text-secondary" /> Responsabilidade Logística
@@ -769,6 +738,24 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
                     </Label>
                 </RadioGroup>
             </div>
+            
+            {/* CAMPO CONDICIONAL: ENDEREÇO DE ENTREGA */}
+            {isDelivery && (
+                <div className="space-y-2 border-t pt-4">
+                    <Label htmlFor="delivery_address" className="flex items-center gap-2 font-semibold text-secondary">
+                        <MapPin className="h-4 w-4" /> Endereço de Entrega / Local do Evento
+                    </Label>
+                    <Textarea
+                        id="delivery_address"
+                        placeholder="Rua, Número, Complemento, Bairro - Cidade/UF"
+                        value={deliveryAddress}
+                        onChange={(e) => setDeliveryAddress(e.target.value)}
+                        required={isDelivery}
+                        rows={3}
+                    />
+                    <p className="text-xs text-muted-foreground">Este endereço será usado para a entrega e constará no contrato.</p>
+                </div>
+            )}
 
             <div className="border-t pt-4">
               <Label className="text-base font-semibold">Itens da Locação</Label>
@@ -860,7 +847,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
                 <div className="space-y-2">
                   <Label>Forma de Pagamento</Label>
                   <Select 
-                    value={watchPaymentMethod} 
+                    value={watch('payment_method')} 
                     onValueChange={(val) => setValue('payment_method', val)}
                   >
                     <SelectTrigger>
@@ -879,7 +866,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
                 <div className="space-y-2">
                   <Label>Momento do Pagamento</Label>
                   <Select 
-                    value={watchPaymentTiming} 
+                    value={watch('payment_timing')} 
                     onValueChange={(val) => setValue('payment_timing', val)}
                   >
                     <SelectTrigger>
