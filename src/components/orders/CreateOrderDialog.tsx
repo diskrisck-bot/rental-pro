@@ -423,7 +423,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
   };
 
   const removeItem = (index: number) => {
-    setSelectedItems(selectedItems.filter((_, i) => i !== index));
+    selectedItems(selectedItems.filter((_, i) => i !== index));
   };
 
   const onSubmit = async (values: any) => {
@@ -743,7 +743,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             {isDelivery && (
                 <div className="space-y-2 border-t pt-4">
                     <Label htmlFor="delivery_address" className="flex items-center gap-2 font-semibold text-secondary">
-                        <MapPin className="h-4 w-4" /> Endereço de Entrega / Local do Evento
+                        <MapPin className="h-4 w-4" /> Endereço de Entrega / Local de uso
                     </Label>
                     <Textarea
                         id="delivery_address"
