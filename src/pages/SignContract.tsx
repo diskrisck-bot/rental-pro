@@ -156,8 +156,20 @@ const SignContract = () => {
           {!order.signed_at ? (
             <div className="bg-blue-50 p-6 rounded-xl space-y-4">
                <div className="flex gap-2"><Checkbox id="t" checked={agreed} onCheckedChange={(v)=>setAgreed(!!v)}/><label htmlFor="t" className="text-sm font-medium">Li e concordo com os termos.</label></div>
-               <div className="bg-white border rounded"><SignaturePad onSave={setCustomerSignature}/></div>
-               <Button onClick={handleSign} disabled={signing || !agreed || !customerSignature} className="w-full bg-blue-900 h-12 text-lg">ASSINAR</Button>
+               
+               {/* O SignaturePad agora contém seus próprios botões de Salvar/Limpar */}
+               <div className="bg-white border rounded">
+                   <SignaturePad onSave={setCustomerSignature} isSaving={signing} />
+               </div>
+               
+               {/* 3. BOTÃO FINAL DE CONFIRMAÇÃO ("ASSINAR") */}
+               <Button 
+                   onClick={handleSign} 
+                   disabled={signing || !agreed || !customerSignature} 
+                   className="w-full h-12 bg-primary hover:bg-primary/90 text-white font-bold text-lg rounded-xl shadow-lg"
+               >
+                   ASSINAR
+               </Button>
             </div>
           ) : (
             <div className="text-center py-6 space-y-4">

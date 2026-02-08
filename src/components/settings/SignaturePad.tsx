@@ -101,7 +101,7 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, initialSignature, d
       const container = canvas.parentElement;
       if (container) {
         canvas.width = container.clientWidth;
-        canvas.height = 150; // Fixed height for signature pad
+        canvas.height = 192; // Fixed height for h-48 equivalent
       }
       
       // Load initial signature if provided
@@ -153,14 +153,15 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, initialSignature, d
 
   return (
     <div className="space-y-3">
+      {/* 1. CONTAINER DA ASSINATURA */}
       <div className={cn(
-        "border-2 border-dashed rounded-xl bg-white relative",
+        "w-full h-48 bg-white border-2 border-dashed border-gray-300 rounded-xl relative", // Aplicando classes estritas
         disabled || isSaving ? "opacity-60 cursor-not-allowed" : "hover:border-blue-400 transition-colors"
       )}>
         <canvas 
           ref={canvasRef} 
-          className="w-full h-[150px]"
-          style={{ touchAction: 'none' }} // CORREÇÃO APLICADA AQUI
+          className="w-full h-full" // Ocupa 100% do container (192px)
+          style={{ touchAction: 'none' }} // Essencial para mobile UX
         />
         {isEmpty && (
           <div className="absolute inset-0 flex items-center justify-center text-muted-foreground pointer-events-none">
@@ -168,13 +169,15 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, initialSignature, d
           </div>
         )}
       </div>
-      <div className="flex justify-end gap-2">
+      
+      {/* 2. BOTÕES DE AÇÃO DA ASSINATURA: Grid responsivo */}
+      <div className="grid grid-cols-2 gap-3 mt-3">
         <Button 
           type="button" 
           variant="outline" 
           onClick={clearCanvas} 
           disabled={isEmpty || disabled || isSaving}
-          className="text-red-500 hover:bg-red-50"
+          className="w-full justify-center text-red-500 hover:bg-red-50"
         >
           <RotateCcw className="h-4 w-4 mr-2" /> Limpar
         </Button>
@@ -182,10 +185,10 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, initialSignature, d
           type="button" 
           onClick={saveSignature} 
           disabled={isEmpty || disabled || isSaving}
-          className="bg-green-600 hover:bg-green-700"
+          className="w-full justify-center bg-green-600 hover:bg-green-700"
         >
           {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-          Salvar Assinatura
+          Salvar
         </Button>
       </div>
     </div>
