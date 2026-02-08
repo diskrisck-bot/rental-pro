@@ -3,16 +3,80 @@
 @tailwind utilities;
 
 @layer base {
+  /* 1. Default Theme: Modern (Clean) - Light Mode */
   :root {
-    /* Industrial High-Impact Theme */
+    --background: 0 0% 100%; /* #ffffff */
+    --foreground: 222.2 47.4% 11.2%; /* #0f172a (Slate 900) */
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 47.4% 11.2%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 47.4% 11.2%;
+
+    --primary: 222.2 47.4% 11.2%; /* #0f172a (Primary = Dark Text/Buttons) */
+    --primary-foreground: 210 20% 98%; /* #f8fafc */
+
+    --secondary: 220 14.3% 95.9%; /* #f1f5f9 (Slate 100) */
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 220 14.3% 95.9%;
+    --muted-foreground: 215.4 16.3% 46.9%; /* #64748b */
+
+    --accent: 220 14.3% 95.9%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%; /* #ef4444 */
+    --destructive-foreground: 210 20% 98%;
+
+    --border: 220 13% 91%; /* #e2e8f0 */
+    --input: 220 13% 91%;
+    --ring: 222.2 47.4% 11.2%;
+
+    --radius: 0.5rem;
+  }
+
+  /* 2. Dark Mode (Applies to :root unless overridden by data-theme) */
+  .dark {
+    --background: 222.2 47.4% 4.9%; /* #020617 (Slate 950) */
+    --foreground: 210 20% 98%; /* #f8fafc */
+
+    --card: 222.2 47.4% 11.2%; /* #0f172a */
+    --card-foreground: 210 20% 98%;
+
+    --popover: 222.2 47.4% 11.2%;
+    --popover-foreground: 210 20% 98%;
+
+    --primary: 210 20% 98%; /* #f8fafc (Primary = Light Text/Buttons) */
+    --primary-foreground: 222.2 47.4% 4.9%;
+
+    --secondary: 220 14.3% 17.5%; /* #1e293b */
+    --secondary-foreground: 210 20% 98%;
+
+    --muted: 220 14.3% 17.5%;
+    --muted-foreground: 214.7 18.7% 71.4%; /* #94a3b8 */
+
+    --accent: 220 14.3% 17.5%;
+    --accent-foreground: 210 20% 98%;
+
+    --destructive: 0 62.8% 30.6%; /* #7f1d1d */
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 220 14.3% 17.5%;
+    --input: 220 14.3% 17.5%;
+    --ring: 214 3.2% 84.6%;
+  }
+
+  /* 3. Industrial Theme (Overrides Modern defaults when data-theme="industrial" is present) */
+  [data-theme="industrial"] {
     --background: 220 14.3% 97.8%; /* #F4F5F7 (Concrete Grey) */
     --foreground: 235 66% 30%; /* #1A237E (Legal Blue) */
 
     --card: 0 0% 100%; /* #FFFFFF */
     --card-foreground: 235 66% 30%; /* #1A237E */
 
-    --popover: 0 0% 100%; /* #FFFFFF */
-    --popover-foreground: 235 66% 30%; /* #1A237E */
+    --popover: 0 0% 100%;
+    --popover-foreground: 235 66% 30%;
 
     --primary: 30 100% 48%; /* #F57C00 (Safety Orange) */
     --primary-foreground: 0 0% 100%; /* #FFFFFF */
@@ -33,38 +97,7 @@
     --input: 0 0% 100%; /* #FFFFFF (Input Background) */
     --ring: 30 100% 48%; /* #F57C00 */
 
-    --radius: 0.5rem; /* 8px base */
-  }
-
-  .dark {
-    /* Simple Dark Mode Inversion */
-    --background: 235 66% 15%;
-    --foreground: 210 40% 98%;
-
-    --card: 235 66% 15%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 235 66% 15%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 30 100% 48%;
-    --primary-foreground: 0 0% 100%;
-
-    --secondary: 235 66% 30%;
-    --secondary-foreground: 0 0% 100%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 30 100% 48%;
+    --radius: 0.3rem;
   }
 }
 

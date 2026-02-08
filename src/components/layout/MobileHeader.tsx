@@ -18,10 +18,10 @@ const MobileHeader = () => {
   if (!isMobile) return null;
 
   return (
-    <header className="flex h-16 items-center justify-between px-4 border-b bg-white sticky top-0 z-40 shadow-sm">
+    <header className="flex h-16 items-center justify-between px-4 border-b bg-card sticky top-0 z-40 shadow-sm">
       {isInternalRoute ? (
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-6 w-6 text-gray-600" />
+          <ArrowLeft className="h-6 w-6 text-muted-foreground" />
         </Button>
       ) : (
         <div className="flex items-center gap-2">

@@ -73,30 +73,30 @@ const Timeline = () => {
     const isEndingToday = isSameDay(parseISO(endDate), startOfToday());
     
     if (isEndingToday && status !== 'returned') {
-        return { bg: 'bg-[#D32F2F]', border: 'border-red-700', text: 'text-white', label: 'VENCE HOJE' };
+        return { bg: 'bg-destructive', border: 'border-destructive/80', text: 'text-white', label: 'VENCE HOJE' };
     }
 
     switch (status) {
-      case 'signed': return { bg: 'bg-[#10B981]', border: 'border-green-600', text: 'text-white', label: 'ASSINADO' };
-      case 'picked_up': return { bg: 'bg-[#F57C00]', border: 'border-orange-600', text: 'text-white', label: 'NA RUA' };
-      case 'reserved': return { bg: 'bg-[#1A237E]', border: 'border-blue-800', text: 'text-white', label: 'RESERVADO' };
+      case 'signed': return { bg: 'bg-green-600', border: 'border-green-700', text: 'text-white', label: 'ASSINADO' };
+      case 'picked_up': return { bg: 'bg-primary', border: 'border-primary/80', text: 'text-white', label: 'NA RUA' };
+      case 'reserved': return { bg: 'bg-secondary', border: 'border-secondary/80', text: 'text-white', label: 'RESERVADO' };
       default: return { bg: 'bg-gray-400', border: 'border-gray-500', text: 'text-gray-900', label: status };
     }
   };
 
   return (
-    <div className="p-4 md:p-8 space-y-6 h-screen flex flex-col bg-[#F4F5F7]">
+    <div className="p-4 md:p-8 space-y-6 h-screen flex flex-col bg-background">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-[#1A237E] uppercase">Timeline de Contratos</h1>
-            <p className="text-gray-500 font-medium">Gestão visual por contrato e período.</p>
+            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground uppercase">Timeline de Contratos</h1>
+            <p className="text-muted-foreground font-medium">Gestão visual por contrato e período.</p>
         </div>
         
-        <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg p-1 shadow-sm">
-          <Button variant="ghost" size="icon" onClick={() => setViewStartDay(d => addDays(d, -15))}><ChevronLeft className="h-5 w-5 text-[#1A237E]" /></Button>
+        <div className="flex items-center gap-2 bg-card border border-border rounded-lg p-1 shadow-sm">
+          <Button variant="ghost" size="icon" onClick={() => setViewStartDay(d => addDays(d, -15))}><ChevronLeft className="h-5 w-5 text-secondary" /></Button>
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant={"outline"} className={cn("w-[180px] justify-start text-left font-bold text-[#1A237E] border-gray-300")}>
+              <Button variant={"outline"} className={cn("w-[180px] justify-start text-left font-bold text-secondary border-border")}>
                 <CalendarIcon className="mr-2 h-4 w-4" />{selectedDate ? format(selectedDate, "MMMM yyyy", { locale: ptBR }) : <span>Selecione</span>}
               </Button>
             </PopoverTrigger>
@@ -104,45 +104,45 @@ const Timeline = () => {
               <Calendar mode="single" selected={selectedDate} onSelect={handleDateSelect} initialFocus locale={ptBR} />
             </PopoverContent>
           </Popover>
-          <Button variant="ghost" size="icon" onClick={() => setViewStartDay(d => addDays(d, 15))}><ChevronRight className="h-5 w-5 text-[#1A237E]" /></Button>
+          <Button variant="ghost" size="icon" onClick={() => setViewStartDay(d => addDays(d, 15))}><ChevronRight className="h-5 w-5 text-secondary" /></Button>
         </div>
       </div>
 
-      <div className="flex-1 bg-white border border-gray-300 rounded-xl overflow-hidden relative shadow-hard">
+      <div className="flex-1 bg-card border border-border rounded-xl overflow-hidden relative shadow-hard">
         <div className="overflow-x-auto h-full">
           <div className="inline-block min-w-full">
             {/* Header Dias */}
-            <div className="flex sticky top-0 z-20 bg-gray-50 border-b border-gray-300 shadow-sm">
-              <div className="w-72 p-4 border-r border-gray-300 font-extrabold text-[#1A237E] bg-gray-100 sticky left-0 z-30 uppercase tracking-wide flex items-center gap-2">
+            <div className="flex sticky top-0 z-20 bg-muted border-b border-border shadow-sm">
+              <div className="w-72 p-4 border-r border-border font-extrabold text-secondary bg-accent sticky left-0 z-30 uppercase tracking-wide flex items-center gap-2">
                 <User className="h-4 w-4" /> Cliente / Contrato
               </div>
               {days.map((day) => (
-                <div key={day.toString()} className={`flex-1 min-w-[120px] p-4 text-center border-r border-gray-200 last:border-r-0 ${isSameDay(day, new Date()) ? 'bg-blue-50' : ''}`}>
-                  <div className="text-xs uppercase text-gray-500 font-bold">{format(day, 'EEE', { locale: ptBR })}</div>
-                  <div className={`text-xl font-black ${isSameDay(day, new Date()) ? 'text-[#F57C00]' : 'text-gray-700'}`}>{format(day, 'dd')}</div>
+                <div key={day.toString()} className={`flex-1 min-w-[120px] p-4 text-center border-r border-border/50 last:border-r-0 ${isSameDay(day, new Date()) ? 'bg-accent/30' : ''}`}>
+                  <div className="text-xs uppercase text-muted-foreground font-bold">{format(day, 'EEE', { locale: ptBR })}</div>
+                  <div className={`text-xl font-black ${isSameDay(day, new Date()) ? 'text-primary' : 'text-foreground'}`}>{format(day, 'dd')}</div>
                 </div>
               ))}
             </div>
 
             {/* Linhas dos Contratos */}
-            {isLoading ? <div className="flex justify-center p-20"><Loader2 className="animate-spin h-8 w-8 text-[#1A237E]"/></div> : 
-             orders?.length === 0 ? <div className="p-10 text-center text-gray-400 font-medium">Nenhum contrato ativo neste período.</div> : 
+            {isLoading ? <div className="flex justify-center p-20"><Loader2 className="animate-spin h-8 w-8 text-primary"/></div> : 
+             orders?.length === 0 ? <div className="p-10 text-center text-muted-foreground font-medium">Nenhum contrato ativo neste período.</div> : 
              orders?.map((order: any) => {
                const position = getBlockPosition(order.start_date, order.end_date, days);
                const style = getStatusConfig(order.status, order.end_date);
                
                return (
-                 <div key={order.id} className="flex border-b border-gray-200 last:border-b-0 hover:bg-gray-50 transition-colors group h-16 relative">
+                 <div key={order.id} className="flex border-b border-border/50 last:border-b-0 hover:bg-accent/10 transition-colors group h-16 relative">
                    {/* Coluna Fixa do Cliente */}
-                   <div className="w-72 p-3 border-r border-gray-300 bg-white sticky left-0 z-10 group-hover:bg-gray-50 flex flex-col justify-center shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
-                     <span className="font-bold text-[#1A237E] truncate" title={order.customer_name}>{order.customer_name}</span>
-                     <span className="text-xs text-gray-500 font-medium">#{order.id.split('-')[0]}</span>
+                   <div className="w-72 p-3 border-r border-border bg-card sticky left-0 z-10 group-hover:bg-accent/10 flex flex-col justify-center shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                     <span className="font-bold text-secondary truncate" title={order.customer_name}>{order.customer_name}</span>
+                     <span className="text-xs text-muted-foreground font-medium">#{order.id.split('-')[0]}</span>
                    </div>
                    
                    {/* Grade e Barra */}
                    <div className="flex flex-1 relative h-full items-center">
                      {days.map((day) => (
-                        <div key={day.toString()} className={`flex-1 min-w-[120px] h-full border-r border-gray-100 last:border-r-0 ${isSameDay(day, new Date()) ? 'bg-blue-50/30' : ''}`} />
+                        <div key={day.toString()} className={`flex-1 min-w-[120px] h-full border-r border-border/30 last:border-r-0 ${isSameDay(day, new Date()) ? 'bg-accent/10' : ''}`} />
                      ))}
                      
                      {position && (
@@ -160,15 +160,15 @@ const Timeline = () => {
                                {style.label}
                              </Link>
                            </TooltipTrigger>
-                           <TooltipContent className="bg-[#1A237E] text-white border-none p-4 rounded-lg shadow-xl">
-                             <div className="font-bold mb-2 text-lg border-b border-blue-500 pb-1">{order.customer_name}</div>
-                             <div className="text-xs text-blue-200 mb-2 font-mono">
+                           <TooltipContent className="bg-secondary text-secondary-foreground border-none p-4 rounded-lg shadow-xl">
+                             <div className="font-bold mb-2 text-lg border-b border-primary/50 pb-1">{order.customer_name}</div>
+                             <div className="text-xs text-muted-foreground mb-2 font-mono">
                                {format(parseISO(order.start_date), 'dd/MM')} até {format(parseISO(order.end_date), 'dd/MM')}
                              </div>
                              <div className="space-y-1">
                                {order.order_items?.map((item: any, idx: number) => (
                                  <div key={idx} className="flex items-center gap-2 text-sm">
-                                   <Box className="h-3 w-3 text-[#F57C00]" /> 
+                                   <Box className="h-3 w-3 text-primary" /> 
                                    <span className="font-bold">{item.quantity}x</span> {item.products?.name}
                                  </div>
                                ))}
