@@ -61,6 +61,10 @@ export default {
         lg: "0.75rem", // 12px max
         md: "var(--radius)", // 8px
         sm: "calc(var(--radius) - 2px)", // 6px
+        xl: "1rem", // 16px
+      },
+      boxShadow: {
+        'hard-shadow': '4px 4px 0px 0px rgba(26, 35, 126, 0.2)', // Legal Blue shadow
       },
       keyframes: {
         "accordion-down": {
