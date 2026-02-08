@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Plus, Trash2, Loader2, Wallet, Edit, CreditCard, Clock, Zap, Calendar, AlertTriangle, Package, AlertCircle, CheckCircle } from 'lucide-react';
+import { Plus, Trash2, Loader2, Wallet, Edit, CreditCard, Clock, Zap, Calendar, AlertTriangle, Package, AlertCircle, CheckCircle, Truck, Store } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { 
   Dialog, 
@@ -29,6 +29,7 @@ import MaskedInput from 'react-text-mask';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAllProducts } from '@/integrations/supabase/queries';
 import { Badge } from '@/components/ui/badge';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'; // Import RadioGroup
 
 interface CreateOrderDialogProps {
   orderId?: string; // Se presente, entra em modo de edição
@@ -90,6 +91,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
       payment_method: 'Pix', // Default value
       payment_timing: 'paid_on_pickup', // Default value
       fulfillment_type: 'reservation', // Novo campo padrão
+      delivery_method: 'pickup', // NOVO CAMPO PADRÃO
     }
   });
 
@@ -97,6 +99,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
   const watchPaymentMethod = watch('payment_method');
   const watchPaymentTiming = watch('payment_timing');
   const watchFulfillmentType = watch('fulfillment_type');
+  const watchDeliveryMethod = watch('delivery_method'); // NOVO WATCH
   const [startDateStr, endDateStr] = watchDates;
 
   const financialSummary = useMemo(() => {
@@ -266,6 +269,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             setValue('payment_method', orderData.payment_method || 'Pix');
             setValue('payment_timing', orderData.payment_timing || 'paid_on_pickup');
             setValue('fulfillment_type', orderData.fulfillment_type || 'reservation');
+            setValue('delivery_method', orderData.delivery_method || 'pickup'); // CARREGA NOVO CAMPO
             
             // Inicializa o estado local do documento
             setCustomerDocument(orderData.customer_cpf || '');
@@ -289,6 +293,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             payment_method: 'Pix',
             payment_timing: 'paid_on_pickup',
             fulfillment_type: 'reservation',
+            delivery_method: 'pickup', // RESET NOVO CAMPO
           });
           setCustomerDocument('');
           setSelectedItems([]);
@@ -548,6 +553,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         payment_method: values.payment_method,
         payment_timing: values.payment_timing,
         fulfillment_type: values.fulfillment_type,
+        delivery_method: values.delivery_method, // SALVA NOVO CAMPO
         status: orderId ? undefined : initialStatus 
       };
 
@@ -718,6 +724,49 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
                   />
                 </div>
               </div>
+            </div>
+            
+            {/* NOVO CAMPO: MÉTODO DE ENTREGA */}
+            <div className="border-t pt-4 space-y-3">
+                <Label className="text-base font-semibold flex items-center gap-2">
+                    <Truck className="h-4 w-4 text-secondary" /> Responsabilidade Logística
+                </Label>
+                <RadioGroup 
+                    value={watchDeliveryMethod} 
+                    onValueChange={(val) => setValue('delivery_method', val)}
+                    className="grid grid-cols-1 md:grid-cols-2 gap-4"
+                >
+                    <Label 
+                        htmlFor="pickup" 
+                        className={cn(
+                            "flex flex-col items-center justify-between rounded-xl border-2 p-4 cursor-pointer transition-all",
+                            watchDeliveryMethod === 'pickup' ? "border-primary bg-primary/5 shadow-md" : "border-gray-200 hover:bg-gray-50"
+                        )}
+                    >
+                        <div className="flex items-center space-x-3 w-full">
+                            <RadioGroupItem value="pickup" id="pickup" className="h-5 w-5" />
+                            <div className="flex-1">
+                                <span className="font-bold text-sm flex items-center gap-2"><Store className="h-4 w-4" /> Retirada (Balcão)</span>
+                                <p className="text-xs text-muted-foreground mt-1">Cliente retira e devolve no seu endereço.</p>
+                            </div>
+                        </div>
+                    </Label>
+                    <Label 
+                        htmlFor="delivery" 
+                        className={cn(
+                            "flex flex-col items-center justify-between rounded-xl border-2 p-4 cursor-pointer transition-all",
+                            watchDeliveryMethod === 'delivery' ? "border-primary bg-primary/5 shadow-md" : "border-gray-200 hover:bg-gray-50"
+                        )}
+                    >
+                        <div className="flex items-center space-x-3 w-full">
+                            <RadioGroupItem value="delivery" id="delivery" className="h-5 w-5" />
+                            <div className="flex-1">
+                                <span className="font-bold text-sm flex items-center gap-2"><Truck className="h-4 w-4" /> Entrega (Frete)</span>
+                                <p className="text-xs text-muted-foreground mt-1">Locadora entrega e retira no endereço do cliente.</p>
+                            </div>
+                        </div>
+                    </Label>
+                </RadioGroup>
             </div>
 
             <div className="border-t pt-4">

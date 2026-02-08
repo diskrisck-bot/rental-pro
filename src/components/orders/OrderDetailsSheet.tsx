@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { 
   Loader2, Calendar, Package, ClipboardCheck, ArrowRightLeft, Edit, 
   CheckCircle, Phone, User, History, AlertCircle, MessageCircle, 
-  Download, AlertTriangle, XCircle, Truck 
+  Download, AlertTriangle, XCircle, Truck, Store
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { format, isAfter, parseISO, differenceInDays } from 'date-fns';
@@ -165,9 +165,16 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     printSectionTitle("CLÁUSULA 4 - DA RESPONSABILIDADE E USO"); 
     printBody("O LOCATÁRIO declara receber os bens em perfeito estado de funcionamento e conservação. É de inteira responsabilidade do LOCATÁRIO a guarda e o uso correto dos equipamentos. Em caso de dano, avaria, roubo ou furto, o LOCATÁRIO arcará com o custo integral de reparo ou reposição do bem por um novo, de mesma marca e modelo, conforme os valores de reposição listados na Cláusula 1.");
 
-    // CLÁUSULA 5 - DO TRANSPORTE
+    // CLÁUSULA 5 - DO TRANSPORTE (DINÂMICA)
     printSectionTitle("CLÁUSULA 5 - DO TRANSPORTE"); 
-    printBody("O transporte dos equipamentos (retirada e devolução) corre por conta e risco do LOCATÁRIO, salvo disposição em contrário expressa neste contrato.");
+    
+    let transporteText = "";
+    if (order.delivery_method === 'pickup') {
+        transporteText = "O LOCATÁRIO responsabiliza-se integralmente pela retirada e devolução dos bens no endereço do LOCADOR, assumindo todos os riscos e custos de transporte.";
+    } else { // delivery
+        transporteText = "O LOCADOR responsabiliza-se pela entrega e retirada dos bens no endereço indicado pelo LOCATÁRIO. O LOCATÁRIO deve garantir que haja pessoa autorizada para receber e conferir os bens no horário agendado.";
+    }
+    printBody(transporteText);
 
     // CLÁUSULA 6 - DA RESCISÃO
     printSectionTitle("CLÁUSULA 6 - DA RESCISÃO"); 
@@ -198,12 +205,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     doc.line(120, yAssin, 190, yAssin); 
     doc.text("LOCATÁRIO", 120, yAssin + 5);
     
-    // Testemunhas (Opcional)
-    currentY = yAssin + 20;
-    doc.line(margin, currentY, margin + 70, currentY); 
-    doc.text("TESTEMUNHA 1", margin, currentY + 5);
-    doc.line(120, currentY, 190, currentY); 
-    doc.text("TESTEMUNHA 2", 120, currentY + 5);
+    // REMOÇÃO DE TESTEMUNHAS: Não adicionamos mais espaço para testemunhas.
 
     // Certificado Digital (Se assinado)
     if (order.signed_at) {
@@ -269,6 +271,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
   const status = order?.status;
   const isFinalized = status === 'returned' || status === 'canceled';
   const showWhatsappButton = !isSigned && !isFinalized;
+  const isDelivery = order?.delivery_method === 'delivery';
 
   const getStatusBadge = () => {
       switch(status) {
@@ -306,6 +309,22 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
             <p className="text-4xl font-black">R$ {Number(order?.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
           </div>
           
+          {/* Detalhe Logístico (NOVO) */}
+          <div className={cn(
+              "rounded-[var(--radius)] p-4 border flex items-center gap-3",
+              isDelivery ? "bg-secondary/10 border-secondary/20" : "bg-gray-100 border-gray-200"
+          )}>
+              {isDelivery ? <Truck className="h-6 w-6 text-secondary" /> : <Store className="h-6 w-6 text-gray-600" />}
+              <div>
+                  <p className="font-bold text-sm text-foreground">
+                      {isDelivery ? "Entrega pela Locadora (Frete)" : "Retirada pelo Cliente (Balcão)"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                      {isDelivery ? "Responsabilidade de transporte é da Locadora." : "Responsabilidade de transporte é do Cliente."}
+                  </p>
+              </div>
+          </div>
+
           {/* Ações Documentais */}
           <div className={cn("grid gap-3", showWhatsappButton ? "grid-cols-2" : "grid-cols-1")}>
              
