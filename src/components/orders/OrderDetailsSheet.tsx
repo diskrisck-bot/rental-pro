@@ -278,60 +278,62 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
         </div>
 
         {/* FOOTER FIXO */}
-        <SheetFooter className="p-6 border-t border-gray-200 bg-white mt-auto flex flex-col gap-3">
-           
-           {/* AÇÃO PRINCIPAL (Retirada / Devolução) */}
-           {status === 'signed' && (
-             <Button 
-                className="w-full h-14 bg-[#10B981] hover:bg-green-600 text-white font-bold uppercase tracking-wide text-lg shadow-lg" 
-                onClick={() => updateStatus('returned')}
-                disabled={updating}
-             >
-               {updating ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <ArrowRightLeft className="mr-2 h-6 w-6" />} 
-               Registrar Devolução (Estoque Volta)
-             </Button>
-           )}
+        <SheetFooter className="border-t border-gray-200 bg-white mt-auto w-full">
+            <div className="p-6 flex flex-col gap-3">
+                
+                {/* AÇÃO PRINCIPAL (Retirada / Devolução) */}
+                {status === 'signed' && (
+                    <Button 
+                        className="w-full h-14 bg-[#10B981] hover:bg-green-600 text-white font-bold uppercase tracking-wide text-lg shadow-lg" 
+                        onClick={() => updateStatus('returned')}
+                        disabled={updating}
+                    >
+                        {updating ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <ArrowRightLeft className="mr-2 h-6 w-6" />} 
+                        Registrar Devolução (Estoque Volta)
+                    </Button>
+                )}
 
-           {status === 'reserved' && (
-             <Button 
-                className="w-full h-14 bg-[#F57C00] hover:bg-orange-600 text-white font-bold uppercase tracking-wide text-lg shadow-lg" 
-                onClick={() => updateStatus('picked_up')}
-                disabled={updating}
-             >
-               {updating ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <Truck className="mr-2 h-6 w-6" />} 
-               Confirmar Retirada
-             </Button>
-           )}
+                {status === 'reserved' && (
+                    <Button 
+                        className="w-full h-14 bg-[#F57C00] hover:bg-orange-600 text-white font-bold uppercase tracking-wide text-lg shadow-lg" 
+                        onClick={() => updateStatus('picked_up')}
+                        disabled={updating}
+                    >
+                        {updating ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <Truck className="mr-2 h-6 w-6" />} 
+                        Confirmar Retirada
+                    </Button>
+                )}
 
-           {status === 'picked_up' && (
-             <Button 
-                className="w-full h-14 bg-[#10B981] hover:bg-green-600 text-white font-bold uppercase tracking-wide text-lg shadow-lg" 
-                onClick={() => updateStatus('returned')}
-                disabled={updating}
-             >
-               {updating ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <ArrowRightLeft className="mr-2 h-6 w-6" />} 
-               Registrar Devolução
-             </Button>
-           )}
+                {status === 'picked_up' && (
+                    <Button 
+                        className="w-full h-14 bg-[#10B981] hover:bg-green-600 text-white font-bold uppercase tracking-wide text-lg shadow-lg" 
+                        onClick={() => updateStatus('returned')}
+                        disabled={updating}
+                    >
+                        {updating ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <ArrowRightLeft className="mr-2 h-6 w-6" />} 
+                        Registrar Devolução
+                    </Button>
+                )}
 
-           {/* MENSAGEM DE SUCESSO (Se finalizado) */}
-           {isFinalized && (
-               <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-center justify-center gap-2 text-green-700 font-bold">
-                   <CheckCircle className="h-5 w-5" /> Contrato Finalizado
-               </div>
-           )}
+                {/* MENSAGEM DE SUCESSO (Se finalizado) */}
+                {isFinalized && (
+                    <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-center justify-center gap-2 text-green-700 font-bold">
+                        <CheckCircle className="h-5 w-5" /> Contrato Finalizado
+                    </div>
+                )}
 
-           {/* CANCELAR (Abaixo da ação principal, se não estiver finalizado) */}
-           {!isFinalized && (
-             <Button 
-                variant="ghost" 
-                className="w-full text-red-500 hover:text-red-700 hover:bg-red-50 font-bold uppercase text-xs mt-2" 
-                onClick={handleCancelOrder} 
-                disabled={updating}
-             >
-               <XCircle className="mr-2 h-4 w-4" /> Cancelar Pedido
-             </Button>
-           )}
+                {/* CANCELAR (Abaixo da ação principal, se não estiver finalizado) */}
+                {!isFinalized && (
+                    <Button 
+                        variant="ghost" 
+                        className="w-full text-red-500 hover:text-red-700 hover:bg-red-50 font-bold uppercase text-xs mt-2" 
+                        onClick={handleCancelOrder} 
+                        disabled={updating}
+                    >
+                        <XCircle className="mr-2 h-4 w-4" /> Cancelar Pedido
+                    </Button>
+                )}
+            </div>
         </SheetFooter>
       </SheetContent>
     </Sheet>
