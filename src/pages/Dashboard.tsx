@@ -175,7 +175,7 @@ const QuickInventoryWidget = ({ products, activeOrders }: any) => {
               </div>
               <div className="text-right">
                 {item.status === 'out_of_stock' && <Badge className="bg-destructive text-white font-bold hover:bg-destructive/90">ESGOTADO</Badge>}
-                {item.status === 'low_stock' && <Badge className="bg-primary text-white font-bold hover:bg-primary/90">{item.available} RESTANTES}</Badge>}
+                {item.status === 'low_stock' && <Badge className="bg-primary text-white font-bold hover:bg-primary/90">{item.available} RESTANTES</Badge>}
                 {item.status === 'available' && <Badge className="bg-success text-white font-bold hover:bg-success/90">{item.available} DISPONÍVEIS</Badge>}
               </div>
             </div>
