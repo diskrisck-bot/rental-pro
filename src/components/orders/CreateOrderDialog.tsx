@@ -53,7 +53,7 @@ interface ProductData {
 
 // Máscaras
 const phoneMask = ['(', /[1-9]/, /\d/, ')', ' ', /\d/, /\d/, /\d/, /\d/, /\d/, '-', /\d/, /\d/, /\d/, /\d/];
-const cpfMask = [/\d/, /\d/, /\d/, '.', /\d/, /\d/, /\d/, '.', /\d/, /\d/, /\d/, '-', /\d/, /\d/];
+// Removendo cpfMask, pois usaremos lógica customizada para CPF/CNPJ
 
 const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDialogProps) => {
   const [open, setOpen] = useState(false);
@@ -64,6 +64,9 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
   const [currentProductId, setCurrentProductId] = useState("");
   const [currentQuantity, setCurrentQuantity] = useState(1);
   const [currentAvailability, setCurrentAvailability] = useState<number | null>(null);
+  
+  // Novo estado para gerenciar o valor formatado do documento (CPF/CNPJ)
+  const [customerDocument, setCustomerDocument] = useState('');
 
   // Fetch products using useQuery
   const { data: products, isLoading: isProductsLoading, isError: isProductsError } = useQuery<ProductData[]>({
@@ -81,7 +84,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
     defaultValues: {
       customer_name: '',
       customer_phone: '',
-      customer_cpf: '',
+      customer_cpf: '', // Este campo será preenchido pelo estado local
       start_date: defaultStartDate,
       end_date: defaultEndDate,
       payment_method: 'Pix', // Default value
@@ -99,6 +102,34 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
   const financialSummary = useMemo(() => {
     return calculateOrderTotal(startDateStr, endDateStr, selectedItems);
   }, [selectedItems, startDateStr, endDateStr]);
+
+  // Lógica de Máscara Dinâmica
+  const handleDocumentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // 1. Remove tudo que não é número
+    let value = e.target.value.replace(/\D/g, '');
+    
+    // 2. Limita a 14 números (CNPJ)
+    if (value.length > 14) value = value.slice(0, 14);
+
+    // 3. Aplica a Máscara
+    if (value.length <= 11) {
+      // Máscara CPF: 000.000.000-00
+      value = value.replace(/(\d{3})(\d)/, '$1.$2');
+      value = value.replace(/(\d{3})(\d)/, '$1.$2');
+      value = value.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+    } else {
+      // Máscara CNPJ: 00.000.000/0000-00
+      value = value.replace(/^(\d{2})(\d)/, '$1.$2');
+      value = value.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
+      value = value.replace(/\.(\d{3})(\d)/, '.$1/$2');
+      value = value.replace(/(\d{4})(\d)/, '$1-$2');
+    }
+
+    // 4. Atualiza o estado
+    setCustomerDocument(value);
+    // Atualiza o valor no React Hook Form para submissão
+    setValue('customer_cpf', value, { shouldValidate: true });
+  };
 
   // Efeito para ajustar a data de início quando o tipo de cumprimento muda
   useEffect(() => {
@@ -230,12 +261,15 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
           if (orderData) {
             setValue('customer_name', orderData.customer_name);
             setValue('customer_phone', orderData.customer_phone || '');
-            setValue('customer_cpf', orderData.customer_cpf || '');
             setValue('start_date', format(parseISO(orderData.start_date), 'yyyy-MM-dd'));
             setValue('end_date', format(parseISO(orderData.end_date), 'yyyy-MM-dd'));
             setValue('payment_method', orderData.payment_method || 'Pix');
             setValue('payment_timing', orderData.payment_timing || 'paid_on_pickup');
             setValue('fulfillment_type', orderData.fulfillment_type || 'reservation');
+            
+            // Inicializa o estado local do documento
+            setCustomerDocument(orderData.customer_cpf || '');
+            setValue('customer_cpf', orderData.customer_cpf || '');
             
             const existingItems = orderData.order_items.map((item: any) => ({
               product_id: item.product_id,
@@ -256,6 +290,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             payment_timing: 'paid_on_pickup',
             fulfillment_type: 'reservation',
           });
+          setCustomerDocument('');
           setSelectedItems([]);
         }
         setFetchingData(false);
@@ -329,11 +364,11 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         let peakDate = newOrderStartDate;
         
         // Usando new Date() para garantir que a iteração funcione corretamente
-        const start = new Date(newOrderStartDate);
-        const end = new Date(newOrderEndDate);
+        const start = parseISO(newOrderStartDate);
+        const end = parseISO(newOrderEndDate);
 
         // Loop dia a dia
-        for (let d = new Date(start); d <= end; d = addDays(d, 1)) {
+        for (let d = start; d <= end; d = addDays(d, 1)) {
           const currentDayStr = format(d, 'yyyy-MM-dd');
 
           const usageOnThisDay = (activeRentals || []).reduce((acc: number, item: any) => {
@@ -647,16 +682,17 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="customer_cpf">CPF</Label>
-                  <MaskedInput
-                    mask={cpfMask}
-                    placeholder="XXX.XXX.XXX-XX"
+                  <Label htmlFor="customer_cpf">CPF / CNPJ</Label>
+                  <Input
                     id="customer_cpf"
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    value={watch('customer_cpf')}
-                    onChange={(e) => setValue('customer_cpf', e.target.value)}
+                    placeholder="Digite o CPF ou CNPJ"
+                    maxLength={18} // CNPJ formatado tem 18 caracteres
+                    value={customerDocument}
+                    onChange={handleDocumentChange}
                     required
                   />
+                  {/* O campo customer_cpf do RHF é atualizado via setValue em handleDocumentChange */}
+                  <input type="hidden" {...register('customer_cpf', { required: true })} />
                 </div>
               </div>
 
