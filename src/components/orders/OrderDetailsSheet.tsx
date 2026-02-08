@@ -279,7 +279,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
 
         {/* FOOTER FIXO */}
         <SheetFooter className="border-t border-gray-200 bg-white mt-auto w-full">
-            <div className="p-6 flex flex-col gap-3">
+            <div className="p-6 flex flex-col gap-3 w-full">
                 
                 {/* AÇÃO PRINCIPAL (Retirada / Devolução) */}
                 {status === 'signed' && (
