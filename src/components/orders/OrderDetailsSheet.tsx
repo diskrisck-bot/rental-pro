@@ -257,7 +257,13 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
                 onClick={handleDownloadFinalPDF} 
                 disabled={isGeneratingContract} 
                 variant={isSigned ? "default" : "outline"} 
-                className={cn("w-full h-12 font-bold", isSigned ? "bg-secondary hover:bg-secondary/90 text-foreground" : "border-foreground text-foreground", !showWhatsappButton && "col-span-full")}
+                className={cn(
+                    "w-full h-12 font-bold", 
+                    isSigned 
+                        ? "bg-secondary hover:bg-secondary/90 text-white" // CORREÇÃO APLICADA AQUI: Forçando text-white
+                        : "border-foreground text-foreground", 
+                    !showWhatsappButton && "col-span-full"
+                )}
              >
                 {isGeneratingContract ? <Loader2 className="animate-spin mr-2" /> : <Download className="mr-2 h-4 w-4" />} 
                 {isSigned ? 'Baixar Contrato Assinado' : 'Baixar Rascunho PDF'}
@@ -286,11 +292,11 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
                 {status === 'signed' && (
                     <Button 
                         className="w-full h-14 bg-success hover:bg-success/90 text-white font-bold uppercase text-lg shadow-lg" 
-                        onClick={() => updateStatus('returned')}
+                        onClick={() => updateStatus('picked_up')} // Corrigido para 'picked_up'
                         disabled={updating}
                     >
-                        {updating ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <ArrowRightLeft className="mr-2 h-6 w-6" />} 
-                        REGISTRAR DEVOLUÇÃO
+                        {updating ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <Truck className="mr-2 h-6 w-6" />} 
+                        CONFIRMAR RETIRADA
                     </Button>
                 )}
 
