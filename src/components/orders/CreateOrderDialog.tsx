@@ -69,7 +69,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
   const [customerDocument, setCustomerDocument] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState('');
 
-  const { data: products, isLoading: isProductsLoading, isError: isProductsError } = useQuery<ProductData[]>({
+  const { data: products, isLoading: isProductsLoading } = useQuery<ProductData[]>({
     queryKey: ['allProducts'],
     queryFn: fetchAllProducts,
     enabled: open,
@@ -131,34 +131,18 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
   }, [watchFulfillmentType, setValue, orderId]);
 
   const checkAvailabilityForUI = useCallback(async (productId: string, start: string, end: string): Promise<number> => {
-    const product = productList.find(p => p.id === productId);
-    if (!product) return 0;
-
-    const { data: productData, error: prodError } = await supabase
-      .from('products')
-      .select('total_quantity')
-      .eq('id', productId)
-      .single();
-      
-    if (prodError || !productData) return 0;
+    const { data: productData } = await supabase.from('products').select('total_quantity').eq('id', productId).single();
+    if (!productData) return 0;
     const totalEstoque = Number(productData.total_quantity) || 0;
 
-    const newOrderStartDate = `${start}T12:00:00.000Z`;
-    const newOrderEndDate = `${end}T12:00:00.000Z`;
-
-    const { data: activeRentals, error: conflictError } = await supabase
+    const { data: activeRentals } = await supabase
       .from('order_items')
-      .select(`
-        quantity,
-        orders!inner (start_date, end_date, status)
-      `)
+      .select(`quantity, orders!inner (start_date, end_date, status)`)
       .eq('product_id', productId)
       .neq('order_id', orderId || '00000000-0000-0000-0000-000000000000') 
       .in('orders.status', ['signed', 'reserved', 'picked_up']) 
-      .lte('orders.start_date', newOrderEndDate)
-      .gte('orders.end_date', newOrderStartDate);
-
-    if (conflictError) return 0;
+      .lte('orders.start_date', `${end}T12:00:00.000Z`)
+      .gte('orders.end_date', `${start}T12:00:00.000Z`);
 
     let maxUsage = 0;
     const startDay = parseISO(start);
@@ -166,17 +150,16 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
 
     for (let d = startDay; d <= endDay; d = addDays(d, 1)) {
       const currentDayStr = format(d, 'yyyy-MM-dd');
-      const usageOnThisDay = (activeRentals || []).reduce((acc, item) => {
-        const itemQuantity = Number(item.quantity) || 0;
+      const usageOnThisDay = (activeRentals || []).reduce((acc: number, item: any) => {
         const itemStart = item.orders.start_date.split('T')[0];
         const itemEnd = item.orders.end_date.split('T')[0];
-        if (currentDayStr >= itemStart && currentDayStr <= itemEnd) return acc + itemQuantity;
+        if (currentDayStr >= itemStart && currentDayStr <= itemEnd) return acc + Number(item.quantity);
         return acc;
       }, 0);
       if (usageOnThisDay > maxUsage) maxUsage = usageOnThisDay;
     }
     return Math.max(0, totalEstoque - maxUsage);
-  }, [productList, orderId]);
+  }, [orderId]);
 
   useEffect(() => {
     if (currentProductId && startDateStr && endDateStr) {
@@ -185,25 +168,16 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         return;
       }
       setCurrentAvailability(null);
-      checkAvailabilityForUI(currentProductId, startDateStr, endDateStr)
-        .then(setCurrentAvailability);
-    } else {
-      setCurrentAvailability(null);
+      checkAvailabilityForUI(currentProductId, startDateStr, endDateStr).then(setCurrentAvailability);
     }
   }, [currentProductId, startDateStr, endDateStr, checkAvailabilityForUI]);
 
   useEffect(() => {
     if (open) {
       const init = async () => {
-        if (orderId && isProductsLoading) return;
         setFetchingData(true);
         if (orderId) {
-          const { data: orderData } = await supabase
-            .from('orders')
-            .select('*, order_items(*, products(name, price))')
-            .eq('id', orderId)
-            .single();
-
+          const { data: orderData } = await supabase.from('orders').select('*, order_items(*, products(name, price))').eq('id', orderId).single();
           if (orderData) {
             setValue('customer_name', orderData.customer_name);
             setValue('customer_phone', orderData.customer_phone || '');
@@ -212,17 +186,8 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             setValue('payment_method', orderData.payment_method || 'Pix');
             setValue('payment_timing', orderData.payment_timing || 'paid_on_pickup');
             setValue('fulfillment_type', orderData.fulfillment_type || 'reservation');
-            
-            // Parsing do Composite Field para edição
-            const rawMethod = orderData.delivery_method || 'pickup';
-            if (rawMethod.startsWith('delivery')) {
-                setValue('delivery_method', 'delivery');
-                setDeliveryAddress(rawMethod.split('|')[1] || '');
-            } else {
-                setValue('delivery_method', 'pickup');
-                setDeliveryAddress('');
-            }
-
+            setValue('delivery_method', orderData.delivery_method || 'pickup'); 
+            setDeliveryAddress(orderData.delivery_address || '');
             setCustomerDocument(orderData.customer_cpf || '');
             setValue('customer_cpf', orderData.customer_cpf || '');
             const existingItems = orderData.order_items.map((item: any) => ({
@@ -251,31 +216,20 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         }
         setFetchingData(false);
       };
-      if (!orderId || !isProductsLoading) init();
+      init();
     }
-  }, [open, orderId, setValue, reset, isProductsLoading]);
+  }, [open, orderId, setValue, reset]);
 
   const addItem = async () => {
-    if (!startDateStr || !endDateStr || isBefore(parseISO(endDateStr), parseISO(startDateStr)) || !currentProductId || currentQuantity < 1) return;
+    if (!startDateStr || !endDateStr || !currentProductId || currentQuantity < 1) return;
     const product = productList.find(p => p.id === currentProductId);
     if (!product) return;
     setLoading(true);
     try {
-        const { data: productData } = await supabase.from('products').select('total_quantity').eq('id', currentProductId).single();
-        const totalEstoque = Number(productData?.total_quantity) || 0;
-        const { data: activeRentals } = await supabase.from('order_items').select('quantity, orders!inner (start_date, end_date, status)').eq('product_id', currentProductId).neq('order_id', orderId || '00000000-0000-0000-0000-000000000000').in('orders.status', ['signed', 'reserved', 'picked_up']).lte('orders.start_date', `${endDateStr}T12:00:00.000Z`).gte('orders.end_date', `${startDateStr}T12:00:00.000Z`);
-        let maxUsage = 0;
-        const start = parseISO(startDateStr);
-        const end = parseISO(endDateStr);
-        for (let d = start; d <= end; d = addDays(d, 1)) {
-          const currentDayStr = format(d, 'yyyy-MM-dd');
-          const usageOnThisDay = (activeRentals || []).reduce((acc: number, item: any) => (currentDayStr >= item.orders.start_date.split('T')[0] && currentDayStr <= item.orders.end_date.split('T')[0]) ? acc + Number(item.quantity) : acc, 0);
-          if (usageOnThisDay > maxUsage) maxUsage = usageOnThisDay;
-        }
-        const disponivel = totalEstoque - maxUsage;
+        const avail = await checkAvailabilityForUI(currentProductId, startDateStr, endDateStr);
         const quantityInCart = selectedItems.filter(item => item.product_id === currentProductId).reduce((sum, item) => sum + item.quantity, 0);
-        if (quantityInCart + currentQuantity > disponivel) {
-            showError(`Estoque insuficiente. Máximo disponível: ${disponivel} un.`);
+        if (quantityInCart + currentQuantity > avail) {
+            showError(`Estoque insuficiente. Máximo disponível: ${avail} un.`);
             return; 
         }
         const existingItemIndex = selectedItems.findIndex(item => item.product_id === currentProductId);
@@ -309,28 +263,27 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
       const newStart = new Date(`${values.start_date}T12:00:00`);
       const newEnd = new Date(`${values.end_date}T12:00:00`);
 
-      // Implementação do Composite Field pattern
-      const compositeDeliveryMethod = values.delivery_method === 'delivery' 
-        ? `delivery|${deliveryAddress.trim()}` 
-        : 'pickup';
-
+      // Payload Seguro: Garantindo que valores nulos sejam explicitamente null, não undefined
       const orderPayload: any = {
         customer_name: values.customer_name,
-        customer_phone: values.customer_phone,
-        customer_cpf: values.customer_cpf,
+        customer_phone: values.customer_phone || null,
+        customer_cpf: values.customer_cpf || null,
         start_date: newStart.toISOString(), 
         end_date: newEnd.toISOString(),     
         total_amount: financialSummary.totalAmount,
-        payment_method: values.payment_method,
-        payment_timing: values.payment_timing,
-        fulfillment_type: values.fulfillment_type,
-        delivery_method: compositeDeliveryMethod, // Usando o campo composto
+        payment_method: values.payment_method || 'Pix',
+        payment_timing: values.payment_timing || 'paid_on_pickup',
+        fulfillment_type: values.fulfillment_type || 'reservation',
+        delivery_method: values.delivery_method || 'pickup', 
+        delivery_address: values.delivery_method === 'delivery' ? (deliveryAddress.trim() || null) : null,
         user_id: user.id
       };
 
       if (!orderId) {
         orderPayload.status = 'pending_signature';
       }
+
+      console.log("[CreateOrderDialog] Enviando Pedido:", orderPayload);
 
       let currentOrderId = orderId;
 
@@ -340,7 +293,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
           .update(orderPayload)
           .eq('id', orderId);
 
-        if (updateError) throw new Error(`Erro ao atualizar pedido: ${updateError.message}`);
+        if (updateError) throw updateError;
         await supabase.from('order_items').delete().eq('order_id', orderId);
       } else {
         const { data: newOrder, error: insertError } = await supabase
@@ -349,7 +302,10 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
           .select()
           .single();
 
-        if (insertError || !newOrder) throw new Error(`Erro ao criar pedido: ${insertError?.message || 'Erro desconhecido'}`);
+        if (insertError || !newOrder) {
+          console.error("[CreateOrderDialog] Erro no Insert:", insertError);
+          throw new Error(insertError?.message || "Erro ao inserir pedido (retorno nulo)");
+        }
         currentOrderId = newOrder.id;
       }
 
@@ -361,12 +317,13 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
           quantity: item.quantity 
         })));
 
-      if (itemsError) throw new Error(`Pedido criado, mas falha ao inserir itens: ${itemsError.message}`);
+      if (itemsError) throw itemsError;
 
       showSuccess(orderId ? "Pedido atualizado!" : "Pedido criado!");
       setOpen(false);
       onOrderCreated();
     } catch (error: any) { 
+      console.error("[CreateOrderDialog] Erro fatal:", error);
       showError(error.message); 
     } finally { 
       setLoading(false); 
