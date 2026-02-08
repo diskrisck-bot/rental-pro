@@ -3,41 +3,76 @@
 @tailwind utilities;
 
 @layer base {
+  /* --- TEMA MODERN (PADRÃO - INSPIRADO NO STRIPE) --- */
   :root {
-    /* Industrial High-Impact Theme */
-    --background: 220 14.3% 97.8%; /* #F4F5F7 (Concrete Grey) */
-    --foreground: 235 66% 30%; /* #1A237E (Legal Blue) */
+    --background: 210 40% 98%; /* Slate 50 */
+    --foreground: 222 47% 11%; /* Slate 900 */
 
-    --card: 0 0% 100%; /* #FFFFFF */
-    --card-foreground: 235 66% 30%; /* #1A237E */
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
 
-    --popover: 0 0% 100%; /* #FFFFFF */
-    --popover-foreground: 235 66% 30%; /* #1A237E */
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
 
-    --primary: 30 100% 48%; /* #F57C00 (Safety Orange) */
-    --primary-foreground: 0 0% 100%; /* #FFFFFF */
+    --primary: 240 70% 60%; /* Indigo 600 */
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 235 66% 30%; /* #1A237E (Legal Blue) */
-    --secondary-foreground: 0 0% 100%; /* #FFFFFF */
+    --secondary: 214 25% 91%; /* Slate 200 */
+    --secondary-foreground: 222 47% 11%;
 
-    --muted: 214 25% 91%; /* #E2E8F0 */
+    --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
 
-    --accent: 214 25% 91%; /* #E2E8F0 */
-    --accent-foreground: 235 66% 30%; /* #1A237E */
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222 47% 11%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 214 25% 88%; /* #CBD5E1 */
-    --input: 0 0% 100%; /* #FFFFFF (Input Background) */
-    --ring: 30 100% 48%; /* #F57C00 */
+    --border: 214 25% 91%;
+    --input: 0 0% 100%;
+    --ring: 240 70% 60%;
 
-    --radius: 0.5rem; /* 8px base */
+    --radius: 0.75rem; /* 12px */
+    --shadow-style: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); /* Soft Shadow */
+  }
+
+  /* --- TEMA INDUSTRIAL (O ANTIGO) --- */
+  [data-theme="industrial"] {
+    --background: 220 14.3% 97.8%; /* #F4F5F7 */
+    --foreground: 235 66% 30%; /* Legal Blue */
+
+    --card: 0 0% 100%;
+    --card-foreground: 235 66% 30%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 235 66% 30%;
+
+    --primary: 30 100% 48%; /* Safety Orange */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 235 66% 30%; /* Legal Blue */
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 214 25% 91%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 214 25% 91%;
+    --accent-foreground: 235 66% 30%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214 25% 88%;
+    --input: 0 0% 100%;
+    --ring: 30 100% 48%;
+
+    --radius: 0.3rem; /* 4px */
+    --shadow-style: 4px 4px 0px 0px rgba(0,0,0,1); /* Hard Shadow */
   }
 
   .dark {
-    /* Simple Dark Mode Inversion */
+    /* Simple Dark Mode Inversion (Kept for compatibility, but themes should handle colors) */
     --background: 235 66% 15%;
     --foreground: 210 40% 98%;
 
@@ -79,5 +114,11 @@
   
   h1, h2, h3, h4, h5, h6 {
     @apply font-heading;
+  }
+}
+
+@layer utilities {
+  .shadow-hard {
+    box-shadow: var(--shadow-style);
   }
 }

@@ -58,12 +58,9 @@ export default {
         },
       },
       borderRadius: {
-        lg: "0.75rem", // 12px max
-        md: "var(--radius)", // 8px
-        sm: "calc(var(--radius) - 2px)", // 6px
-      },
-      boxShadow: {
-        'hard-shadow': '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1)',
+        lg: "var(--radius)", // Using CSS variable for theme control
+        md: "var(--radius)", // Using CSS variable for theme control
+        sm: "calc(var(--radius) - 2px)",
       },
       keyframes: {
         "accordion-down": {
