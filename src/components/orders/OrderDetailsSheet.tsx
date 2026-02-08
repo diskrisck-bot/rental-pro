@@ -18,6 +18,7 @@ import { showSuccess, showError } from '@/utils/toast';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import jsPDF from 'jspdf';
+import 'jspdf-autotable'; // Importação necessária para o jsPDF funcionar corretamente
 
 interface OrderDetailsSheetProps {
   orderId: string | null;
@@ -70,29 +71,36 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     return `https://wa.me/${order.customer_phone?.replace(/\D/g, '')}?text=${encodeURIComponent(messageText)}`;
   };
 
-  // --- GERADOR DE PDF (MANTIDO O SEU CÓDIGO ORIGINAL) ---
+  // --- GERADOR DE PDF (REFACTOR JURÍDICO) ---
   const generatePDF = async (order: any, owner: OwnerProfile | null) => {
     const doc = new jsPDF({ format: 'a4', unit: 'mm' });
-    // Cores fixas para PDF (não mudam com o tema)
-    const primaryColor = [30, 58, 138]; 
+    
+    // Configurações de Estilo
+    const primaryColor = [30, 58, 138]; // Navy Blue
     const lightGray = [245, 245, 245];
     
     const locador = {
-      name: owner?.business_name || "Locadora",
+      name: owner?.business_name || "LOCADOR NÃO CADASTRADO",
       cnpj: owner?.business_cnpj || "CNPJ n/a",
       address: owner?.business_address || "Endereço n/a",
-      city: owner?.business_city || "Cidade da Empresa"
+      phone: owner?.business_phone || "Telefone n/a",
+      city: owner?.business_city || "Cidade da Empresa",
+      signature: owner?.signature_url
     };
 
-    const dias = differenceInDays(parseISO(order.end_date), parseISO(order.start_date)) || 1;
+    const dias = differenceInDays(parseISO(order.end_date), parseISO(order.start_date)) + 1;
     const formatMoney = (val: any) => Number(val).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     
     const listaItens = order.order_items.map((i: any) => 
       `• ${i.quantity}x ${i.products?.name} (Valor de Reposição: ${formatMoney(i.products?.replacement_value || 0)})`
     ).join('\n');
 
-    const margin = 20; const pageWidth = 210; const maxLineWidth = pageWidth - (margin * 2); let currentY = 20;
+    const margin = 20; 
+    const pageWidth = 210; 
+    const maxLineWidth = pageWidth - (margin * 2); 
+    let currentY = 20;
 
+    // Funções de Impressão
     const printTitle = (text: string) => {
       doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
       doc.text(text, pageWidth / 2, currentY, { align: "center" });
@@ -100,11 +108,13 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
       doc.line(margin + 20, currentY + 2, pageWidth - 40, currentY + 2);
       currentY += 15;
     };
+    
     const printSectionTitle = (text: string) => {
       if (currentY > 260) { doc.addPage(); currentY = 20; }
       doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
       doc.text(text.toUpperCase(), margin, currentY); currentY += 6;
     };
+    
     const printBody = (text: string) => {
       doc.setFont("times", "normal"); doc.setFontSize(11); doc.setTextColor(0, 0, 0);
       const lines = doc.splitTextToSize(text, maxLineWidth);
@@ -112,43 +122,99 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
       doc.text(lines, margin, currentY); currentY += (lines.length * 5) + 3;
     };
 
+    // --- INÍCIO DO DOCUMENTO ---
     printTitle("CONTRATO DE LOCAÇÃO DE BENS MÓVEIS");
 
-    doc.setFillColor(lightGray[0], lightGray[1], lightGray[2]); doc.rect(margin, currentY, maxLineWidth, 35, 'FD');
+    // Quadro de Identificação das Partes
+    doc.setFillColor(lightGray[0], lightGray[1], lightGray[2]); doc.rect(margin, currentY, maxLineWidth, 45, 'FD');
     const startBoxY = currentY + 6;
-    doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(0,0,0);
-    doc.text("LOCADOR", margin + 5, startBoxY);
-    doc.setFont("times", "normal"); doc.setFontSize(10);
-    doc.text(`${locador.name}`, margin + 5, startBoxY + 5); doc.text(`CNPJ: ${locador.cnpj}`, margin + 5, startBoxY + 10);
-    doc.text(`${locador.city}`, margin + 5, startBoxY + 15);
+    
+    doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(0,0,0);
+    doc.text("LOCADOR (EMPRESA)", margin + 5, startBoxY);
+    doc.setFont("times", "normal"); doc.setFontSize(9);
+    doc.text(`Nome: ${locador.name}`, margin + 5, startBoxY + 5); 
+    doc.text(`CNPJ: ${locador.cnpj}`, margin + 5, startBoxY + 10);
+    doc.text(`Endereço: ${locador.address}`, margin + 5, startBoxY + 15);
+    doc.text(`Cidade: ${locador.city} | Tel: ${locador.phone}`, margin + 5, startBoxY + 20);
 
-    doc.setFont("helvetica", "bold"); doc.setFontSize(9);
-    doc.text("LOCATÁRIO", margin + 90, startBoxY);
-    doc.setFont("times", "normal"); doc.setFontSize(10);
-    doc.text(`${order.customer_name}`, margin + 90, startBoxY + 5); doc.text(`CPF: ${order.customer_cpf || '---'}`, margin + 90, startBoxY + 10);
-    currentY += 45;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+    doc.text("LOCATÁRIO (CLIENTE)", margin + 90, startBoxY);
+    doc.setFont("times", "normal"); doc.setFontSize(9);
+    doc.text(`Nome: ${order.customer_name}`, margin + 90, startBoxY + 5); 
+    doc.text(`CPF/CNPJ: ${order.customer_cpf || '---'}`, margin + 90, startBoxY + 10);
+    doc.text(`Telefone: ${order.customer_phone || '---'}`, margin + 90, startBoxY + 15);
+    doc.text(`Endereço: ${order.customer_address || '---'}`, margin + 90, startBoxY + 20);
+    
+    currentY += 55; // Espaço após o quadro
 
-    printSectionTitle("1. DO OBJETO DA LOCAÇÃO"); printBody(`O presente instrumento tem como objeto o aluguel dos seguintes bens:\n${listaItens}`);
-    printSectionTitle("2. VIGÊNCIA E PRAZOS"); printBody(`A locação terá a duração de ${dias} diária(s), iniciando-se em ${format(parseISO(order.start_date), "dd/MM/yyyy")} e encerrando-se em ${format(parseISO(order.end_date), "dd/MM/yyyy")}.`);
-    printSectionTitle("3. VALOR E FORMA DE PAGAMENTO"); printBody(`Total: R$ ${Number(order.total_amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}, via ${order.payment_method || 'combinar'}.`);
-    printSectionTitle("4. RESPONSABILIDADE"); printBody("O LOCATÁRIO assume total responsabilidade pela guarda e uso dos bens. Em caso de perda ou dano, obriga-se a indenizar o LOCADOR pelo valor de reposição.");
-    printSectionTitle("5. DO FORO"); printBody(`Eleito o foro de ${locador.city} para dirimir quaisquer dúvidas.`);
+    // --- CLÁUSULAS ---
+    
+    // CLÁUSULA 1 - DO OBJETO
+    printSectionTitle("CLÁUSULA 1 - DO OBJETO DA LOCAÇÃO"); 
+    printBody(`O presente instrumento tem como objeto o aluguel dos seguintes bens móveis, que o LOCATÁRIO declara receber em perfeito estado de funcionamento e conservação:\n\n${listaItens}\n\nParágrafo Único: O valor de reposição de cada item é o valor que será cobrado integralmente do LOCATÁRIO em caso de perda, roubo, furto ou dano irreparável.`);
 
-    currentY += 5; doc.setFont("times", "italic"); doc.text(`${locador.city}, ${format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}.`, margin, currentY);
+    // CLÁUSULA 2 - DO PRAZO E ENTREGA
+    printSectionTitle("CLÁUSULA 2 - DO PRAZO E ENTREGA"); 
+    printBody(`A locação vigorará pelo período de ${dias} diária(s), iniciando-se em ${format(parseISO(order.start_date), "dd/MM/yyyy")} e encerrando-se em ${format(parseISO(order.end_date), "dd/MM/yyyy")}, devendo os bens ser devolvidos na data final até as 18:00h. O atraso na devolução configurará apropriação indébita e gerará cobrança de novas diárias, sem prejuízo de multa de 10% sobre o valor total do contrato.`);
 
-    currentY += 25; if (currentY > 240) { doc.addPage(); currentY = 40; }
-    const yAssin = currentY; const yImg = yAssin - 25;
-    if (owner?.signature_url) { try { doc.addImage(owner.signature_url, 'PNG', margin + 10, yImg, 40, 20); } catch (e) {} }
-    doc.setDrawColor(0,0,0); doc.line(margin, yAssin, margin + 70, yAssin); doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.text("LOCADOR", margin, yAssin + 5);
+    // CLÁUSULA 3 - DO PREÇO E PAGAMENTO
+    printSectionTitle("CLÁUSULA 3 - DO PREÇO E PAGAMENTO"); 
+    printBody(`O valor total da locação é de ${formatMoney(order.total_amount)}, a ser pago via ${order.payment_method || 'combinar'}. O não pagamento na data acordada acarretará juros de mora de 1% (um por cento) ao mês e multa de 2% (dois por cento) sobre o valor devido.`);
+
+    // CLÁUSULA 4 - DA RESPONSABILIDADE E USO
+    printSectionTitle("CLÁUSULA 4 - DA RESPONSABILIDADE E USO"); 
+    printBody("O LOCATÁRIO declara receber os bens em perfeito estado de funcionamento e conservação. É de inteira responsabilidade do LOCATÁRIO a guarda e o uso correto dos equipamentos. Em caso de dano, avaria, roubo ou furto, o LOCATÁRIO arcará com o custo integral de reparo ou reposição do bem por um novo, de mesma marca e modelo, conforme os valores de reposição listados na Cláusula 1.");
+
+    // CLÁUSULA 5 - DO TRANSPORTE
+    printSectionTitle("CLÁUSULA 5 - DO TRANSPORTE"); 
+    printBody("O transporte dos equipamentos (retirada e devolução) corre por conta e risco do LOCATÁRIO, salvo disposição em contrário expressa neste contrato.");
+
+    // CLÁUSULA 6 - DA RESCISÃO
+    printSectionTitle("CLÁUSULA 6 - DA RESCISÃO"); 
+    printBody("O descumprimento de qualquer cláusula contratual ensejará a rescisão imediata deste contrato e a retomada dos bens pelo LOCADOR, sem prejuízo das penalidades cabíveis.");
+
+    // CLÁUSULA 7 - DO FORO
+    printSectionTitle("CLÁUSULA 7 - DO FORO"); 
+    printBody(`Fica eleito o foro da comarca de ${locador.city} para dirimir quaisquer dúvidas oriundas deste contrato, renunciando a qualquer outro, por mais privilegiado que seja.`);
+
+    // --- ENCERRAMENTO E ASSINATURAS ---
+    currentY += 5; 
+    doc.setFont("times", "italic"); 
+    doc.text(`${locador.city}, ${format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}.`, margin, currentY);
+
+    currentY += 25; 
+    if (currentY > 240) { doc.addPage(); currentY = 40; }
+    
+    const yAssin = currentY; 
+    const yImg = yAssin - 25;
+    
+    // Assinatura Locador
+    if (locador.signature) { try { doc.addImage(locador.signature, 'PNG', margin + 10, yImg, 40, 20); } catch (e) {} }
+    doc.setDrawColor(0,0,0); doc.line(margin, yAssin, margin + 70, yAssin); 
+    doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.text("LOCADOR", margin, yAssin + 5);
+    
+    // Assinatura Locatário
     if (order.signature_image) { try { doc.addImage(order.signature_image, 'PNG', 130, yImg, 40, 20); } catch (e) {} }
-    doc.line(120, yAssin, 190, yAssin); doc.text("LOCATÁRIO", 120, yAssin + 5);
+    doc.line(120, yAssin, 190, yAssin); 
+    doc.text("LOCATÁRIO", 120, yAssin + 5);
+    
+    // Testemunhas (Opcional)
+    currentY = yAssin + 20;
+    doc.line(margin, currentY, margin + 70, currentY); 
+    doc.text("TESTEMUNHA 1", margin, currentY + 5);
+    doc.line(120, currentY, 190, currentY); 
+    doc.text("TESTEMUNHA 2", 120, currentY + 5);
 
+    // Certificado Digital (Se assinado)
     if (order.signed_at) {
       doc.addPage(); currentY = 20;
-      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.text("CERTIFICADO DIGITAL", pageWidth/2, currentY, {align: 'center'});
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.text("CERTIFICADO DIGITAL DE ASSINATURA", pageWidth/2, currentY, {align: 'center'});
       currentY += 20; doc.setFillColor(lightGray[0], lightGray[1], lightGray[2]); doc.rect(margin, currentY, maxLineWidth, 60, 'FD'); currentY += 10; doc.setTextColor(0,0,0);
       const addLog = (l: string, v: string) => { doc.setFont("courier", "bold"); doc.setFontSize(9); doc.text(l, margin + 5, currentY); doc.setFont("courier", "normal"); doc.text(v, margin + 40, currentY); currentY += 8; };
-      addLog("ID:", order.id); addLog("Data:", format(parseISO(order.signed_at), "dd/MM/yyyy HH:mm")); addLog("IP:", order.signer_ip || "N/A");
+      addLog("ID:", order.id); 
+      addLog("Data:", format(parseISO(order.signed_at), "dd/MM/yyyy HH:mm")); 
+      addLog("IP:", order.signer_ip || "N/A");
+      addLog("User Agent:", order.signer_user_agent ? order.signer_user_agent.substring(0, 50) + '...' : "N/A");
       if (order.signature_image) { currentY += 5; doc.text("Rubrica:", margin + 5, currentY); doc.addImage(order.signature_image, 'PNG', margin + 5, currentY + 5, 30, 15); }
     }
 
@@ -157,7 +223,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
 
   const handleDownloadFinalPDF = async () => {
     if (!order) return;
-    try { setIsGeneratingContract(true); const doc = await generatePDF(order, ownerProfile); doc.save(`Contrato-${order.id.split('-')[0]}.pdf`); showSuccess("Download iniciado."); } catch (e: any) { showError("Erro ao gerar PDF."); } finally { setIsGeneratingContract(false); }
+    try { setIsGeneratingContract(true); const doc = await generatePDF(order, ownerProfile); doc.save(`Contrato-${order.id.split('-')[0]}.pdf`); showSuccess("Download iniciado."); } catch (e: any) { showError("Erro ao gerar PDF: " + e.message); } finally { setIsGeneratingContract(false); }
   };
 
   // --- ATUALIZAÇÃO DE STATUS LOGÍSTICO ---
