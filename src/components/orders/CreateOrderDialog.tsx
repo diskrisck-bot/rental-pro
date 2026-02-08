@@ -130,8 +130,8 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
 
     // Lógica de Colisão CORRIGIDA:
     // Um aluguel existente (Order) colide com o período selecionado (Selected) se:
-    // (Order.start_date < Selected.end_date) AND (Order.end_date > Selected.start_date)
-    // Usamos estritamente '<' e '>' para evitar que o dia de início e o dia de fim sejam contados como conflito.
+    // (Order.start_date <= Selected.end_date) AND (Order.end_date >= Selected.start_date)
+    // Usamos <= e >= para garantir que 1-day rentals (Start=End) sejam contados como conflito.
     
     // Se for produto rastreável, a quantidade total é 1, e a lógica de colisão é mais simples
     if (product.type === 'trackable') {
@@ -143,8 +143,8 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             .eq('product_id', productId)
             .neq('order_id', orderId || '00000000-0000-0000-0000-000000000000') 
             .in('orders.status', ['signed', 'reserved', 'picked_up'])
-            .lt('orders.start_date', endBoundary) // OrderStart < SelectedEnd (CORREÇÃO APLICADA)
-            .gt('orders.end_date', startBoundary); // OrderEnd > SelectedStart (CORREÇÃO APLICADA)
+            .lte('orders.start_date', endBoundary) // OrderStart <= SelectedEnd (CORREÇÃO APLICADA)
+            .gte('orders.end_date', startBoundary); // OrderEnd >= SelectedStart (CORREÇÃO APLICADA)
 
         if (error) throw error;
         
@@ -166,8 +166,8 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         .eq('product_id', productId)
         .neq('order_id', orderId || '00000000-0000-0000-0000-000000000000') 
         .in('orders.status', ['signed', 'reserved', 'picked_up'])
-        .lt('orders.start_date', endBoundary) // OrderStart < SelectedEnd (CORREÇÃO APLICADA)
-        .gt('orders.end_date', startBoundary); // OrderEnd > SelectedStart (CORREÇÃO APLICADA)
+        .lte('orders.start_date', endBoundary) // OrderStart <= SelectedEnd (CORREÇÃO APLICADA)
+        .gte('orders.end_date', startBoundary); // OrderEnd >= SelectedStart (CORREÇÃO APLICADA)
 
     if (conflictError) throw conflictError;
 
