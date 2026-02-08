@@ -17,8 +17,8 @@
     --primary: 243 100% 69%; /* #635BFF (Stripe Indigo) */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 0 0% 100%; /* #FFFFFF (Botões secundários brancos com borda) */
-    --secondary-foreground: 222 22% 18%;
+    --secondary: 222 22% 18%; /* NOVO: Slate 800 (Escuro para texto/fundo) */
+    --secondary-foreground: 0 0% 100%;
 
     --muted: 210 20% 96%; /* #F1F5F9 */
     --muted-foreground: 215 14% 53%; /* #64748b */
@@ -53,7 +53,7 @@
     --primary: 30 100% 48%; /* Safety Orange */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 235 66% 30%; /* Legal Blue */
+    --secondary: 235 66% 30%; /* Legal Blue (Escuro) */
     --secondary-foreground: 0 0% 100%;
 
     --muted: 214 25% 91%;
@@ -106,7 +106,7 @@
   }
 
   body {
-    @apply bg-background text-foreground font-sans tracking-tight; /* Adicionado tracking-tight */
+    @apply bg-background text-foreground font-sans tracking-tight;
   }
   
   h1, h2, h3, h4, h5, h6 {
@@ -115,7 +115,6 @@
 }
 
 @layer utilities {
-  /* Atualizado para usar a nova variável */
   .shadow-custom {
     box-shadow: var(--shadow-custom);
   }

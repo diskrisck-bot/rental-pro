@@ -32,11 +32,11 @@ const Login = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-      <Card className="w-full max-w-md rounded-xl shadow-2xl border-4 border-primary/20">
+      <Card className="w-full max-w-md rounded-[var(--radius)] shadow-custom border-4 border-primary/20">
         <CardHeader className="text-center space-y-2 pt-8">
-          <div className="flex justify-center items-center gap-2 text-secondary">
+          <div className="flex justify-center items-center gap-2 text-primary">
             <Package className="w-8 h-8" />
-            <CardTitle className="text-3xl font-heading font-extrabold">RentalPro</CardTitle>
+            <CardTitle className="text-3xl font-heading font-extrabold text-foreground">RentalPro</CardTitle>
           </div>
           <p className="text-sm text-muted-foreground">Acesse sua conta para continuar.</p>
         </CardHeader>

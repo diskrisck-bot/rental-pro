@@ -8,11 +8,13 @@ import {
   ShoppingCart, 
   Calendar as CalendarIcon,
   Settings,
-  LogOut
+  LogOut,
+  Palette
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { signOut } from '@/integrations/supabase/auth';
 import { showError } from '@/utils/toast';
+import ThemeSwitcher from '../ThemeSwitcher'; // Import ThemeSwitcher
 
 interface SidebarProps {
   onLinkClick?: () => void;
@@ -61,17 +63,17 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
                 "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors border-l-4",
                 isActive 
                   ? "bg-primary text-white border-primary/80" 
-                  : "text-gray-200 border-transparent hover:bg-secondary/80 hover:text-white"
+                  : "text-gray-400 border-transparent hover:bg-secondary/80 hover:text-white" // Ajustado para text-gray-400
               )}
             >
-              <item.icon className={cn("w-5 h-5", isActive ? "text-white" : "text-gray-400")} />
+              <item.icon className={cn("w-5 h-5", isActive ? "text-white" : "text-gray-500")} /> {/* Ajustado para text-gray-500 */}
               {item.label}
             </Link>
           );
         })}
       </nav>
 
-      <div className="p-4 border-t border-secondary/80 space-y-1">
+      <div className="p-4 border-t border-secondary/80 space-y-3">
         <Link
           to="/settings"
           onClick={onLinkClick}
@@ -79,12 +81,22 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
             "flex items-center gap-3 px-3 py-2 w-full rounded-md text-sm font-medium transition-colors border-l-4",
             location.pathname === '/settings' 
               ? "bg-primary text-white border-primary/80" 
-              : "text-gray-200 border-transparent hover:bg-secondary/80 hover:text-white"
+              : "text-gray-400 border-transparent hover:bg-secondary/80 hover:text-white" // Ajustado para text-gray-400
           )}
         >
-          <Settings className={cn("w-5 h-5", location.pathname === '/settings' ? "text-white" : "text-gray-400")} />
+          <Settings className={cn("w-5 h-5", location.pathname === '/settings' ? "text-white" : "text-gray-500")} />
           Configurações
         </Link>
+        
+        {/* Theme Switcher integrado */}
+        <div className="flex items-center justify-between px-3 py-2">
+            <div className="flex items-center gap-3 text-gray-400">
+                <Palette className="w-5 h-5 text-gray-500" />
+                <span className="text-sm font-medium">Tema</span>
+            </div>
+            <ThemeSwitcher isSidebar={true} />
+        </div>
+
         <button 
           onClick={handleLogout}
           className="flex items-center gap-3 px-3 py-2 w-full rounded-md text-sm font-medium text-red-300 hover:bg-secondary/80 transition-colors"

@@ -27,7 +27,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import CreateOrderDialog from '@/components/orders/CreateOrderDialog';
-import ThemeSwitcher from '@/components/ThemeSwitcher'; // Import ThemeSwitcher
+// ThemeSwitcher removido daqui
 
 // --- SUB-COMPONENTES VISUAIS ---
 
@@ -286,99 +286,6 @@ const TimelineWidget = ({ activeOrders }: any) => {
         </div>
       </div>
     </Card>
-  );
-};
-
-
-const Dashboard = () => {
-  const { data: businessName } = useQuery({ queryKey: ['businessName'], queryFn: fetchBusinessName });
-  
-  const { data: orders } = useQuery({
-    queryKey: ['dashboardOrders'],
-    queryFn: async () => {
-        const { data } = await supabase.from('orders').select('*').neq('status', 'canceled');
-        return data || [];
-    }
-  });
-
-  const { data: products } = useQuery({
-    queryKey: ['dashboardProducts'],
-    queryFn: async () => {
-        const { data } = await supabase.from('products').select('*').order('name');
-        return data || [];
-    }
-  });
-
-  const { data: activeOrders } = useQuery({
-    queryKey: ['dashboardActiveOrders'],
-    queryFn: async () => {
-        const { data } = await supabase
-            .from('orders')
-            .select('*, order_items(quantity, product_id)')
-            .in('status', ['signed', 'reserved', 'picked_up'])
-        return data || [];
-    }
-  });
-
-  const metrics = useMemo(() => {
-    if (!orders) return { revenue: 0, active: 0, future: 0, clients: 0, itemsOut: 0 };
-
-    const revenue = orders.filter(o => o.status !== 'draft').reduce((acc, curr) => acc + (Number(curr.total_amount) || 0), 0);
-    const active = orders.filter(o => ['signed', 'reserved', 'picked_up'].includes(o.status)).length;
-    
-    const today = startOfDay(new Date());
-    const future = orders.filter(o => {
-        const start = new Date(o.start_date);
-        return ['signed', 'reserved'].includes(o.status) && isAfter(start, today);
-    }).length;
-
-    const clients = new Set(orders.filter(o => o.status !== 'draft').map(o => o.customer_cpf)).size;
-    const itemsOut = activeOrders?.reduce((acc: number, order: any) => {
-        const orderTotal = order.order_items.reduce((sum: number, item: any) => sum + item.quantity, 0);
-        return acc + orderTotal;
-    }, 0) || 0;
-
-    return { revenue, active, future, clients, itemsOut };
-  }, [orders, activeOrders]);
-
-  const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
-
-  return (
-    <div className="p-6 md:p-10 space-y-8 bg-background min-h-screen font-sans">
-      
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-foreground uppercase">Dashboard</h1>
-          <p className="text-gray-500 mt-1 font-medium">Visão tática: {businessName || 'Minha Locadora'}</p>
-        </div>
-        <div className="flex gap-3 items-center">
-            <ThemeSwitcher />
-            <CreateOrderDialog onOrderCreated={() => window.location.reload()}> 
-                <Button className="bg-primary hover:bg-primary/90 text-white font-bold uppercase h-12 px-6 shadow-custom rounded-[var(--radius)] transition-all active:translate-y-1">
-                    + Novo Pedido
-                </Button>
-            </CreateOrderDialog>
-        </div>
-      </div>
-
-      <ReturnsAlertWidget orders={orders || []} />
-
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <MetricCard title="Receita Total" value={formatCurrency(metrics.revenue)} subtext="Acumulado" icon={DollarSign} variant="primary" />
-        <MetricCard title="Contratos Ativos" value={metrics.active} subtext="Em andamento" icon={FileText} variant="secondary" />
-        <MetricCard title="Itens Alugados" value={metrics.itemsOut} subtext="Equipamentos fora" icon={Box} variant="primary" />
-        <MetricCard title="Clientes" value={metrics.clients} subtext="Base total" icon={Users} variant="secondary" />
-      </div>
-
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-12">
-        <div className="lg:col-span-8 h-full min-h-[400px]">
-            <TimelineWidget activeOrders={activeOrders} />
-        </div>
-        <div className="lg:col-span-4 h-full min-h-[400px]">
-            <QuickInventoryWidget products={products} activeOrders={activeOrders} />
-        </div>
-      </div>
-    </div>
   );
 };
 

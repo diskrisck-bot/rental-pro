@@ -4,11 +4,16 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Palette, Zap, CheckCircle } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 
 const THEME_KEY = 'app-theme';
 const INDUSTRIAL_THEME_VALUE = 'industrial';
 
-const ThemeSwitcher = () => {
+interface ThemeSwitcherProps {
+    isSidebar?: boolean;
+}
+
+const ThemeSwitcher = ({ isSidebar = false }: ThemeSwitcherProps) => {
   const [currentTheme, setCurrentTheme] = useState<'modern' | 'industrial'>('modern');
 
   const applyTheme = useCallback((theme: 'modern' | 'industrial') => {
@@ -46,14 +51,21 @@ const ThemeSwitcher = () => {
       <TooltipTrigger asChild>
         <Button 
           variant="outline" 
-          size="icon" 
+          size={isSidebar ? "sm" : "icon"} 
           onClick={toggleTheme}
-          className="h-12 w-12 shadow-custom border-border text-foreground"
+          className={cn(
+            "shadow-custom border-border text-foreground",
+            isSidebar ? "h-8 px-2 text-xs font-bold bg-secondary/50 text-white hover:bg-secondary/80" : "h-12 w-12"
+          )}
         >
-          <Palette className="h-5 w-5" />
+          {isSidebar ? (
+            isIndustrial ? 'Industrial' : 'Signature'
+          ) : (
+            <Palette className="h-5 w-5" />
+          )}
         </Button>
       </TooltipTrigger>
-      <TooltipContent className="bg-foreground text-white border-none">
+      <TooltipContent className="bg-secondary text-white border-none">
         Alternar para Tema: {themeName}
       </TooltipContent>
     </Tooltip>
