@@ -129,7 +129,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
 
     printSectionTitle("1. DO OBJETO DA LOCAÇÃO"); printBody(`O presente instrumento tem como objeto o aluguel dos seguintes bens:\n${listaItens}`);
     printSectionTitle("2. VIGÊNCIA E PRAZOS"); printBody(`A locação terá a duração de ${dias} diária(s), iniciando-se em ${format(parseISO(order.start_date), "dd/MM/yyyy")} e encerrando-se em ${format(parseISO(order.end_date), "dd/MM/yyyy")}.`);
-    printSectionTitle("3. VALOR E FORMA DE PAGAMENTO"); printBody(`Total: ${formatMoney(order.total_amount)}, via ${order.payment_method || 'combinar'}.`);
+    printSectionTitle("3. VALOR E FORMA DE PAGAMENTO"); printBody(`Total: R$ ${Number(order.total_amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}, via ${order.payment_method || 'combinar'}.`);
     printSectionTitle("4. RESPONSABILIDADE"); printBody("O LOCATÁRIO assume total responsabilidade pela guarda e uso dos bens. Em caso de perda ou dano, obriga-se a indenizar o LOCADOR pelo valor de reposição.");
     printSectionTitle("5. DO FORO"); printBody(`Eleito o foro de ${locador.city} para dirimir quaisquer dúvidas.`);
 
@@ -167,10 +167,17 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
       setUpdating(true); 
       const p: any = { status: newStatus };
       
-      // LOGÍSTICA: Atualiza datas para controle de inventário
+      // LÓGICA: Atualiza datas para controle de inventário
       if (newStatus === 'picked_up') p.picked_up_at = new Date().toISOString(); 
       if (newStatus === 'returned') p.returned_at = new Date().toISOString(); 
       
+      // Cenário A: Se o status atual for 'signed', e o novo for 'returned', 
+      // precisamos garantir que o picked_up_at seja definido para hoje, 
+      // pois estamos pulando a etapa 'picked_up'.
+      if (order?.status === 'signed' && newStatus === 'returned') {
+          p.picked_up_at = new Date().toISOString();
+      }
+
       const { error } = await supabase.from('orders').update(p).eq('id', orderId);
       if(error) throw error;
       
@@ -180,6 +187,8 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
       );
 
       queryClient.invalidateQueries({ queryKey: ['orders'] }); 
+      queryClient.invalidateQueries({ queryKey: ['dashboardOrders'] }); 
+      queryClient.invalidateQueries({ queryKey: ['dashboardOrderItems'] }); 
       fetchOrderDetails(); 
       onStatusUpdate();
     } catch (e: any) { showError(e.message); } finally { setUpdating(false); }
@@ -225,14 +234,26 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
           </div>
           
           {/* Ações Documentais */}
-          <div className="grid grid-cols-2 gap-3">
-             <a href={getWhatsappLink(order)} target="_blank" rel="noopener noreferrer" className="w-full">
-                <Button variant="outline" className="w-full h-12 border-green-500 text-green-700 hover:bg-green-50 font-bold">
-                    <MessageCircle className="h-4 w-4 mr-2" /> WhatsApp
-                </Button>
-             </a>
-             <Button onClick={handleDownloadFinalPDF} disabled={isGeneratingContract} variant="outline" className="w-full h-12 border-[#1A237E] text-[#1A237E] font-bold">
-                {isGeneratingContract ? <Loader2 className="animate-spin mr-2" /> : <Download className="mr-2 h-4 w-4" />} PDF
+          <div className={cn("grid gap-3", isSigned ? "grid-cols-1" : "grid-cols-2")}>
+             
+             {/* 1. BOTÃO WHATSAPP (SÓ SE NÃO ESTIVER ASSINADO) */}
+             {!isSigned && (
+                <a href={getWhatsappLink(order)} target="_blank" rel="noopener noreferrer" className="w-full">
+                    <Button variant="outline" className="w-full h-12 border-green-500 text-green-700 hover:bg-green-50 font-bold">
+                        <MessageCircle className="h-4 w-4 mr-2" /> Enviar Link (WA)
+                    </Button>
+                </a>
+             )}
+
+             {/* 2. BOTÃO PDF (Sempre visível, mas com destaque se assinado) */}
+             <Button 
+                onClick={handleDownloadFinalPDF} 
+                disabled={isGeneratingContract} 
+                variant={isSigned ? "default" : "outline"} 
+                className={cn("w-full h-12 font-bold", isSigned ? "bg-secondary hover:bg-secondary/90" : "border-[#1A237E] text-[#1A237E]")}
+             >
+                {isGeneratingContract ? <Loader2 className="animate-spin mr-2" /> : <Download className="mr-2 h-4 w-4" />} 
+                {isSigned ? 'Baixar PDF Assinado' : 'Baixar Rascunho PDF'}
              </Button>
           </div>
 
@@ -250,26 +271,42 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
           </div>
         </div>
 
-        {/* --- FOOTER OPERACIONAL CORRIGIDO --- */}
+        {/* --- FOOTER OPERACIONAL --- */}
         <SheetFooter className="mt-auto pt-4 border-t border-gray-200 flex flex-col gap-3 bg-white -mx-6 px-6 pb-6">
            
-           {/* LOGÍSTICA DE SAÍDA: Aparece se estiver Assinado OU Reservado */}
-           {(status === 'signed' || status === 'reserved') && (
+           {/* Cenário A: Assinado (Vai direto para Devolvido) */}
+           {status === 'signed' && (
              <Button 
-                className="w-full h-14 bg-[#F57C00] hover:bg-orange-600 text-white font-bold uppercase tracking-wide text-lg shadow-hard" 
-                onClick={() => updateStatus('picked_up')}
+                className="w-full h-14 bg-[#10B981] hover:bg-green-600 text-white font-bold uppercase tracking-wide text-lg shadow-hard" 
+                onClick={() => updateStatus('returned')}
+                disabled={updating}
              >
-               <Truck className="mr-2 h-6 w-6" /> Confirmar Retirada
+               {updating ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <ArrowRightLeft className="mr-2 h-6 w-6" />} 
+               Registrar Devolução (Estoque Volta)
              </Button>
            )}
 
-           {/* LOGÍSTICA DE RETORNO: Aparece se estiver Na Rua */}
+           {/* Cenário B: Reservado (Vai para Retirada) */}
+           {status === 'reserved' && (
+             <Button 
+                className="w-full h-14 bg-[#F57C00] hover:bg-orange-600 text-white font-bold uppercase tracking-wide text-lg shadow-hard" 
+                onClick={() => updateStatus('picked_up')}
+                disabled={updating}
+             >
+               {updating ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <Truck className="mr-2 h-6 w-6" />} 
+               Confirmar Retirada
+             </Button>
+           )}
+
+           {/* Cenário C: Na Rua (Vai para Devolvido) */}
            {status === 'picked_up' && (
              <Button 
                 className="w-full h-14 bg-[#10B981] hover:bg-green-600 text-white font-bold uppercase tracking-wide text-lg shadow-hard" 
                 onClick={() => updateStatus('returned')}
+                disabled={updating}
              >
-               <ArrowRightLeft className="mr-2 h-6 w-6" /> Registrar Devolução
+               {updating ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <ArrowRightLeft className="mr-2 h-6 w-6" />} 
+               Registrar Devolução
              </Button>
            )}
 
@@ -282,7 +319,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
 
            {/* CANCELAR */}
            {status !== 'returned' && status !== 'canceled' && (
-             <Button variant="ghost" className="w-full text-red-500 hover:text-red-700 hover:bg-red-50 font-bold uppercase text-xs" onClick={handleCancelOrder}>
+             <Button variant="ghost" className="w-full text-red-500 hover:text-red-700 hover:bg-red-50 font-bold uppercase text-xs" onClick={handleCancelOrder} disabled={updating}>
                <XCircle className="mr-2 h-4 w-4" /> Cancelar Pedido
              </Button>
            )}
