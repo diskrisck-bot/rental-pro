@@ -118,105 +118,96 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
   }, [isProductsError]);
 
   // Lógica de verificação de disponibilidade (Peak Demand Algorithm)
-  const checkAvailability = useCallback(async (productId: string, start: string, end: string): Promise<{ available: number, maxUsage: number, peakDate: string }> => {
+  // Esta função agora é apenas para feedback visual e não para a validação final
+  const checkAvailabilityForUI = useCallback(async (productId: string, start: string, end: string): Promise<number> => {
     const product = productList.find(p => p.id === productId);
-    if (!product) return { available: 0, maxUsage: 0, peakDate: format(new Date(), 'dd/MM/yyyy') };
+    if (!product) return 0;
 
-    const totalQuantity = product.total_quantity || 0;
-    
-    // 1. Busca de Dados: Pedidos que colidem com o período solicitado
-    
-    // Datas de limite para a consulta (usando T12:00:00Z para evitar problemas de fuso horário)
-    const requestedStart = parseISO(`${start}T12:00:00.000Z`);
-    const requestedEnd = parseISO(`${end}T12:00:00.000Z`);
+    // 1. Busca Fresca do Total
+    const { data: productData, error: prodError } = await supabase
+      .from('products')
+      .select('total_quantity')
+      .eq('id', productId)
+      .single();
+      
+    if (prodError || !productData) {
+      console.error("Erro ao buscar total de estoque para UI.");
+      return 0;
+    }
+    const totalEstoque = Number(productData.total_quantity) || 0;
 
-    // Filtro estrito de status ativos
-    const activeStatuses = ['signed', 'reserved', 'picked_up'];
+    // 2. Busca Ocupação
+    const newOrderStartDate = `${start}T12:00:00.000Z`;
+    const newOrderEndDate = `${end}T12:00:00.000Z`;
 
-    const { data: conflictingItems, error: conflictError } = await supabase
-        .from('order_items')
-        .select(`
-            quantity,
-            order_id,
-            orders!inner (
-                id,
-                status,
-                start_date,
-                end_date
-            )
-        `)
-        .eq('product_id', productId)
-        .neq('order_id', orderId || '00000000-0000-0000-0000-000000000000') 
-        .in('orders.status', activeStatuses) // FILTRO CRÍTICO DE STATUS
-        .lte('orders.start_date', requestedEnd.toISOString()) // Colisão: OrderStart <= RequestedEnd
-        .gte('orders.end_date', requestedStart.toISOString()); // Colisão: OrderEnd >= RequestedStart
+    const { data: activeRentals, error: conflictError } = await supabase
+      .from('order_items')
+      .select(`
+        quantity,
+        orders!inner (start_date, end_date, status)
+      `)
+      .eq('product_id', productId)
+      .neq('order_id', orderId || '00000000-0000-0000-0000-000000000000') 
+      .in('orders.status', ['signed', 'reserved', 'picked_up']) 
+      .lte('orders.start_date', newOrderEndDate)
+      .gte('orders.end_date', newOrderStartDate);
 
-    if (conflictError) throw conflictError;
-
-    // 2. Lógica de Cálculo: Peak Demand
-    
-    // Define o intervalo de dias a ser verificado (inclusivo)
-    const daysToCheck = eachDayOfInterval({ start: requestedStart, end: requestedEnd });
-    
-    let maxUsage = 0;
-    let peakDate = format(requestedStart, 'dd/MM/yyyy');
-
-    for (const day of daysToCheck) {
-        let usageToday = 0;
-        
-        // Para cada dia, some a quantidade de todos os pedidos ativos que cobrem esse dia
-        for (const item of conflictingItems) {
-            const orderStart = parseISO(item.orders.start_date);
-            const orderEnd = parseISO(item.orders.end_date);
-            
-            // Check if the current day is within the order's period (inclusive)
-            // Usamos startOfDay para comparação puramente baseada em data, ignorando o T12:00:00Z
-            if (isWithinInterval(startOfDay(day), { start: startOfDay(orderStart), end: startOfDay(orderEnd) })) {
-                usageToday += item.quantity;
-            }
-        }
-        
-        if (usageToday > maxUsage) {
-            maxUsage = usageToday;
-            peakDate = format(day, 'dd/MM/yyyy');
-        }
+    if (conflictError) {
+        console.error("Erro ao buscar aluguéis ativos para UI:", conflictError);
+        return 0;
     }
 
-    const available = Math.max(0, totalQuantity - maxUsage);
-    
-    // DEBUG OBRIGATÓRIO
-    console.log('DEBUG ESTOQUE:', { 
-        productName: product.name,
-        total: totalQuantity, 
-        activeRentals: conflictingItems.length, 
-        maxUsageInPeriod: maxUsage, 
-        available: available,
-        peakDate: peakDate
-    });
+    // 3. Algoritmo de Pico Diário (Daily Peak)
+    let maxUsage = 0;
+    const startDay = parseISO(start);
+    const endDay = parseISO(end);
 
-    return { available, maxUsage, peakDate };
+    // Loop dia a dia
+    for (let d = startDay; d <= endDay; d = addDays(d, 1)) {
+      const currentDayStr = format(d, 'yyyy-MM-dd');
+
+      const usageOnThisDay = (activeRentals || []).reduce((acc, item) => {
+        // Garantia numérica
+        const itemQuantity = Number(item.quantity) || 0;
+        
+        // Usamos split('T')[0] para garantir que a comparação seja apenas por data (YYYY-MM-DD)
+        const itemStart = item.orders.start_date.split('T')[0];
+        const itemEnd = item.orders.end_date.split('T')[0];
+
+        // Se o dia 'd' está dentro do período do aluguel existente
+        if (currentDayStr >= itemStart && currentDayStr <= itemEnd) {
+          return acc + itemQuantity;
+        }
+        return acc;
+      }, 0);
+
+      if (usageOnThisDay > maxUsage) maxUsage = usageOnThisDay;
+    }
+
+    const disponivel = totalEstoque - maxUsage;
+    return Math.max(0, disponivel);
   }, [productList, orderId]);
+
 
   // Efeito para atualizar a disponibilidade na UI
   useEffect(() => {
     if (currentProductId && startDateStr && endDateStr) {
-      // Validação de datas: End date must be equal or after start date
       if (isBefore(parseISO(endDateStr), parseISO(startDateStr))) {
         setCurrentAvailability(0);
         return;
       }
 
       setCurrentAvailability(null);
-      checkAvailability(currentProductId, startDateStr, endDateStr)
-        .then(result => setCurrentAvailability(result.available))
+      checkAvailabilityForUI(currentProductId, startDateStr, endDateStr)
+        .then(setCurrentAvailability)
         .catch((e) => {
-          console.error("Erro ao verificar disponibilidade:", e);
+          console.error("Erro ao verificar disponibilidade para UI:", e);
           setCurrentAvailability(0);
         });
     } else {
       setCurrentAvailability(null);
     }
-  }, [currentProductId, startDateStr, endDateStr, checkAvailability]);
+  }, [currentProductId, startDateStr, endDateStr, checkAvailabilityForUI]);
 
 
   // Carrega dados do pedido (se for edição) e inicializa o formulário
@@ -291,59 +282,134 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
     const product = productList.find(p => p.id === currentProductId);
     if (!product) return;
 
-    // 2. LÓGICA DE VERIFICAÇÃO DE ESTOQUE (Anti-Overselling)
-    
-    // Soma a quantidade já selecionada no carrinho local para este produto
-    const quantityInCart = selectedItems
-        .filter(item => item.product_id === currentProductId)
-        .reduce((sum, item) => sum + item.quantity, 0);
-
-    const requestedQuantity = currentQuantity;
-    const totalRequested = quantityInCart + requestedQuantity;
+    setLoading(true);
 
     try {
-        setLoading(true); // Bloqueia o botão de adicionar enquanto verifica
-        
-        // Chamada atualizada para obter o pico de uso
-        const { available: availableQuantity, maxUsage, peakDate } = await checkAvailability(currentProductId, startDateStr, endDateStr);
-        
-        if (totalRequested > availableQuantity) {
-            // Feedback de erro detalhado
-            const unitsFree = product.total_quantity - maxUsage;
-            showError(`Estoque insuficiente para este período. O dia mais cheio (${peakDate}) tem apenas ${unitsFree} unidades livres. Máximo para este período: ${availableQuantity}`);
-            return;
+        // --- 1. ETAPA DE SEGURANÇA (Data Fetching Dedicado) ---
+        const selectedProductId = currentProductId;
+        const newOrderStartDate = startDateStr;
+        const newOrderEndDate = endDateStr;
+        const quantityInput = currentQuantity;
+
+        // 1. Busca Fresca do Total
+        const { data: productData, error: prodError } = await supabase
+          .from('products')
+          .select('total_quantity')
+          .eq('id', selectedProductId)
+          .single();
+          
+        if (prodError || !productData) {
+          showError("Erro ao verificar produto. Tente novamente.");
+          return;
         }
+        
+        // GARANTIA NUMÉRICA: Força conversão para Number e fallback para 0
+        const totalEstoque = Number(productData.total_quantity) || 0;
+
+        // 2. Busca Ocupação
+        const startBoundary = `${newOrderStartDate}T12:00:00.000Z`;
+        const endBoundary = `${newOrderEndDate}T12:00:00.000Z`;
+
+        const { data: activeRentals, error: conflictError } = await supabase
+          .from('order_items')
+          .select(`
+            quantity,
+            orders!inner (start_date, end_date, status)
+          `)
+          .eq('product_id', selectedProductId)
+          .neq('order_id', orderId || '00000000-0000-0000-0000-000000000000') 
+          .in('orders.status', ['signed', 'reserved', 'picked_up']) 
+          .lte('orders.start_date', endBoundary)
+          .gte('orders.end_date', startBoundary);
+
+        if (conflictError) throw conflictError;
+
+        // 3. Algoritmo de Pico Diário (Daily Peak)
+        let maxUsage = 0;
+        let peakDate = newOrderStartDate;
+        const start = parseISO(newOrderStartDate);
+        const end = parseISO(newOrderEndDate);
+
+        // Loop dia a dia
+        for (let d = start; d <= end; d = addDays(d, 1)) {
+          const currentDayStr = format(d, 'yyyy-MM-dd');
+
+          const usageOnThisDay = (activeRentals || []).reduce((acc, item) => {
+            // GARANTIA NUMÉRICA
+            const itemQuantity = Number(item.quantity) || 0;
+            
+            // Usamos split('T')[0] para garantir que a comparação seja apenas por data (YYYY-MM-DD)
+            const itemStart = item.orders.start_date.split('T')[0];
+            const itemEnd = item.orders.end_date.split('T')[0];
+
+            // Se o dia 'd' está dentro do período do aluguel existente
+            if (currentDayStr >= itemStart && currentDayStr <= itemEnd) {
+              return acc + itemQuantity;
+            }
+            return acc;
+          }, 0);
+
+          if (usageOnThisDay > maxUsage) {
+            maxUsage = usageOnThisDay;
+            peakDate = currentDayStr;
+          }
+        }
+
+        const disponivel = totalEstoque - maxUsage;
+        
+        // DEBUG OBRIGATÓRIO
+        console.log('DEBUG ESTOQUE:', { 
+            total: totalEstoque, 
+            activeRentalsCount: activeRentals?.length, 
+            maxUsageInPeriod: maxUsage, 
+            available: disponivel,
+            peakDate: peakDate
+        });
+
+        // 4. VALIDAÇÃO
+        const qtdSolicitada = Number(quantityInput) || 0;
+        
+        // Soma a quantidade já selecionada no carrinho local para este produto
+        const quantityInCart = selectedItems
+            .filter(item => item.product_id === currentProductId)
+            .reduce((sum, item) => sum + item.quantity, 0);
+
+        const totalRequested = quantityInCart + qtdSolicitada;
+
+        if (totalRequested > disponivel) {
+            showError(`Estoque insuficiente para o período. Máximo disponível: ${disponivel} un. Ocupado no pico (${format(parseISO(peakDate), 'dd/MM')}): ${maxUsage} un.`);
+            return; // Bloqueia adição
+        }
+
+        // 5. Se passou na validação, adiciona/atualiza o item
+        const existingItemIndex = selectedItems.findIndex(item => item.product_id === currentProductId);
+        
+        if (existingItemIndex !== -1) {
+            const updatedItems = selectedItems.map((item, index) => 
+                index === existingItemIndex 
+                    ? { ...item, quantity: totalRequested }
+                    : item
+            );
+            setSelectedItems(updatedItems);
+        } else {
+            const newItem: OrderItem = {
+                product_id: currentProductId,
+                product_name: product.name,
+                quantity: qtdSolicitada,
+                daily_price: Number(product.price)
+            };
+            setSelectedItems([...selectedItems, newItem]);
+        }
+
+        setCurrentProductId("");
+        setCurrentQuantity(1);
+        setCurrentAvailability(null);
+
     } catch (error: any) {
         showError("Erro ao verificar estoque: " + error.message);
-        return;
     } finally {
         setLoading(false);
     }
-
-    // 3. Se passou na validação, adiciona/atualiza o item
-    const existingItemIndex = selectedItems.findIndex(item => item.product_id === currentProductId);
-    
-    if (existingItemIndex !== -1) {
-        // Se já existe, atualiza a quantidade (já validamos o totalRequested)
-        const updatedItems = selectedItems.map((item, index) => 
-            index === existingItemIndex 
-                ? { ...item, quantity: totalRequested }
-                : item
-        );
-        setSelectedItems(updatedItems);
-    } else {
-        const newItem: OrderItem = {
-            product_id: currentProductId,
-            product_name: product.name,
-            quantity: currentQuantity,
-            daily_price: Number(product.price)
-        };
-        setSelectedItems([...selectedItems, newItem]);
-    }
-
-    setCurrentProductId("");
-    setCurrentQuantity(1);
-    setCurrentAvailability(null);
   };
 
   const removeItem = (index: number) => {
@@ -359,23 +425,74 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
     try {
       setLoading(true);
 
-      // --- CORREÇÃO DE FUSO HORÁRIO (A MÁGICA ACONTECE AQUI) ---
-      // Forçamos o horário para 12:00:00 (Meio-dia).
-      // Isso impede que o fuso horário (UTC-3) jogue a data para o dia anterior (21:00).
+      // --- CORREÇÃO DE FUSO HORÁRIO ---
       const newStart = new Date(`${values.start_date}T12:00:00`);
       const newEnd = new Date(`${values.end_date}T12:00:00`);
 
-      // --- 3. MÓDULO DE ESTOQUE E CONFLITOS (ANTIDUPLICIDADE) ---
+      // --- 3. MÓDULO DE ESTOQUE E CONFLITOS (Revalidação Final) ---
       // Revalidação final de estoque antes de salvar (para garantir que as datas não mudaram)
       for (const item of selectedItems) {
         const product = productList.find(p => p.id === item.product_id);
         
         if (product) {
-            const { available: availableQuantity, maxUsage, peakDate } = await checkAvailability(product.id, values.start_date, values.end_date);
+            // 1. Busca Fresca do Total
+            const { data: productData, error: prodError } = await supabase
+              .from('products')
+              .select('total_quantity')
+              .eq('id', item.product_id)
+              .single();
+              
+            if (prodError || !productData) {
+              showError("Erro ao verificar produto na validação final.");
+              setLoading(false);
+              return;
+            }
+            const totalEstoque = Number(productData.total_quantity) || 0;
+
+            // 2. Busca Ocupação
+            const startBoundary = `${values.start_date}T12:00:00.000Z`;
+            const endBoundary = `${values.end_date}T12:00:00.000Z`;
+
+            const { data: activeRentals, error: conflictError } = await supabase
+              .from('order_items')
+              .select(`
+                quantity,
+                orders!inner (start_date, end_date, status)
+              `)
+              .eq('product_id', item.product_id)
+              .neq('order_id', orderId || '00000000-0000-0000-0000-000000000000') 
+              .in('orders.status', ['signed', 'reserved', 'picked_up']) 
+              .lte('orders.start_date', endBoundary)
+              .gte('orders.end_date', startBoundary);
+
+            if (conflictError) throw conflictError;
+
+            // 3. Algoritmo de Pico Diário (Daily Peak)
+            let maxUsage = 0;
+            const start = parseISO(values.start_date);
+            const end = parseISO(values.end_date);
+
+            for (let d = start; d <= end; d = addDays(d, 1)) {
+              const currentDayStr = format(d, 'yyyy-MM-dd');
+
+              const usageOnThisDay = (activeRentals || []).reduce((acc, rental) => {
+                const itemQuantity = Number(rental.quantity) || 0;
+                const itemStart = rental.orders.start_date.split('T')[0];
+                const itemEnd = rental.orders.end_date.split('T')[0];
+
+                if (currentDayStr >= itemStart && currentDayStr <= itemEnd) {
+                  return acc + itemQuantity;
+                }
+                return acc;
+              }, 0);
+
+              if (usageOnThisDay > maxUsage) maxUsage = usageOnThisDay;
+            }
+
+            const disponivel = totalEstoque - maxUsage;
             
-            if (item.quantity > availableQuantity) {
-                const unitsFree = product.total_quantity - maxUsage;
-                showError(`Falha na validação final: O item "${product.name}" excede o estoque disponível. O dia mais cheio (${peakDate}) tem apenas ${unitsFree} unidades livres.`);
+            if (item.quantity > disponivel) {
+                showError(`Falha na validação final: O item "${product.name}" excede o estoque disponível (${disponivel} un) para o período selecionado.`);
                 setLoading(false);
                 return;
             }
