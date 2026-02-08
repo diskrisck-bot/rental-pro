@@ -13,7 +13,8 @@ import {
   CheckCircle,
   ChevronRight,
   Clock,
-  User
+  User,
+  Hash
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useQuery } from '@tanstack/react-query';
@@ -110,8 +111,6 @@ const QuickInventoryWidget = ({ products, activeOrders }: any) => {
   const inventoryStatus = useMemo(() => {
     if (!products || !activeOrders) return [];
     
-    // Converte activeOrders (que agora são PEDIDOS) em uma lista de ITENS ALUGADOS
-    // para poder calcular o estoque corretamente
     const allRentedItems = activeOrders.flatMap((order: any) => 
         order.order_items.map((item: any) => ({
             product_id: item.product_id,
@@ -182,26 +181,23 @@ const QuickInventoryWidget = ({ products, activeOrders }: any) => {
   );
 };
 
-// Widget de Timeline (Central) - CORRIGIDO PARA CONTRATOS
+// Widget de Timeline (Central) - AJUSTADO: SÓ ID NA COLUNA
 const TimelineWidget = ({ activeOrders }: any) => {
   const navigate = useNavigate();
   const today = startOfDay(new Date());
-  const days = eachDayOfInterval({ start: today, end: addDays(today, 6) }); // 7 dias
+  const days = eachDayOfInterval({ start: today, end: addDays(today, 6) }); 
 
-  // Ordena pedidos por data de início
   const sortedOrders = useMemo(() => {
-    // Filtra apenas o que está acontecendo NESTA semana para exibir
     return (activeOrders || [])
         .filter((order: any) => {
             const start = parseISO(order.start_date);
             const end = parseISO(order.end_date);
-            // Se termina antes de hoje ou começa depois da janela de 7 dias, esconde
             if (isBefore(end, today)) return false;
             if (isAfter(start, days[days.length - 1])) return false;
             return true;
         })
         .sort((a: any, b: any) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())
-        .slice(0, 6); // Mostra no máximo 6 linhas para caber no widget
+        .slice(0, 6);
   }, [activeOrders, days, today]);
 
   return (
@@ -222,8 +218,9 @@ const TimelineWidget = ({ activeOrders }: any) => {
         <div className="min-w-[600px]">
             {/* Header Dias */}
             <div className="flex border-b border-gray-200 bg-white sticky top-0 z-10 shadow-sm">
-                <div className="w-40 p-3 text-xs font-extrabold text-gray-400 border-r border-gray-200 bg-gray-50 sticky left-0 z-20 uppercase tracking-wider flex items-center gap-1">
-                    <User className="h-3 w-3" /> Contrato
+                {/* Coluna ID Estreita */}
+                <div className="w-24 p-3 text-xs font-extrabold text-gray-400 border-r border-gray-200 bg-gray-50 sticky left-0 z-20 uppercase tracking-wider flex items-center justify-center gap-1">
+                    <Hash className="h-3 w-3" /> ID
                 </div>
                 {days.map(day => {
                     const isToday = isSameDay(day, today);
@@ -242,7 +239,6 @@ const TimelineWidget = ({ activeOrders }: any) => {
                 const start = parseISO(order.start_date);
                 const end = parseISO(order.end_date);
                 
-                // Lógica de posicionamento simplificada para widget
                 let startIndex = days.findIndex(d => isSameDay(d, start));
                 let endIndex = days.findIndex(d => isSameDay(d, end));
                 
@@ -256,27 +252,23 @@ const TimelineWidget = ({ activeOrders }: any) => {
 
                 return (
                     <div key={order.id} className="flex border-b border-gray-200 last:border-0 hover:bg-white transition-colors group h-12 relative bg-white">
-                        {/* Coluna Contrato */}
-                        <div className="w-40 p-3 text-xs font-bold text-[#1A237E] border-r border-gray-200 bg-white sticky left-0 z-10 truncate flex flex-col justify-center shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
-                            <span className="truncate">{order.customer_name}</span>
-                            <span className="text-[10px] text-gray-400 font-medium">#{order.id.split('-')[0]}</span>
+                        {/* Coluna ID Limpa */}
+                        <div className="w-24 p-3 text-xs font-bold text-[#1A237E] border-r border-gray-200 bg-white sticky left-0 z-10 flex items-center justify-center shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                            #{order.id.split('-')[0]}
                         </div>
                         
-                        {/* Grade */}
                         <div className="flex-1 flex relative">
                             {days.map(day => (
                                 <div key={day.toString()} className={`flex-1 min-w-[60px] border-r border-gray-100 ${isSameDay(day, today) ? 'bg-blue-50/20' : ''}`} />
                             ))}
                             
-                            {/* Barra */}
                             <div 
                                 className={cn(
-                                    "absolute top-3 h-6 rounded mx-0.5 text-[10px] font-bold text-white flex items-center px-2 shadow-sm overflow-hidden whitespace-nowrap cursor-pointer hover:scale-[1.02] transition-all",
-                                    isEndsToday ? "bg-[#D32F2F]" : "bg-[#10B981]" // Vermelho se vence hoje
+                                    "absolute top-2 h-8 rounded mx-0.5 text-[10px] font-bold text-white flex items-center px-2 shadow-sm overflow-hidden whitespace-nowrap",
+                                    isEndsToday ? "bg-[#D32F2F]" : "bg-[#10B981]"
                                 )}
                                 style={{ left: `${left}%`, width: `${width}%`, maxWidth: '100%' }}
-                                title={`${order.customer_name} - ${isEndsToday ? 'Vence Hoje' : 'Ativo'}`}
-                                onClick={() => navigate(`/orders?id=${order.id}`)}
+                                title={order.customer_name}
                             >
                                 {isEndsToday && <AlertTriangle className="h-3 w-3 mr-1 text-white" />}
                                 {order.customer_name}
@@ -295,7 +287,6 @@ const TimelineWidget = ({ activeOrders }: any) => {
 const Dashboard = () => {
   const { data: businessName } = useQuery({ queryKey: ['businessName'], queryFn: fetchBusinessName });
   
-  // Queries
   const { data: orders } = useQuery({
     queryKey: ['dashboardOrders'],
     queryFn: async () => {
@@ -312,19 +303,12 @@ const Dashboard = () => {
     }
   });
 
-  // Busca PEDIDOS (ORDERS) diretamente, com os itens aninhados
   const { data: activeOrders } = useQuery({
     queryKey: ['dashboardActiveOrders'],
     queryFn: async () => {
         const { data } = await supabase
             .from('orders')
-            .select(`
-                *,
-                order_items (
-                    product_id,
-                    quantity
-                )
-            `)
+            .select('*, order_items(quantity, product_id)')
             .in('status', ['signed', 'reserved', 'picked_up'])
         return data || [];
     }
@@ -343,8 +327,6 @@ const Dashboard = () => {
     }).length;
 
     const clients = new Set(orders.filter(o => o.status !== 'draft').map(o => o.customer_cpf)).size;
-    
-    // Calcula itens fora baseado nos activeOrders
     const itemsOut = activeOrders?.reduce((acc: number, order: any) => {
         const orderTotal = order.order_items.reduce((sum: number, item: any) => sum + item.quantity, 0);
         return acc + orderTotal;
@@ -358,7 +340,6 @@ const Dashboard = () => {
   return (
     <div className="p-6 md:p-10 space-y-8 bg-[#F4F5F7] min-h-screen font-sans">
       
-      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight text-[#1A237E] uppercase">Dashboard</h1>
@@ -373,10 +354,8 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* ALERTA DE DEVOLUÇÃO */}
       <ReturnsAlertWidget orders={orders || []} />
 
-      {/* METRICS ROW */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <MetricCard title="Receita Total" value={formatCurrency(metrics.revenue)} subtext="Acumulado" icon={DollarSign} variant="primary" />
         <MetricCard title="Contratos Ativos" value={metrics.active} subtext="Em andamento" icon={FileText} variant="secondary" />
@@ -384,10 +363,8 @@ const Dashboard = () => {
         <MetricCard title="Clientes" value={metrics.clients} subtext="Base total" icon={Users} variant="secondary" />
       </div>
 
-      {/* MAIN CONTENT GRID */}
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-12">
         <div className="lg:col-span-8 h-full min-h-[400px]">
-            {/* Widget Corrigido: Passa os Pedidos */}
             <TimelineWidget activeOrders={activeOrders} />
         </div>
         <div className="lg:col-span-4 h-full min-h-[400px]">
