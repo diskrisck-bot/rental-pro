@@ -124,9 +124,11 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
 
     const totalQuantity = product.total_quantity || 0;
     
-    // Usamos T12:00:00Z para alinhar com o formato de salvamento e garantir a inclusão correta do dia.
-    const startBoundary = `${start}T12:00:00.000Z`;
-    const endBoundary = `${end}T12:00:00.000Z`;
+    // CORREÇÃO: Usamos T00:00:00Z para o início e T23:59:59.999Z para o fim
+    // na consulta, garantindo que a colisão cubra o dia inteiro,
+    // independentemente do timestamp T12:00:00Z usado para salvar.
+    const startBoundary = `${start}T00:00:00.000Z`;
+    const endBoundary = `${end}T23:59:59.999Z`;
 
     // Se for produto rastreável, a quantidade total é 1, e a lógica de colisão é mais simples
     if (product.type === 'trackable') {
