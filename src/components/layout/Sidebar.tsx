@@ -13,7 +13,6 @@ import {
 import { cn } from '@/lib/utils';
 import { signOut } from '@/integrations/supabase/auth';
 import { showError } from '@/utils/toast';
-import { ThemeToggle } from '../ThemeToggle'; // Importando o novo componente
 
 interface SidebarProps {
   onLinkClick?: () => void;
@@ -44,7 +43,7 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
     <div className="w-64 bg-secondary border-r h-screen flex flex-col md:fixed left-0 top-0">
       <div className="p-6">
         <h1 className="text-2xl font-heading font-extrabold flex items-center gap-2">
-          <Package className="w-8 h-8 text-primary" /> {/* Usando text-primary para ser dinâmico */}
+          <Package className="w-8 h-8 text-white" />
           <span className="text-white">Rental</span>
           <span className="text-primary italic">PRO</span>
         </h1>
@@ -61,30 +60,29 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
               className={cn(
                 "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors border-l-4",
                 isActive 
-                  ? "bg-primary text-primary-foreground border-primary/80" // Usando primary-foreground
+                  ? "bg-primary text-white border-primary/80" 
                   : "text-gray-200 border-transparent hover:bg-secondary/80 hover:text-white"
               )}
             >
-              <item.icon className={cn("w-5 h-5", isActive ? "text-primary-foreground" : "text-gray-400")} />
+              <item.icon className={cn("w-5 h-5", isActive ? "text-white" : "text-gray-400")} />
               {item.label}
             </Link>
           );
         })}
       </nav>
 
-      <div className="p-4 border-t border-secondary/80 space-y-3">
-        <ThemeToggle /> {/* Adicionando o Theme Toggle */}
+      <div className="p-4 border-t border-secondary/80 space-y-1">
         <Link
           to="/settings"
           onClick={onLinkClick}
           className={cn(
             "flex items-center gap-3 px-3 py-2 w-full rounded-md text-sm font-medium transition-colors border-l-4",
             location.pathname === '/settings' 
-              ? "bg-primary text-primary-foreground border-primary/80" 
+              ? "bg-primary text-white border-primary/80" 
               : "text-gray-200 border-transparent hover:bg-secondary/80 hover:text-white"
           )}
         >
-          <Settings className={cn("w-5 h-5", location.pathname === '/settings' ? "text-primary-foreground" : "text-gray-400")} />
+          <Settings className={cn("w-5 h-5", location.pathname === '/settings' ? "text-white" : "text-gray-400")} />
           Configurações
         </Link>
         <button 

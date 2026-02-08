@@ -73,8 +73,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
   // --- GERADOR DE PDF (MANTIDO O SEU CÓDIGO ORIGINAL) ---
   const generatePDF = async (order: any, owner: OwnerProfile | null) => {
     const doc = new jsPDF({ format: 'a4', unit: 'mm' });
-    // Cores hardcoded no PDF não são afetadas pelo tema do frontend, mas vou usar as variáveis para consistência
-    const primaryColor = [30, 58, 138]; // Legal Blue (Secondary in Industrial)
+    const primaryColor = [30, 58, 138]; 
     const lightGray = [245, 245, 245];
     
     const locador = {
@@ -206,10 +205,10 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
 
   const getStatusBadge = () => {
       switch(status) {
-          case 'pending_signature': return <Badge variant="outline" className="text-primary border-primary/20 bg-primary/10">Aguardando Assinatura</Badge>;
+          case 'pending_signature': return <Badge variant="outline" className="text-orange-600 border-orange-200 bg-orange-50">Aguardando Assinatura</Badge>;
           case 'signed': return <Badge className="bg-green-600">Assinado</Badge>;
-          case 'reserved': return <Badge className="bg-secondary">Reservado</Badge>;
-          case 'picked_up': return <Badge className="bg-primary">Em Andamento (Na Rua)</Badge>; 
+          case 'reserved': return <Badge className="bg-blue-600">Reservado</Badge>;
+          case 'picked_up': return <Badge className="bg-[#F57C00]">Em Andamento (Na Rua)</Badge>; 
           case 'returned': return <Badge className="bg-gray-600">Concluído</Badge>;
           case 'canceled': return <Badge variant="destructive">Cancelado</Badge>;
           default: return <Badge>{status}</Badge>;
@@ -218,24 +217,24 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
   
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-md flex flex-col h-full p-0 gap-0 bg-background">
+      <SheetContent className="sm:max-w-md flex flex-col h-full p-0 gap-0 bg-[#F4F5F7]">
         
         {/* HEADER FIXO */}
-        <SheetHeader className="px-6 py-4 border-b border-border bg-card">
+        <SheetHeader className="px-6 py-4 border-b border-gray-100 bg-white">
           <div className="flex justify-between items-start">
             <div>
-                <SheetTitle className="text-secondary font-extrabold text-xl uppercase">{order?.customer_name}</SheetTitle>
-                <p className="text-xs text-muted-foreground font-bold">Pedido #{order?.id.split('-')[0]}</p>
+                <SheetTitle className="text-[#1A237E] font-extrabold text-xl uppercase">{order?.customer_name}</SheetTitle>
+                <p className="text-xs text-gray-500 font-bold">Pedido #{order?.id.split('-')[0]}</p>
             </div>
             {getStatusBadge()}
           </div>
         </SheetHeader>
 
         {/* CORPO COM SCROLL */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-background">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-[#F4F5F7]">
           
           {/* Valor Total */}
-          <div className="bg-secondary rounded-2xl p-6 text-secondary-foreground shadow-md text-center">
+          <div className="bg-[#1A237E] rounded-2xl p-6 text-white shadow-md text-center">
             <p className="text-xs font-bold opacity-80 uppercase tracking-widest mb-1">Valor do Contrato</p>
             <p className="text-4xl font-black">R$ {Number(order?.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
           </div>
@@ -257,7 +256,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
                 onClick={handleDownloadFinalPDF} 
                 disabled={isGeneratingContract} 
                 variant={isSigned ? "default" : "outline"} 
-                className={cn("w-full h-12 font-bold", isSigned ? "bg-secondary hover:bg-secondary/90" : "border-secondary text-secondary", !showWhatsappButton && "col-span-full")}
+                className={cn("w-full h-12 font-bold", isSigned ? "bg-secondary hover:bg-secondary/90" : "border-[#1A237E] text-[#1A237E]", !showWhatsappButton && "col-span-full")}
              >
                 {isGeneratingContract ? <Loader2 className="animate-spin mr-2" /> : <Download className="mr-2 h-4 w-4" />} 
                 {isSigned ? 'Baixar Contrato Assinado' : 'Baixar Rascunho PDF'}
@@ -265,13 +264,13 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
           </div>
 
           {/* Lista de Itens */}
-          <div className="bg-card rounded-xl border border-border p-4 shadow-sm">
-            <h4 className="text-xs font-bold text-muted-foreground uppercase mb-3 flex items-center gap-2"><Package className="h-4 w-4"/> Equipamentos</h4>
-            <div className="divide-y divide-border/50">
+          <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+            <h4 className="text-xs font-bold text-gray-500 uppercase mb-3 flex items-center gap-2"><Package className="h-4 w-4"/> Equipamentos</h4>
+            <div className="divide-y divide-gray-100">
                 {order?.order_items.map((item: any, idx: number) => (
                   <div key={idx} className="py-3 flex justify-between items-center">
-                      <span className="text-sm font-medium text-foreground">{item.products?.name}</span>
-                      <Badge className="bg-secondary text-secondary-foreground">x{item.quantity}</Badge>
+                      <span className="text-sm font-medium text-gray-800">{item.products?.name}</span>
+                      <Badge className="bg-[#1A237E]">x{item.quantity}</Badge>
                   </div>
                 ))}
             </div>
@@ -279,13 +278,13 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
         </div>
 
         {/* FOOTER FIXO */}
-        <SheetFooter className="border-t border-border bg-card mt-auto w-full">
+        <SheetFooter className="border-t border-gray-200 bg-white mt-auto w-full">
             <div className="p-6 flex flex-col gap-3 w-full">
                 
                 {/* AÇÃO PRINCIPAL (Retirada / Devolução) */}
                 {status === 'signed' && (
                     <Button 
-                        className="w-full h-14 bg-green-600 hover:bg-green-700 text-white font-bold uppercase text-lg shadow-lg" 
+                        className="w-full h-14 bg-[#10B981] hover:bg-green-600 text-white font-bold uppercase text-lg shadow-lg" 
                         onClick={() => updateStatus('returned')}
                         disabled={updating}
                     >
@@ -296,7 +295,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
 
                 {status === 'reserved' && (
                     <Button 
-                        className="w-full h-14 bg-primary hover:bg-primary/90 text-primary-foreground font-bold uppercase text-lg shadow-lg" 
+                        className="w-full h-14 bg-[#F57C00] hover:bg-orange-600 text-white font-bold uppercase text-lg shadow-lg" 
                         onClick={() => updateStatus('picked_up')}
                         disabled={updating}
                     >
@@ -307,7 +306,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
 
                 {status === 'picked_up' && (
                     <Button 
-                        className="w-full h-14 bg-green-600 hover:bg-green-700 text-white font-bold uppercase text-lg shadow-lg" 
+                        className="w-full h-14 bg-[#10B981] hover:bg-green-600 text-white font-bold uppercase text-lg shadow-lg" 
                         onClick={() => updateStatus('returned')}
                         disabled={updating}
                     >
@@ -327,7 +326,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
                 {!isFinalized && (
                     <Button 
                         variant="ghost" 
-                        className="w-full text-destructive hover:text-destructive/90 hover:bg-destructive/10 font-bold uppercase text-xs mt-2" 
+                        className="w-full text-red-500 hover:text-red-700 hover:bg-red-50 font-bold uppercase text-xs mt-2" 
                         onClick={handleCancelOrder} 
                         disabled={updating}
                     >

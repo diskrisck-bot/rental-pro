@@ -31,18 +31,18 @@ import CreateOrderDialog from '@/components/orders/CreateOrderDialog';
 // --- SUB-COMPONENTES VISUAIS ---
 
 const MetricCard = ({ title, value, subtext, icon: Icon, variant }: any) => {
-  const isPrimary = variant === 'primary'; // Laranja/Modern Primary
-  const bgColor = isPrimary ? 'bg-primary' : 'bg-secondary';
-  const textColor = isPrimary ? 'text-primary' : 'text-secondary';
+  const isPrimary = variant === 'primary'; // Laranja
+  const bgColor = isPrimary ? 'bg-[#F57C00]' : 'bg-[#1A237E]';
+  const textColor = isPrimary ? 'text-[#F57C00]' : 'text-[#1A237E]';
 
   return (
-    <Card className="shadow-hard border border-gray-200 bg-card relative overflow-hidden group hover:shadow-lg transition-all rounded-xl">
+    <Card className="shadow-hard border border-gray-200 bg-white relative overflow-hidden group hover:shadow-lg transition-all rounded-xl">
       <div className={`absolute top-0 left-0 w-1.5 h-full ${bgColor}`} />
       <CardContent className="p-6 flex items-start justify-between">
         <div>
-          <p className="text-sm font-bold text-muted-foreground uppercase tracking-wide mb-1">{title}</p>
+          <p className="text-sm font-bold text-gray-500 uppercase tracking-wide mb-1">{title}</p>
           <h3 className={`text-3xl font-extrabold ${textColor}`}>{value}</h3>
-          {subtext && <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1 font-medium">{subtext}</p>}
+          {subtext && <p className="text-xs text-gray-400 mt-2 flex items-center gap-1 font-medium">{subtext}</p>}
         </div>
         <div className={`p-3 rounded-lg ${bgColor} bg-opacity-10`}>
           <Icon className={`h-6 w-6 ${textColor}`} />
@@ -68,31 +68,31 @@ const ReturnsAlertWidget = ({ orders }: { orders: any[] }) => {
   if (returnsToday.length === 0) return null;
 
   return (
-    <Card className="border-2 border-primary bg-primary/5 shadow-sm mb-6">
-      <CardHeader className="pb-2 border-b border-primary/20">
+    <Card className="border-2 border-[#F57C00] bg-orange-50/50 shadow-sm mb-6">
+      <CardHeader className="pb-2 border-b border-orange-100">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-primary" />
-            <CardTitle className="text-lg font-extrabold text-primary uppercase">Atenção: Devoluções Hoje</CardTitle>
+            <AlertTriangle className="h-5 w-5 text-[#F57C00]" />
+            <CardTitle className="text-lg font-extrabold text-orange-900 uppercase">Atenção: Devoluções Hoje</CardTitle>
           </div>
-          <Badge className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold">{returnsToday.length} Pendentes</Badge>
+          <Badge className="bg-[#F57C00] hover:bg-orange-600 text-white font-bold">{returnsToday.length} Pendentes</Badge>
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        <div className="divide-y divide-primary/20">
+        <div className="divide-y divide-orange-200/50">
           {returnsToday.map((order) => (
-            <div key={order.id} className="p-4 flex items-center justify-between hover:bg-primary/10 transition-colors cursor-pointer" onClick={() => navigate(`/orders?id=${order.id}`)}>
+            <div key={order.id} className="p-4 flex items-center justify-between hover:bg-orange-100/50 transition-colors cursor-pointer" onClick={() => navigate(`/orders?id=${order.id}`)}>
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-card rounded-full border border-primary/20">
-                  <Clock className="h-4 w-4 text-primary" />
+                <div className="p-2 bg-white rounded-full border border-orange-200">
+                  <Clock className="h-4 w-4 text-[#F57C00]" />
                 </div>
                 <div>
-                  <p className="font-bold text-foreground">{order.customer_name}</p>
-                  <p className="text-xs text-primary font-medium">Pedido #{order.id.split('-')[0]}</p>
+                  <p className="font-bold text-gray-900">{order.customer_name}</p>
+                  <p className="text-xs text-orange-800 font-medium">Pedido #{order.id.split('-')[0]}</p>
                 </div>
               </div>
               <div className="text-right">
-                <Button size="sm" variant="ghost" className="text-primary font-bold hover:text-primary/90 hover:bg-primary/10">
+                <Button size="sm" variant="ghost" className="text-[#F57C00] font-bold hover:text-orange-800 hover:bg-orange-200">
                   Ver Pedido <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
               </div>
@@ -147,38 +147,34 @@ const QuickInventoryWidget = ({ products, activeOrders }: any) => {
   }, [products, activeOrders]);
 
   return (
-    <Card className="h-full border border-border shadow-hard bg-card rounded-xl">
-      <CardHeader className="pb-2 border-b border-border/50">
+    <Card className="h-full border border-gray-200 shadow-hard bg-white rounded-xl">
+      <CardHeader className="pb-2 border-b border-gray-100">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-extrabold text-secondary">Inventário Rápido</CardTitle>
-          <Button variant="ghost" size="sm" onClick={() => navigate('/inventory')} className="text-xs font-bold text-muted-foreground uppercase tracking-wide hover:text-secondary">Ver tudo</Button>
+          <CardTitle className="text-lg font-extrabold text-[#1A237E]">Inventário Rápido</CardTitle>
+          <Button variant="ghost" size="sm" onClick={() => navigate('/inventory')} className="text-xs font-bold text-gray-500 uppercase tracking-wide hover:text-[#1A237E]">Ver tudo</Button>
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        <div className="divide-y divide-border/50">
+        <div className="divide-y divide-gray-100">
           {inventoryStatus.map((item: any) => (
-            <div key={item.id} className="p-4 flex items-center justify-between hover:bg-accent/10 transition-colors">
+            <div key={item.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
               <div className="flex items-center gap-3">
-                <div className={cn("p-2 rounded-lg border", 
-                    item.status === 'out_of_stock' ? 'bg-destructive/10 border-destructive/20 text-destructive' : 
-                    item.status === 'low_stock' ? 'bg-primary/10 border-primary/20 text-primary' : 
-                    'bg-secondary/10 border-secondary/20 text-secondary'
-                )}>
+                <div className={`p-2 rounded-lg border ${item.status === 'out_of_stock' ? 'bg-red-50 border-red-100 text-red-600' : item.status === 'low_stock' ? 'bg-orange-50 border-orange-100 text-[#F57C00]' : 'bg-blue-50 border-blue-100 text-[#1A237E]'}`}>
                   <Package className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="font-bold text-sm text-foreground">{item.name}</p>
-                  <p className="text-xs text-muted-foreground font-medium">Total: {item.total_quantity} un</p>
+                  <p className="font-bold text-sm text-gray-800">{item.name}</p>
+                  <p className="text-xs text-gray-500 font-medium">Total: {item.total_quantity} un</p>
                 </div>
               </div>
               <div className="text-right">
-                {item.status === 'out_of_stock' && <Badge variant="destructive" className="font-bold">ESGOTADO</Badge>}
-                {item.status === 'low_stock' && <Badge className="bg-primary text-primary-foreground font-bold hover:bg-primary/90">{item.available} RESTANTES</Badge>}
-                {item.status === 'available' && <Badge className="bg-green-600 text-white font-bold hover:bg-green-700">DISPONÍVEIS</Badge>}
+                {item.status === 'out_of_stock' && <Badge className="bg-[#D32F2F] text-white font-bold hover:bg-red-700">ESGOTADO</Badge>}
+                {item.status === 'low_stock' && <Badge className="bg-[#F57C00] text-white font-bold hover:bg-orange-600">{item.available} RESTANTES</Badge>}
+                {item.status === 'available' && <Badge className="bg-[#10B981] text-white font-bold hover:bg-green-600">{item.available} DISPONÍVEIS</Badge>}
               </div>
             </div>
           ))}
-          {inventoryStatus.length === 0 && <p className="p-6 text-center text-sm text-muted-foreground">Nenhum produto cadastrado.</p>}
+          {inventoryStatus.length === 0 && <p className="p-6 text-center text-sm text-gray-400">Nenhum produto cadastrado.</p>}
         </div>
       </CardContent>
     </Card>
@@ -205,40 +201,40 @@ const TimelineWidget = ({ activeOrders }: any) => {
   }, [activeOrders, days, today]);
 
   return (
-    <Card className="h-full border border-border shadow-hard bg-card overflow-hidden flex flex-col rounded-xl">
-      <CardHeader className="pb-2 border-b border-border/50 bg-card z-20">
+    <Card className="h-full border border-gray-200 shadow-hard bg-white overflow-hidden flex flex-col rounded-xl">
+      <CardHeader className="pb-2 border-b border-gray-100 bg-white z-20">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <CardTitle className="text-lg font-extrabold text-secondary">Timeline de Contratos</CardTitle>
-            <Badge variant="outline" className="text-xs font-bold text-muted-foreground border-border">Próximos 7 dias</Badge>
+            <CardTitle className="text-lg font-extrabold text-[#1A237E]">Timeline de Contratos</CardTitle>
+            <Badge variant="outline" className="text-xs font-bold text-gray-500 border-gray-300">Próximos 7 dias</Badge>
           </div>
-          <Button variant="outline" size="sm" onClick={() => navigate('/timeline')} className="text-xs font-bold uppercase tracking-wide border-border text-muted-foreground hover:text-secondary">
+          <Button variant="outline" size="sm" onClick={() => navigate('/timeline')} className="text-xs font-bold uppercase tracking-wide border-gray-300 text-gray-600 hover:text-[#1A237E]">
              Expandir <ChevronRight className="h-3 w-3 ml-1" />
           </Button>
         </div>
       </CardHeader>
       
-      <div className="flex-1 overflow-x-auto overflow-y-auto relative bg-background">
+      <div className="flex-1 overflow-x-auto overflow-y-auto relative bg-gray-50/50">
         <div className="min-w-[600px]">
             {/* Header Dias */}
-            <div className="flex border-b border-border/50 bg-card sticky top-0 z-10 shadow-sm">
+            <div className="flex border-b border-gray-200 bg-white sticky top-0 z-10 shadow-sm">
                 {/* Coluna ID Estreita */}
-                <div className="w-24 p-3 text-xs font-extrabold text-muted-foreground border-r border-border bg-accent sticky left-0 z-20 uppercase tracking-wider flex items-center justify-center gap-1">
+                <div className="w-24 p-3 text-xs font-extrabold text-gray-400 border-r border-gray-200 bg-gray-50 sticky left-0 z-20 uppercase tracking-wider flex items-center justify-center gap-1">
                     <Hash className="h-3 w-3" /> ID
                 </div>
                 {days.map(day => {
                     const isToday = isSameDay(day, today);
                     return (
-                        <div key={day.toString()} className={`flex-1 min-w-[60px] p-2 text-center border-r border-border/50 ${isToday ? 'bg-accent/30' : ''}`}>
-                            <div className={`text-[10px] font-black uppercase ${isToday ? 'text-secondary' : 'text-muted-foreground'}`}>{format(day, 'EEE', { locale: ptBR })}</div>
-                            <div className={`text-sm font-extrabold ${isToday ? 'text-primary' : 'text-foreground'}`}>{format(day, 'dd')}</div>
+                        <div key={day.toString()} className={`flex-1 min-w-[60px] p-2 text-center border-r border-gray-100 ${isToday ? 'bg-blue-50/50' : ''}`}>
+                            <div className={`text-[10px] font-black uppercase ${isToday ? 'text-[#1A237E]' : 'text-gray-400'}`}>{format(day, 'EEE', { locale: ptBR })}</div>
+                            <div className={`text-sm font-extrabold ${isToday ? 'text-[#F57C00]' : 'text-gray-700'}`}>{format(day, 'dd')}</div>
                         </div>
                     );
                 })}
             </div>
 
             {/* Linhas (Pedidos) */}
-            {sortedOrders.length === 0 ? <div className="p-8 text-center text-muted-foreground text-sm font-medium">Sem contratos ativos na semana.</div> :
+            {sortedOrders.length === 0 ? <div className="p-8 text-center text-gray-400 text-sm font-medium">Sem contratos ativos na semana.</div> :
              sortedOrders.map((order: any) => {
                 const start = parseISO(order.start_date);
                 const end = parseISO(order.end_date);
@@ -255,21 +251,21 @@ const TimelineWidget = ({ activeOrders }: any) => {
                 const isEndsToday = isSameDay(end, today);
 
                 return (
-                    <div key={order.id} className="flex border-b border-border/50 last:border-0 hover:bg-accent/10 transition-colors group h-12 relative bg-card">
+                    <div key={order.id} className="flex border-b border-gray-200 last:border-0 hover:bg-white transition-colors group h-12 relative bg-white">
                         {/* Coluna ID Limpa */}
-                        <div className="w-24 p-3 text-xs font-bold text-secondary border-r border-border bg-card sticky left-0 z-10 flex items-center justify-center shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                        <div className="w-24 p-3 text-xs font-bold text-[#1A237E] border-r border-gray-200 bg-white sticky left-0 z-10 flex items-center justify-center shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                             #{order.id.split('-')[0]}
                         </div>
                         
                         <div className="flex-1 flex relative">
                             {days.map(day => (
-                                <div key={day.toString()} className={`flex-1 min-w-[60px] border-r border-border/30 ${isSameDay(day, today) ? 'bg-accent/20' : ''}`} />
+                                <div key={day.toString()} className={`flex-1 min-w-[60px] border-r border-gray-100 ${isSameDay(day, today) ? 'bg-blue-50/20' : ''}`} />
                             ))}
                             
                             <div 
                                 className={cn(
                                     "absolute top-2 h-8 rounded mx-0.5 text-[10px] font-bold text-white flex items-center px-2 shadow-sm overflow-hidden whitespace-nowrap",
-                                    isEndsToday ? "bg-destructive" : "bg-green-600" // Mantendo verde para 'ativo' e vermelho para 'vencendo'
+                                    isEndsToday ? "bg-[#D32F2F]" : "bg-[#10B981]"
                                 )}
                                 style={{ left: `${left}%`, width: `${width}%`, maxWidth: '100%' }}
                                 title={order.customer_name}
@@ -342,16 +338,16 @@ const Dashboard = () => {
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   return (
-    <div className="p-6 md:p-10 space-y-8 bg-background min-h-screen font-sans">
+    <div className="p-6 md:p-10 space-y-8 bg-[#F4F5F7] min-h-screen font-sans">
       
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-foreground uppercase">Dashboard</h1>
-          <p className="text-muted-foreground mt-1 font-medium">Visão tática: {businessName || 'Minha Locadora'}</p>
+          <h1 className="text-3xl font-extrabold tracking-tight text-[#1A237E] uppercase">Dashboard</h1>
+          <p className="text-gray-500 mt-1 font-medium">Visão tática: {businessName || 'Minha Locadora'}</p>
         </div>
         <div className="flex gap-3">
             <CreateOrderDialog onOrderCreated={() => window.location.reload()}> 
-                <Button className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold uppercase tracking-wide h-12 px-6 shadow-hard rounded-lg transition-all active:translate-y-1">
+                <Button className="bg-[#F57C00] hover:bg-orange-700 text-white font-bold uppercase tracking-wide h-12 px-6 shadow-hard rounded-lg transition-all active:translate-y-1">
                     + Novo Pedido
                 </Button>
             </CreateOrderDialog>
