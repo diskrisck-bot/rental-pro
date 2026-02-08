@@ -1,274 +1,352 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Users, 
   Box, 
   DollarSign, 
   FileText, 
   Loader2, 
-  Info,
-  Plus,
-  AlertTriangle,
+  TrendingUp,
   Package,
-  TrendingUp
+  AlertCircle,
+  CheckCircle,
+  ChevronRight,
+  Calendar as CalendarIcon
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { 
-  fetchPendingPickups, 
-  fetchPendingReturns,
-  fetchBusinessName,
-  fetchBusinessConfig,
-  fetchProductCount
-} from '@/integrations/supabase/queries';
-import { format, isAfter, startOfDay } from 'date-fns';
+import { useQuery } from '@tanstack/react-query';
+import { fetchBusinessName } from '@/integrations/supabase/queries';
+import { format, isAfter, startOfDay, addDays, eachDayOfInterval, isSameDay, isBefore, parseISO, isWithinInterval } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { 
-  Tooltip, 
-  TooltipContent, 
-  TooltipTrigger 
-} from '@/components/ui/tooltip';
-import RevenueChart from '@/components/dashboard/RevenueChart';
-import { useNavigate } from 'react-router-dom';
-import { useIsMobile } from '@/hooks/use-mobile';
+import { supabase } from '@/lib/supabase';
+import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import CreateOrderDialog from '@/components/orders/CreateOrderDialog';
-import { supabase } from '@/lib/supabase'; // Import direto para garantir os dados
-import { showError } from '@/utils/toast';
 
-const DashboardCard = ({ title, value, icon: Icon, description, isLoading, tooltipContent, subValue }: any) => {
-  const isMobile = useIsMobile();
-  return (
-    <Card className="rounded-xl shadow-sm hover:shadow-md transition-shadow">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <div className="flex flex-col">
-          <div className="flex items-center gap-1">
-            <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
-            {!isMobile && tooltipContent && (
-              <Tooltip>
-                <TooltipTrigger asChild><Info className="h-4 w-4 text-muted-foreground cursor-help" /></TooltipTrigger>
-                <TooltipContent className="max-w-xs bg-gray-800 text-white border-none rounded-lg shadow-lg p-3"><p className="text-xs">{tooltipContent}</p></TooltipContent>
-              </Tooltip>
-            )}
-          </div>
-          {isMobile && tooltipContent && <p className="text-xs text-gray-400 mt-1">{tooltipContent}</p>}
-        </div>
-        <Icon className="h-4 w-4 text-blue-600" />
-      </CardHeader>
-      <CardContent>
-        {isLoading ? <div className="h-8 flex items-center"><Loader2 className="h-5 w-5 animate-spin text-blue-400" /></div> : <div className="text-2xl font-bold">{value}</div>}
-        <div className="flex flex-col mt-1">
-            <p className="text-xs text-muted-foreground">{description}</p>
-            {subValue && (
-                <p className="text-[10px] font-semibold text-orange-600 mt-1 flex items-center gap-1">
-                    <TrendingUp className="h-3 w-3" /> Pipeline: {subValue}
-                </p>
-            )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-};
+// --- SUB-COMPONENTES VISUAIS ---
 
-const TaskListCard = ({ title, data, dateKey, emptyMessage, isLoading, tooltipContent }: any) => {
+const MetricCard = ({ title, value, subtext, icon: Icon, colorClass }: any) => (
+  <Card className="shadow-sm border-none bg-white relative overflow-hidden group hover:shadow-md transition-all">
+    <div className={`absolute top-0 left-0 w-1 h-full ${colorClass}`} />
+    <CardContent className="p-6 flex items-start justify-between">
+      <div>
+        <p className="text-sm font-medium text-gray-500 mb-1">{title}</p>
+        <h3 className="text-3xl font-bold text-gray-800">{value}</h3>
+        {subtext && <p className="text-xs text-gray-400 mt-2 flex items-center gap-1">{subtext}</p>}
+      </div>
+      <div className={`p-3 rounded-xl bg-opacity-10 ${colorClass.replace('bg-', 'bg-opacity-10 bg-')} `}>
+        <Icon className={`h-6 w-6 ${colorClass.replace('bg-', 'text-')}`} />
+      </div>
+    </CardContent>
+  </Card>
+);
+
+// Widget de Inventário Rápido (Lado Direito)
+const QuickInventoryWidget = ({ products, activeOrders }: any) => {
   const navigate = useNavigate();
-  const isMobile = useIsMobile();
-  const handleItemClick = (id: string) => navigate(`/orders?id=${id}`);
+  
+  // Processa os dados para achar itens críticos
+  const inventoryStatus = useMemo(() => {
+    if (!products || !activeOrders) return [];
+    
+    const today = startOfDay(new Date());
+
+    return products.map((product: any) => {
+      const rentedToday = activeOrders
+        .filter((item: any) => {
+          if (item.product_id !== product.id) return false;
+          const start = startOfDay(parseISO(item.orders.start_date));
+          const end = startOfDay(parseISO(item.orders.end_date));
+          return isWithinInterval(today, { start, end });
+        })
+        .reduce((acc: number, item: any) => acc + item.quantity, 0);
+
+      const available = product.total_quantity - rentedToday;
+      let status = 'available';
+      if (available <= 0) status = 'out_of_stock';
+      else if (available / product.total_quantity <= 0.2) status = 'low_stock';
+
+      return { ...product, available, status };
+    })
+    .sort((a: any, b: any) => {
+        // Prioriza: Esgotado > Baixo Estoque > Disponível
+        const priority: any = { out_of_stock: 0, low_stock: 1, available: 2 };
+        return priority[a.status] - priority[b.status];
+    })
+    .slice(0, 5); // Mostra apenas top 5
+  }, [products, activeOrders]);
+
   return (
-    <Card className="col-span-1 rounded-xl shadow-sm">
-      <CardHeader>
-        <div className="flex flex-col">
-          <div className="flex items-center gap-2">
-            <CardTitle>{title}</CardTitle>
-            {!isMobile && tooltipContent && (
-              <Tooltip>
-                <TooltipTrigger asChild><Info className="h-4 w-4 text-muted-foreground cursor-help" /></TooltipTrigger>
-                <TooltipContent className="max-w-xs bg-gray-800 text-white border-none rounded-lg shadow-lg p-3"><p className="text-xs">{tooltipContent}</p></TooltipContent>
-              </Tooltip>
-            )}
-          </div>
-          {isMobile && tooltipContent && <p className="text-xs text-gray-400 mt-1">{tooltipContent}</p>}
+    <Card className="h-full border-none shadow-sm bg-white">
+      <CardHeader className="pb-2 border-b border-gray-50">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-lg font-bold text-gray-800">Inventário Rápido</CardTitle>
+          <Button variant="ghost" size="sm" onClick={() => navigate('/inventory')} className="text-xs text-blue-600 hover:text-blue-700">Ver tudo</Button>
         </div>
       </CardHeader>
-      <CardContent>
-        {isLoading ? <div className="flex flex-col items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-blue-600" /></div> : (
-          <div className="space-y-4">
-            {data && data.length > 0 ? data.map((item: any) => {
-              const date = new Date(item[dateKey]);
-              const time = format(date, 'HH:mm');
-              const displayTime = time !== '00:00' ? time : 'Dia Todo';
-              return (
-                <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border hover:bg-gray-100 transition-colors cursor-pointer" onClick={() => handleItemClick(item.id)}>
-                  <div><p className="font-medium text-sm">Pedido #{item.id.split('-')[0]}</p><p className="text-xs text-gray-500 text-muted-foreground">Cliente: {item.customer_name}</p></div>
-                  <div className="text-xs font-semibold px-2 py-1 bg-yellow-100 text-yellow-700 rounded">{displayTime}</div>
+      <CardContent className="p-0">
+        <div className="divide-y divide-gray-50">
+          {inventoryStatus.map((item: any) => (
+            <div key={item.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${item.status === 'out_of_stock' ? 'bg-red-50 text-red-600' : item.status === 'low_stock' ? 'bg-orange-50 text-orange-600' : 'bg-green-50 text-green-600'}`}>
+                  <Package className="h-4 w-4" />
                 </div>
-              );
-            }) : <p className="text-sm text-center text-muted-foreground py-4 border-2 border-dashed rounded-lg">{emptyMessage}</p>}
-          </div>
-        )}
+                <div>
+                  <p className="font-semibold text-sm text-gray-800">{item.name}</p>
+                  <p className="text-xs text-gray-500">Total: {item.total_quantity} un</p>
+                </div>
+              </div>
+              <div className="text-right">
+                {item.status === 'out_of_stock' && (
+                   <Badge variant="destructive" className="bg-red-100 text-red-700 hover:bg-red-100 border-none">Esgotado</Badge>
+                )}
+                {item.status === 'low_stock' && (
+                   <Badge variant="secondary" className="bg-orange-100 text-orange-700 hover:bg-orange-100 border-none">{item.available} Restantes</Badge>
+                )}
+                {item.status === 'available' && (
+                   <Badge variant="secondary" className="bg-green-100 text-green-700 hover:bg-green-100 border-none">{item.available} Disponíveis</Badge>
+                )}
+              </div>
+            </div>
+          ))}
+          {inventoryStatus.length === 0 && <p className="p-6 text-center text-sm text-gray-400">Nenhum produto cadastrado.</p>}
+        </div>
       </CardContent>
     </Card>
   );
 };
+
+// Widget de Timeline (Central)
+const TimelineWidget = ({ products, activeOrders }: any) => {
+  const navigate = useNavigate();
+  const today = startOfDay(new Date());
+  // Mostra apenas 7 dias no dashboard para não poluir
+  const days = eachDayOfInterval({ start: today, end: addDays(today, 6) });
+  const DAY_WIDTH = 60; // Mais compacto que a tela cheia
+
+  return (
+    <Card className="h-full border-none shadow-sm bg-white overflow-hidden flex flex-col">
+      <CardHeader className="pb-2 border-b border-gray-50 bg-white z-20">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-lg font-bold text-gray-800">Timeline de Disponibilidade</CardTitle>
+            <Badge variant="outline" className="text-xs font-normal text-gray-500">Próximos 7 dias</Badge>
+          </div>
+          <div className="flex gap-2">
+             <Button variant="outline" size="sm" onClick={() => navigate('/timeline')} className="text-xs">
+                Expandir <ChevronRight className="h-3 w-3 ml-1" />
+             </Button>
+          </div>
+        </div>
+      </CardHeader>
+      
+      <div className="flex-1 overflow-x-auto overflow-y-auto relative bg-slate-50/30">
+        <div className="min-w-[600px]">
+            {/* Header Dias */}
+            <div className="flex border-b border-gray-100 bg-white sticky top-0 z-10">
+                <div className="w-48 p-3 text-xs font-semibold text-gray-400 border-r bg-gray-50/50 sticky left-0 z-20">Equipamento</div>
+                {days.map(day => (
+                    <div key={day.toString()} className="flex-1 min-w-[60px] p-2 text-center border-r border-gray-50">
+                        <div className="text-[10px] font-bold text-gray-400 uppercase">{format(day, 'EEE', { locale: ptBR })}</div>
+                        <div className="text-sm font-bold text-gray-700">{format(day, 'dd')}</div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Linhas */}
+            {products?.slice(0, 8).map((product: any) => { // Limita a 8 produtos para não ficar gigante
+                const allocations = activeOrders?.filter((item: any) => item.product_id === product.id) || [];
+                return (
+                    <div key={product.id} className="flex border-b border-gray-100 last:border-0 hover:bg-white transition-colors group h-12 relative">
+                        <div className="w-48 p-3 text-sm font-medium text-gray-700 border-r border-gray-100 bg-white sticky left-0 z-10 truncate flex items-center">
+                            {product.name}
+                        </div>
+                        <div className="flex-1 flex relative">
+                            {days.map(day => (
+                                <div key={day.toString()} className="flex-1 min-w-[60px] border-r border-gray-50/50" />
+                            ))}
+                            
+                            {/* Barras de Reserva Simplificadas */}
+                            {allocations.map((item: any, idx: number) => {
+                                const start = parseISO(item.orders.start_date);
+                                const end = parseISO(item.orders.end_date);
+                                
+                                // Lógica simplificada de posicionamento para o widget
+                                let startIndex = days.findIndex(d => isSameDay(d, start));
+                                let endIndex = days.findIndex(d => isSameDay(d, end));
+                                
+                                // Se começar antes de hoje, trava no inicio
+                                if (isBefore(start, today)) startIndex = 0;
+                                // Se terminar depois da janela, trava no fim
+                                if (isAfter(end, days[days.length-1])) endIndex = 6;
+                                
+                                // Se estiver fora da janela
+                                if (isAfter(start, days[days.length-1]) || isBefore(end, today)) return null;
+
+                                const width = (endIndex - startIndex + 1) * 100 / 7; // % aproximada
+                                const left = (startIndex) * 100 / 7;
+
+                                const isSigned = item.orders.status === 'signed';
+
+                                return (
+                                    <div 
+                                        key={idx}
+                                        className={cn(
+                                            "absolute top-2 h-8 rounded mx-0.5 text-[10px] font-bold text-white flex items-center px-2 shadow-sm overflow-hidden whitespace-nowrap",
+                                            isSigned ? "bg-green-500" : "bg-blue-500"
+                                        )}
+                                        style={{ 
+                                            left: `${left}%`, 
+                                            width: `${width}%`,
+                                            maxWidth: '100%'
+                                        }}
+                                        title={item.orders.customer_name}
+                                    >
+                                        {item.orders.customer_name}
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </div>
+                )
+            })}
+            {products?.length > 8 && (
+                <div className="p-2 text-center text-xs text-gray-400 bg-gray-50">
+                    + {products.length - 8} outros produtos...
+                </div>
+            )}
+        </div>
+      </div>
+    </Card>
+  );
+};
+
 
 const Dashboard = () => {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
+  const { data: businessName } = useQuery({ queryKey: ['businessName'], queryFn: fetchBusinessName });
   
-  // --- SUBTITUIÇÃO DO FETCH ANTIGO POR ESTADO LOCAL CALCULADO ---
-  const [metrics, setMetrics] = useState({
-    totalRevenue: 0,
-    pipelineRevenue: 0,
-    activeRentals: 0,
-    futureReservations: 0,
-    newClients: 0
-  });
-  const [loadingMetrics, setLoadingMetrics] = useState(true);
-
-  // Calcula métricas em tempo real no frontend para garantir precisão
-  const calculateMetrics = async () => {
-    setLoadingMetrics(true);
-    try {
-        const { data: orders, error } = await supabase
+  // --- CARREGAMENTO DE DADOS UNIFICADO (Otimizado para Dashboard) ---
+  // 1. Pedidos (Para métricas e timeline)
+  const { data: orders } = useQuery({
+    queryKey: ['dashboardOrders'],
+    queryFn: async () => {
+        const { data } = await supabase
             .from('orders')
             .select('*')
-            .neq('status', 'canceled'); // Pega tudo menos cancelados
-
-        if (error) throw error;
-
-        if (orders) {
-            // 1. Receita (Tudo que não é rascunho e não é cancelado)
-            const revenue = orders
-                .filter(o => o.status !== 'draft')
-                .reduce((acc, curr) => acc + (Number(curr.total_amount) || 0), 0);
-
-            // 2. Pipeline (Opcional: Valor estimado dos rascunhos)
-            const pipeline = orders
-                .filter(o => o.status === 'draft')
-                .reduce((acc, curr) => acc + (Number(curr.total_amount) || 0), 0);
-
-            // 3. Ativos (AQUI ESTÁ A CORREÇÃO: Signed + Reserved + Picked_up)
-            const active = orders.filter(o => 
-                ['signed', 'reserved', 'picked_up'].includes(o.status)
-            ).length;
-
-            // 4. Reservas Futuras (Ativos com data de início > hoje)
-            const today = startOfDay(new Date());
-            const future = orders.filter(o => {
-                const start = new Date(o.start_date);
-                return ['signed', 'reserved'].includes(o.status) && isAfter(start, today);
-            }).length;
-
-            // 5. Clientes Únicos
-            const clients = new Set(orders.filter(o => o.status !== 'draft').map(o => o.customer_cpf)).size;
-
-            setMetrics({
-                totalRevenue: revenue,
-                pipelineRevenue: pipeline,
-                activeRentals: active,
-                futureReservations: future,
-                newClients: clients
-            });
-        }
-    } catch (e) {
-        console.error(e);
-        showError("Erro ao calcular métricas.");
-    } finally {
-        setLoadingMetrics(false);
+            .neq('status', 'canceled');
+        return data || [];
     }
-  };
+  });
 
-  // Chama o cálculo ao montar
-  useEffect(() => { calculateMetrics(); }, []);
+  // 2. Produtos (Para inventário e timeline)
+  const { data: products } = useQuery({
+    queryKey: ['dashboardProducts'],
+    queryFn: async () => {
+        const { data } = await supabase.from('products').select('*').order('name');
+        return data || [];
+    }
+  });
 
-  const { data: businessName, isLoading: isLoadingName } = useQuery({ queryKey: ['businessName'], queryFn: fetchBusinessName, staleTime: 1000 * 60 * 5 });
-  const { data: pickups, isLoading: isLoadingPickups } = useQuery({ queryKey: ['pendingPickups'], queryFn: fetchPendingPickups });
-  const { data: returns, isLoading: isLoadingReturns } = useQuery({ queryKey: ['pendingReturns'], queryFn: fetchPendingReturns });
-  
-  const { data: businessConfig, isLoading: isLoadingConfig } = useQuery({ queryKey: ['businessConfig'], queryFn: fetchBusinessConfig, staleTime: 0 });
-  const { data: productCount, isLoading: isLoadingProducts } = useQuery({ queryKey: ['productCount'], queryFn: fetchProductCount, staleTime: 0 });
+  // 3. Itens de Pedido (Para conectar produtos e timeline)
+  const { data: orderItems } = useQuery({
+    queryKey: ['dashboardOrderItems'],
+    queryFn: async () => {
+        const today = new Date().toISOString();
+        const { data } = await supabase
+            .from('order_items')
+            .select('quantity, product_id, orders!inner(status, start_date, end_date, customer_name)')
+            .in('orders.status', ['signed', 'reserved', 'picked_up'])
+            .gte('orders.end_date', today); // Pega só o que não acabou ainda (para performance)
+        return data || [];
+    }
+  });
 
-  const isCompanyConfigured = !!(businessConfig?.business_name?.trim() && businessConfig?.business_cnpj?.trim());
-  const hasProducts = (productCount || 0) > 0;
-  const isGlobalLoading = isLoadingConfig || isLoadingProducts;
+  // --- CÁLCULO DE MÉTRICAS ---
+  const metrics = useMemo(() => {
+    if (!orders) return { revenue: 0, active: 0, future: 0, clients: 0, itemsOut: 0 };
 
-  const formatCurrency = (amount: number) => `R$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
-  const greetingName = businessName || 'RentalPro';
+    const revenue = orders.filter(o => o.status !== 'draft').reduce((acc, curr) => acc + (Number(curr.total_amount) || 0), 0);
+    const active = orders.filter(o => ['signed', 'reserved', 'picked_up'].includes(o.status)).length;
+    
+    const today = startOfDay(new Date());
+    const future = orders.filter(o => {
+        const start = new Date(o.start_date);
+        return ['signed', 'reserved'].includes(o.status) && isAfter(start, today);
+    }).length;
 
-  const renderQuickActionButton = () => {
-    if (isGlobalLoading) return <Button disabled><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verificando...</Button>;
-    if (!isCompanyConfigured) return (
-      <Button className="bg-orange-600 hover:bg-orange-700 shadow-lg" onClick={() => navigate('/settings')}>
-        <AlertTriangle className="mr-2 h-4 w-4" /> Configure a Empresa
-      </Button>
-    );
-    if (!hasProducts) return (
-      <Button className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg" onClick={() => navigate('/inventory')}>
-        <Package className="mr-2 h-4 w-4" /> Cadastre um Produto
-      </Button>
-    );
-    return (
-      <CreateOrderDialog onOrderCreated={() => { calculateMetrics(); queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] }); }}>
-        <Button className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100">
-          <Plus className="mr-2 h-4 w-4" /> Novo Pedido
-        </Button>
-      </CreateOrderDialog>
-    );
-  };
+    const clients = new Set(orders.filter(o => o.status !== 'draft').map(o => o.customer_cpf)).size;
+    const itemsOut = orderItems?.reduce((acc, item) => acc + item.quantity, 0) || 0;
+
+    return { revenue, active, future, clients, itemsOut };
+  }, [orders, orderItems]);
+
+  const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   return (
-    <div className="p-4 md:p-8 space-y-8">
+    <div className="p-6 md:p-10 space-y-8 bg-gray-50/50 min-h-screen font-sans">
+      
+      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Bem-vindo, {isLoadingName ? '...' : greetingName}</h1>
-          <p className="text-muted-foreground">Aqui está o que está acontecendo na sua locadora hoje.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900">Dashboard</h1>
+          <p className="text-gray-500 mt-1">Bem-vindo, {businessName || 'Gestor'}. Visão geral de hoje.</p>
         </div>
-        {renderQuickActionButton()}
+        <div className="flex gap-3">
+            <CreateOrderDialog onOrderCreated={() => window.location.reload()}> 
+                <Button className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all">
+                    + Novo Pedido
+                </Button>
+            </CreateOrderDialog>
+        </div>
       </div>
 
-      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
-        <DashboardCard 
-            title="Faturamento Total" 
-            value={formatCurrency(metrics.totalRevenue)} 
+      {/* METRICS ROW */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <MetricCard 
+            title="Receita Total" 
+            value={formatCurrency(metrics.revenue)} 
+            subtext={<span className="text-green-600 font-bold flex items-center"><TrendingUp className="h-3 w-3 mr-1"/> Acumulado</span>}
             icon={DollarSign} 
-            description="contratos assinados e válidos" 
-            subValue={metrics.pipelineRevenue > 0 ? formatCurrency(metrics.pipelineRevenue) : null}
-            isLoading={loadingMetrics} 
-            tooltipContent="Soma financeira de pedidos com assinatura confirmada." 
+            colorClass="bg-blue-600" 
         />
-        <DashboardCard 
+        <MetricCard 
             title="Contratos Ativos" 
-            value={metrics.activeRentals.toLocaleString('pt-BR')} 
-            icon={Box} 
-            description="assinados, reservados ou na rua" 
-            isLoading={loadingMetrics} 
-            tooltipContent="Soma de pedidos Assinados, Reservados ou Em Andamento." 
-        />
-        <DashboardCard 
-            title="Reservas Futuras" 
-            value={metrics.futureReservations.toLocaleString('pt-BR')} 
+            value={metrics.active} 
+            subtext="Assinados ou Na Rua"
             icon={FileText} 
-            description="pedidos agendados" 
-            isLoading={loadingMetrics} 
-            tooltipContent="Pedidos ativos com data de início maior que hoje." 
+            colorClass="bg-purple-600" 
         />
-        <DashboardCard 
-            title="Clientes Únicos" 
-            value={metrics.newClients.toLocaleString('pt-BR')} 
+        <MetricCard 
+            title="Itens Alugados" 
+            value={metrics.itemsOut} 
+            subtext="Equipamentos fora"
+            icon={Box} 
+            colorClass="bg-orange-500" 
+        />
+        <MetricCard 
+            title="Base de Clientes" 
+            value={metrics.clients} 
+            subtext="Clientes únicos"
             icon={Users} 
-            description="total de clientes na base" 
-            isLoading={loadingMetrics} 
-            tooltipContent="Número de clientes cadastrados via pedidos." 
+            colorClass="bg-emerald-500" 
         />
       </div>
-      
-      <div className="grid gap-6 lg:grid-cols-3">
-        <RevenueChart />
-        <TaskListCard title="Retiradas Pendentes (Hoje)" data={pickups} dateKey="start_date" emptyMessage="Nenhuma retirada hoje." isLoading={isLoadingPickups} tooltipContent="Clientes para retirar hoje." />
-      </div>
-      <div className="grid gap-6 md:grid-cols-2">
-        <TaskListCard title="Devoluções Pendentes (Hoje)" data={returns} dateKey="end_date" emptyMessage="Nenhuma devolução hoje." isLoading={isLoadingReturns} tooltipContent="Clientes para devolver hoje." />
+
+      {/* MAIN CONTENT GRID */}
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-12 h-[500px]">
+        {/* ESQUERDA: TIMELINE (Ocupa 8 colunas) */}
+        <div className="lg:col-span-8 h-full">
+            <TimelineWidget products={products} activeOrders={orderItems} />
+        </div>
+
+        {/* DIREITA: INVENTÁRIO RÁPIDO (Ocupa 4 colunas) */}
+        <div className="lg:col-span-4 h-full">
+            <QuickInventoryWidget products={products} activeOrders={orderItems} />
+        </div>
       </div>
     </div>
   );
