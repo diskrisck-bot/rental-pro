@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/select';
 import { supabase } from '@/lib/supabase';
 import { showSuccess, showError } from '@/utils/toast';
-import { format, parseISO, isBefore, isAfter, startOfDay } from 'date-fns';
+import { format, parseISO, isBefore, isAfter, startOfDay, eachDayOfInterval, isWithinInterval } from 'date-fns';
 import { calculateOrderTotal } from '@/utils/financial';
 import MaskedInput from 'react-text-mask';
 import { useQuery } from '@tanstack/react-query';
@@ -117,36 +117,76 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
     }
   }, [isProductsError]);
 
-  // Lógica de verificação de disponibilidade
-  const checkAvailability = useCallback(async (productId: string, start: string, end: string): Promise<number> => {
+  // Lógica de verificação de disponibilidade (Peak Demand Algorithm)
+  const checkAvailability = useCallback(async (productId: string, start: string, end: string): Promise<{ available: number, maxUsage: number, peakDate: string }> => {
     const product = productList.find(p => p.id === productId);
-    if (!product) return 0;
+    if (!product) return { available: 0, maxUsage: 0, peakDate: format(new Date(), 'dd/MM/yyyy') };
 
     const totalQuantity = product.total_quantity || 0;
     
-    // Usamos T12:00:00Z para consistência ao salvar.
-    const startBoundary = `${start}T12:00:00.000Z`;
-    const endBoundary = `${end}T12:00:00.000Z`;
+    // 1. Busca de Dados: Pedidos que colidem com o período solicitado
+    
+    // Usamos T12:00:00Z para consistência ao salvar e verificar
+    const requestedStart = parseISO(`${start}T12:00:00.000Z`);
+    const requestedEnd = parseISO(`${end}T12:00:00.000Z`);
 
-    try {
-        // Usando a função RPC para calcular a quantidade ocupada de forma robusta
-        const { data: occupiedData, error: rpcError } = await supabase.rpc('get_occupied_quantity', {
-            p_product_id: productId,
-            p_start_date: startBoundary,
-            p_end_date: endBoundary,
-            p_current_order_id: orderId || null,
-        });
+    // Fetch orders that *might* overlap with the requested period
+    // Colisão: (order.start <= requested_end) AND (order.end >= requested_start)
+    const { data: conflictingItems, error: conflictError } = await supabase
+        .from('order_items')
+        .select(`
+            quantity,
+            order_id,
+            orders!inner (
+                id,
+                status,
+                start_date,
+                end_date
+            )
+        `)
+        .eq('product_id', productId)
+        .neq('order_id', orderId || '00000000-0000-0000-0000-000000000000') 
+        .in('orders.status', ['signed', 'reserved', 'picked_up'])
+        .lte('orders.start_date', requestedEnd.toISOString()) 
+        .gte('orders.end_date', requestedStart.toISOString()); 
 
-        if (rpcError) throw rpcError;
+    if (conflictError) throw conflictError;
 
-        const occupiedQuantity = occupiedData as number;
+    // 2. Lógica de Cálculo: Peak Demand
+    
+    // Define o intervalo de dias a ser verificado (inclusivo)
+    const daysToCheck = eachDayOfInterval({ start: requestedStart, end: requestedEnd });
+    
+    let maxUsage = 0;
+    let peakDate = format(requestedStart, 'dd/MM/yyyy');
+
+    for (const day of daysToCheck) {
+        let usageToday = 0;
         
-        return Math.max(0, totalQuantity - occupiedQuantity);
-
-    } catch (error) {
-        console.error("[checkAvailability] Erro ao chamar RPC:", error);
-        throw error;
+        // Para cada dia, some a quantidade de todos os pedidos ativos que cobrem esse dia
+        for (const item of conflictingItems) {
+            const orderStart = parseISO(item.orders.start_date);
+            const orderEnd = parseISO(item.orders.end_date);
+            
+            // Check if the current day is within the order's period (inclusive)
+            // Usamos startOfDay para comparação puramente baseada em data, ignorando o T12:00:00Z
+            if (isWithinInterval(startOfDay(day), { start: startOfDay(orderStart), end: startOfDay(orderEnd) })) {
+                usageToday += item.quantity;
+            }
+        }
+        
+        if (usageToday > maxUsage) {
+            maxUsage = usageToday;
+            peakDate = format(day, 'dd/MM/yyyy');
+        }
     }
+
+    const available = Math.max(0, totalQuantity - maxUsage);
+    
+    console.log(`[Inventory Check] Product: ${product.name}, Total: ${totalQuantity}, Requested Period: ${start} to ${end}`);
+    console.log(`[Inventory Check] Peak Usage: ${maxUsage} units on ${peakDate}. Available: ${available}`);
+
+    return { available, maxUsage, peakDate };
   }, [productList, orderId]);
 
   // Efeito para atualizar a disponibilidade na UI
@@ -160,7 +200,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
 
       setCurrentAvailability(null);
       checkAvailability(currentProductId, startDateStr, endDateStr)
-        .then(setCurrentAvailability)
+        .then(result => setCurrentAvailability(result.available))
         .catch((e) => {
           console.error("Erro ao verificar disponibilidade:", e);
           setCurrentAvailability(0);
@@ -255,10 +295,14 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
 
     try {
         setLoading(true); // Bloqueia o botão de adicionar enquanto verifica
-        const availableQuantity = await checkAvailability(currentProductId, startDateStr, endDateStr);
+        
+        // Chamada atualizada para obter o pico de uso
+        const { available: availableQuantity, maxUsage, peakDate } = await checkAvailability(currentProductId, startDateStr, endDateStr);
         
         if (totalRequested > availableQuantity) {
-            showError(`Estoque insuficiente para este período. Disponível: ${availableQuantity}, Solicitado: ${totalRequested}`);
+            // Feedback de erro detalhado
+            const unitsFree = product.total_quantity - maxUsage;
+            showError(`Estoque insuficiente para este período. O dia mais cheio (${peakDate}) tem apenas ${unitsFree} unidades livres. Disponível: ${availableQuantity}, Solicitado: ${totalRequested}`);
             return;
         }
     } catch (error: any) {
@@ -319,9 +363,11 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         const product = productList.find(p => p.id === item.product_id);
         
         if (product) {
-            const available = await checkAvailability(product.id, values.start_date, values.end_date);
-            if (item.quantity > available) {
-                showError(`Falha na validação final: O item "${product.name}" excede o estoque disponível (${available} un) para o período selecionado.`);
+            const { available: availableQuantity, maxUsage, peakDate } = await checkAvailability(product.id, values.start_date, values.end_date);
+            
+            if (item.quantity > availableQuantity) {
+                const unitsFree = product.total_quantity - maxUsage;
+                showError(`Falha na validação final: O item "${product.name}" excede o estoque disponível. O dia mais cheio (${peakDate}) tem apenas ${unitsFree} unidades livres.`);
                 setLoading(false);
                 return;
             }
