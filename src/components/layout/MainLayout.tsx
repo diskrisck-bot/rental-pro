@@ -10,7 +10,7 @@ import Orders from "@/pages/Orders";
 import Timeline from "@/pages/Timeline";
 import Settings from "@/pages/Settings"; 
 import NotFound from "@/pages/NotFound";
-import ZapFlowButton from './ZapFlowButton'; // Importando o novo botão
+// import ZapFlowButton from './ZapFlowButton'; // Importação removida
 
 const MainLayout = () => (
   <div className="flex min-h-screen w-full bg-gray-50">
@@ -39,8 +39,8 @@ const MainLayout = () => (
       </main>
     </div>
     
-    {/* 3. BOTÃO FLUTUANTE DE AÇÃO RÁPIDA */}
-    <ZapFlowButton />
+    {/* 3. BOTÃO FLUTUANTE DE AÇÃO RÁPIDA (Removido) */}
+    {/* <ZapFlowButton /> */}
   </div>
 );
 
