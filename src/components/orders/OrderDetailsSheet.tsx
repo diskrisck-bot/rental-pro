@@ -284,34 +284,34 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
                 {/* AÇÃO PRINCIPAL (Retirada / Devolução) */}
                 {status === 'signed' && (
                     <Button 
-                        className="w-full h-14 bg-[#10B981] hover:bg-green-600 text-white font-bold uppercase tracking-wide text-lg shadow-lg" 
+                        className="w-full h-14 bg-[#10B981] hover:bg-green-600 text-white font-bold uppercase text-lg shadow-lg" 
                         onClick={() => updateStatus('returned')}
                         disabled={updating}
                     >
                         {updating ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <ArrowRightLeft className="mr-2 h-6 w-6" />} 
-                        Registrar Devolução (Estoque Volta)
+                        REGISTRAR DEVOLUÇÃO
                     </Button>
                 )}
 
                 {status === 'reserved' && (
                     <Button 
-                        className="w-full h-14 bg-[#F57C00] hover:bg-orange-600 text-white font-bold uppercase tracking-wide text-lg shadow-lg" 
+                        className="w-full h-14 bg-[#F57C00] hover:bg-orange-600 text-white font-bold uppercase text-lg shadow-lg" 
                         onClick={() => updateStatus('picked_up')}
                         disabled={updating}
                     >
                         {updating ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <Truck className="mr-2 h-6 w-6" />} 
-                        Confirmar Retirada
+                        CONFIRMAR RETIRADA
                     </Button>
                 )}
 
                 {status === 'picked_up' && (
                     <Button 
-                        className="w-full h-14 bg-[#10B981] hover:bg-green-600 text-white font-bold uppercase tracking-wide text-lg shadow-lg" 
+                        className="w-full h-14 bg-[#10B981] hover:bg-green-600 text-white font-bold uppercase text-lg shadow-lg" 
                         onClick={() => updateStatus('returned')}
                         disabled={updating}
                     >
                         {updating ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <ArrowRightLeft className="mr-2 h-6 w-6" />} 
-                        Registrar Devolução
+                        REGISTRAR DEVOLUÇÃO
                     </Button>
                 )}
 
@@ -330,7 +330,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
                         onClick={handleCancelOrder} 
                         disabled={updating}
                     >
-                        <XCircle className="mr-2 h-4 w-4" /> Cancelar Pedido
+                        <XCircle className="mr-2 h-4 w-4" /> CANCELAR PEDIDO
                     </Button>
                 )}
             </div>
