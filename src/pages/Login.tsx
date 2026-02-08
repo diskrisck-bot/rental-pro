@@ -31,12 +31,12 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gray-100">
-      <Card className="w-full max-w-md rounded-xl shadow-2xl border-4 border-blue-100">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
+      <Card className="w-full max-w-md rounded-xl shadow-2xl border-4 border-primary/20">
         <CardHeader className="text-center space-y-2 pt-8">
-          <div className="flex justify-center items-center gap-2 text-blue-600">
+          <div className="flex justify-center items-center gap-2 text-secondary">
             <Package className="w-8 h-8" />
-            <CardTitle className="text-3xl font-bold">RentalPro</CardTitle>
+            <CardTitle className="text-3xl font-heading font-extrabold">RentalPro</CardTitle>
           </div>
           <p className="text-sm text-muted-foreground">Acesse sua conta para continuar.</p>
         </CardHeader>
@@ -64,7 +64,7 @@ const Login = () => {
             </div>
             <Button 
               type="submit" 
-              className="w-full h-12 bg-blue-600 hover:bg-blue-700 transition-all"
+              className="w-full h-12 bg-primary hover:bg-primary/90 transition-all"
               disabled={loading}
             >
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogIn className="mr-2 h-5 w-5" />}

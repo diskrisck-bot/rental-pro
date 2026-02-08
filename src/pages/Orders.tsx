@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Loader2, Download, MessageCircle, CheckCircle, DollarSign, Clock, Zap, Calendar, AlertTriangle, Package, ArrowRightLeft, Edit, XCircle } from 'lucide-react';
+import { Plus, Search, Filter, Loader2, Download, MessageCircle, CheckCircle, DollarSign, Clock, Zap, Calendar, AlertTriangle, Package, ArrowRightLeft, Edit, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
@@ -44,7 +44,7 @@ const getStatusBadge = (status: string) => {
         </Badge>
       );
     case 'reserved': 
-      return <Badge className="bg-blue-50 text-blue-700 border-blue-200 uppercase text-[10px]">Reservado</Badge>;
+      return <Badge className="bg-secondary/10 text-secondary border-secondary/20 uppercase text-[10px]">Reservado</Badge>;
     case 'picked_up': 
       return <Badge className="bg-purple-100 text-purple-800 border-purple-200 uppercase text-[10px]">Em Andamento</Badge>;
     case 'returned': 
@@ -63,8 +63,8 @@ const getPaymentTimingBadge = (timing: string) => {
 };
 
 const getFulfillmentTypeBadge = (type: string) => {
-  if (type === 'immediate') return <Badge variant="secondary" className="bg-orange-50 text-orange-700 border-orange-200 text-[10px]"><Zap className="h-3 w-3 mr-1" /> Imediata</Badge>;
-  if (type === 'reservation') return <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-200 text-[10px]"><Calendar className="h-3 w-3 mr-1" /> Reserva</Badge>;
+  if (type === 'immediate') return <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-[10px]"><Zap className="h-3 w-3 mr-1" /> Imediata</Badge>;
+  if (type === 'reservation') return <Badge variant="secondary" className="bg-secondary/10 text-secondary border-secondary/20 text-[10px]"><Calendar className="h-3 w-3 mr-1" /> Reserva</Badge>;
   return null;
 };
 
@@ -149,10 +149,10 @@ const Orders = () => {
 
   const renderHeaderButton = () => {
     if (isGlobalLoading) return <Button disabled><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Carregando...</Button>;
-    if (!isCompanyConfigured) return <Button className="bg-orange-600" onClick={() => navigate('/settings')}><AlertTriangle className="mr-2 h-4 w-4" /> Configurar Empresa</Button>;
+    if (!isCompanyConfigured) return <Button className="bg-primary" onClick={() => navigate('/settings')}><AlertTriangle className="mr-2 h-4 w-4" /> Configurar Empresa</Button>;
     return (
       <CreateOrderDialog onOrderCreated={fetchOrders}>
-        <Button className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100">
+        <Button className="bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20">
           <Plus className="mr-2 h-4 w-4" /> Novo Pedido
         </Button>
       </CreateOrderDialog>
@@ -160,10 +160,10 @@ const Orders = () => {
   };
 
   return (
-    <div className="p-4 md:p-8 space-y-6 bg-gray-50/50 min-h-screen">
+    <div className="p-4 md:p-8 space-y-6 bg-background min-h-screen">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gray-900">Pedidos</h1>
+          <h1 className="text-2xl md:text-3xl font-heading font-extrabold tracking-tight text-gray-900">Pedidos</h1>
           <p className="text-muted-foreground">Gerenciamento de contratos e locações.</p>
         </div>
         {renderHeaderButton()}
@@ -195,7 +195,7 @@ const Orders = () => {
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={7} className="h-32 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-blue-600" /></TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="h-32 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" /></TableCell></TableRow>
               ) : filteredOrders.length === 0 ? (
                 <TableRow><TableCell colSpan={7} className="h-32 text-center text-gray-500">Nenhum pedido encontrado.</TableCell></TableRow>
               ) : (
@@ -216,7 +216,7 @@ const Orders = () => {
                       </TableCell>
                       <TableCell>{getStatusBadge(order.status)}</TableCell>
                       <TableCell>{getPaymentTimingBadge(order.payment_timing)}</TableCell>
-                      <TableCell className="font-bold text-blue-600">
+                      <TableCell className="font-bold text-primary">
                         R$ {Number(order.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
@@ -226,7 +226,7 @@ const Orders = () => {
                           {isEditable && (
                             <div onClick={(e) => e.stopPropagation()}>
                                 <CreateOrderDialog orderId={order.id} onOrderCreated={fetchOrders}>
-                                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-blue-600 hover:bg-blue-50 hover:text-blue-700" title="Editar Pedido">
+                                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-secondary hover:bg-secondary/10 hover:text-secondary" title="Editar Pedido">
                                         <Edit className="h-4 w-4" />
                                     </Button>
                                 </CreateOrderDialog>
@@ -239,7 +239,7 @@ const Orders = () => {
                             </Button>
                           </a>
                           
-                          <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); handleViewDetails(order.id); }} className="h-8 w-8 p-0 text-gray-400 hover:text-blue-600" title="Ver Detalhes">
+                          <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); handleViewDetails(order.id); }} className="h-8 w-8 p-0 text-gray-400 hover:text-primary" title="Ver Detalhes">
                              <ArrowRightLeft className="h-4 w-4" />
                           </Button>
                         </div>

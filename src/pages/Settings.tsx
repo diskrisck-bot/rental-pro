@@ -75,7 +75,7 @@ const Settings = () => {
         });
       if (error) throw error;
       showSuccess('Assinatura gravada com sucesso!');
-    } catch (error: any) { showError('Erro ao gravar assinatura.'); }
+    } catch (error: any) { showError('Erro ao gravar assinatura: ' + error.message); }
   };
 
   const handleClearSignature = async () => {
@@ -88,20 +88,20 @@ const Settings = () => {
     } catch (e) { showError("Erro ao remover."); }
   };
 
-  if (loading) return <div className="flex h-96 items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
+  if (loading) return <div className="flex h-96 items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>;
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-8 pb-24">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Configurações</h1>
+        <h1 className="text-3xl font-heading font-extrabold text-gray-900">Configurações</h1>
         <p className="text-gray-500">Dados cadastrais e assinatura digital.</p>
       </div>
 
       {/* DADOS DA EMPRESA */}
       <div className="bg-white p-6 rounded-xl border shadow-sm space-y-6">
         <div className="flex items-center gap-2 mb-4 pb-2 border-b">
-          <div className="p-2 bg-blue-100 rounded-lg text-blue-700"><Building className="h-5 w-5" /></div>
-          <h2 className="text-lg font-bold text-gray-800">Dados da Empresa</h2>
+          <div className="p-2 bg-secondary/10 rounded-lg text-secondary"><Building className="h-5 w-5" /></div>
+          <h2 className="text-lg font-heading font-bold text-gray-800">Dados da Empresa</h2>
         </div>
         <div className="grid gap-6">
           <div className="space-y-2"><Label>Nome Fantasia</Label><Input value={businessName} onChange={(e) => setBusinessName(e.target.value)} placeholder="Ex: RentalPro Locações" className="h-11"/></div>
@@ -112,19 +112,19 @@ const Settings = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-2 space-y-2"><Label>Endereço</Label><Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Rua, Número" className="h-11"/></div>
             <div className="space-y-2">
-              <Label className="flex items-center gap-1 text-blue-700 font-bold">Cidade / UF <MapPin className="h-3 w-3" /></Label>
-              <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Cidade - UF" className="h-11 border-blue-200 bg-blue-50/50"/>
+              <Label className="flex items-center gap-1 text-secondary font-bold">Cidade / UF <MapPin className="h-3 w-3" /></Label>
+              <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Cidade - UF" className="h-11 border-secondary/20 bg-secondary/5"/>
             </div>
           </div>
         </div>
-        <Button onClick={handleSaveData} disabled={saving} className="w-full md:w-auto bg-slate-800"><Save className="mr-2 h-4 w-4" /> Salvar Dados</Button>
+        <Button onClick={handleSaveData} disabled={saving} className="w-full md:w-auto bg-secondary hover:bg-secondary/90"><Save className="mr-2 h-4 w-4" /> Salvar Dados</Button>
       </div>
 
       {/* ASSINATURA */}
       <div className="bg-white p-6 rounded-xl border shadow-sm space-y-6">
         <div className="flex items-center gap-2 mb-4 pb-2 border-b">
           <div className="p-2 bg-green-100 rounded-lg text-green-700"><PenTool className="h-5 w-5" /></div>
-          <div><h2 className="text-lg font-bold text-gray-800">Assinatura Digital</h2><p className="text-xs text-gray-500">Usada automaticamente no campo "LOCADOR".</p></div>
+          <div><h2 className="text-lg font-heading font-bold text-gray-800">Assinatura Digital</h2><p className="text-xs text-gray-500">Usada automaticamente no campo "LOCADOR".</p></div>
         </div>
         
         <div className="grid md:grid-cols-2 gap-8">

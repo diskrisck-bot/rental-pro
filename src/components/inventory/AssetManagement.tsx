@@ -69,14 +69,14 @@ const AssetManagement = ({ productId, productType }: AssetManagementProps) => {
 
   const handleAddAsset = () => {
     if (newSerialNumber.trim()) {
-      handleAddAsset.mutate(newSerialNumber.trim());
+      addAssetMutation.mutate(newSerialNumber.trim());
     }
   };
 
   if (productType === 'bulk') {
     return (
       <div className="p-6 text-center bg-gray-50 rounded-lg border border-dashed text-muted-foreground">
-        <AlertTriangle className="h-6 w-6 mx-auto mb-2 text-orange-500" />
+        <AlertTriangle className="h-6 w-6 mx-auto mb-2 text-primary" />
         <p className="font-semibold">Produto de Granel</p>
         <p className="text-sm">Este produto é gerenciado por quantidade total, não por números de série individuais.</p>
       </div>
@@ -98,7 +98,7 @@ const AssetManagement = ({ productId, productType }: AssetManagementProps) => {
           <Button 
             onClick={handleAddAsset} 
             disabled={!newSerialNumber.trim() || addAssetMutation.isPending}
-            className="bg-blue-600 hover:bg-blue-700"
+            className="bg-primary hover:bg-primary/90"
           >
             {addAssetMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
           </Button>
@@ -110,7 +110,7 @@ const AssetManagement = ({ productId, productType }: AssetManagementProps) => {
         
         {isLoading ? (
           <div className="flex justify-center py-4">
-            <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
           </div>
         ) : assets && assets.length > 0 ? (
           <div className="border rounded-lg divide-y max-h-60 overflow-y-auto">

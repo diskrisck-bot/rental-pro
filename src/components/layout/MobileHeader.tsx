@@ -25,8 +25,8 @@ const MobileHeader = () => {
         </Button>
       ) : (
         <div className="flex items-center gap-2">
-          <Package className="w-6 h-6 text-blue-600" />
-          <span className="text-xl font-bold text-blue-600">RentalPro</span>
+          <Package className="w-6 h-6 text-secondary" />
+          <span className="text-xl font-heading font-extrabold text-secondary">RentalPro</span>
         </div>
       )}
       <MobileMenuTrigger /> 

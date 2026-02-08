@@ -321,7 +321,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         
         {isDataLoading ? (
           <div className="flex flex-col items-center justify-center py-12 gap-2">
-            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
             <p className="text-sm text-muted-foreground">Carregando dados do pedido...</p>
           </div>
         ) : (
@@ -329,7 +329,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             
             <div className="space-y-3 border-b pb-4">
               <h3 className="text-base font-semibold flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-blue-600" /> Tipo de Pedido
+                <Calendar className="h-4 w-4 text-secondary" /> Tipo de Pedido
               </h3>
               <Select 
                 value={watchFulfillmentType} 
@@ -342,19 +342,19 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
                 <SelectContent>
                   <SelectItem value="immediate">
                     <div className="flex items-center gap-2">
-                      <Zap className="h-4 w-4 text-orange-500" /> Retirada Imediata
+                      <Zap className="h-4 w-4 text-primary" /> Retirada Imediata
                     </div>
                   </SelectItem>
                   <SelectItem value="reservation">
                     <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-blue-500" /> Reserva Futura
+                      <Clock className="h-4 w-4 text-secondary" /> Reserva Futura
                     </div>
                   </SelectItem>
                 </SelectContent>
               </Select>
               
               <Badge variant="secondary" className="text-xs bg-gray-100 text-gray-600 border-gray-200">
-                <AlertTriangle className="h-3 w-3 mr-1 text-orange-400" />
+                <AlertTriangle className="h-3 w-3 mr-1 text-primary" />
                 {isImmediate 
                   ? "O estoque será baixado imediatamente APÓS a assinatura." 
                   : "O estoque será reservado para o período selecionado APÓS a assinatura."}
@@ -493,7 +493,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
 
             <div className="border-t pt-4 space-y-4">
               <h3 className="text-base font-semibold flex items-center gap-2">
-                <CreditCard className="h-4 w-4 text-blue-600" /> Detalhes do Pagamento
+                <CreditCard className="h-4 w-4 text-secondary" /> Detalhes do Pagamento
               </h3>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -534,20 +534,20 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
               </div>
             </div>
 
-            <div className="bg-blue-50 border border-blue-100 rounded-xl p-6 space-y-3">
-              <div className="flex items-center gap-2 text-blue-800 font-semibold mb-2">
+            <div className="bg-secondary/10 border border-secondary/20 rounded-xl p-6 space-y-3">
+              <div className="flex items-center gap-2 text-secondary font-semibold mb-2">
                 <Wallet className="h-5 w-5" />
                 Recálculo Financeiro
               </div>
-              <div className="flex justify-between text-sm text-blue-700">
+              <div className="flex justify-between text-sm text-secondary">
                 <span>Duração Atualizada:</span>
                 <span className="font-bold">{financialSummary.durationInDays} {financialSummary.durationInDays === 1 ? 'dia' : 'dias'}</span>
               </div>
-              <div className="flex justify-between text-sm text-blue-700">
+              <div className="flex justify-between text-sm text-secondary">
                 <span>Subtotal Diário:</span>
                 <span className="font-bold">R$ {financialSummary.subtotalDaily.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
               </div>
-              <div className="border-t border-blue-200 pt-2 flex justify-between text-lg font-bold text-blue-900">
+              <div className="border-t border-secondary/20 pt-2 flex justify-between text-lg font-bold text-secondary">
                 <span>Novo Valor Total:</span>
                 <span>R$ {financialSummary.totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
               </div>
@@ -555,7 +555,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
 
             <DialogFooter>
               <Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancelar</Button>
-              <Button type="submit" className="bg-blue-600 hover:bg-blue-700 h-12 px-8" disabled={loading}>
+              <Button type="submit" className="bg-primary hover:bg-primary/90 h-12 px-8" disabled={loading}>
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {orderId ? 'Salvar Alterações' : 'Salvar Pedido'}
               </Button>

@@ -193,8 +193,8 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
   const getStatusBadge = () => {
       switch(status) {
           case 'pending_signature': return <Badge className="bg-yellow-100 text-yellow-800">Aguardando Assinatura</Badge>;
-          case 'reserved': return <Badge className="bg-blue-100 text-blue-800">Reservado</Badge>;
-          case 'picked_up': return <Badge className="bg-purple-100 text-purple-800">Em Andamento (Na Rua)</Badge>;
+          case 'reserved': return <Badge className="bg-secondary/10 text-secondary">Reservado</Badge>;
+          case 'picked_up': return <Badge className="bg-purple-100 text-purple-800">Em Andamento (Na Rua)</Badge>; // Keeping purple for high contrast status
           case 'returned': return <Badge className="bg-green-100 text-green-800">Concluído</Badge>;
           case 'canceled': return <Badge className="bg-red-100 text-red-800">Cancelado</Badge>;
           default: return <Badge>{status}</Badge>;
@@ -212,12 +212,12 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto py-6 space-y-6">
-          <div className="bg-blue-600 rounded-xl p-6 text-white shadow"><p className="text-xs font-bold opacity-80 mb-1">Total</p><p className="text-3xl font-bold">R$ {Number(order?.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p></div>
+          <div className="bg-secondary rounded-xl p-6 text-white shadow"><p className="text-xs font-bold opacity-80 mb-1">Total</p><p className="text-3xl font-heading font-extrabold">R$ {Number(order?.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p></div>
           
           {/* Seção de Contrato e PDF */}
           <div className="space-y-3">
              <a href={getWhatsappLink(order)} target="_blank" rel="noopener noreferrer" className="w-full h-12 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow"><MessageCircle className="h-5 w-5" /> {isSigned ? 'Reenviar Contrato' : 'Link de Assinatura'}</a>
-             {isSigned && <Button onClick={handleDownloadFinalPDF} disabled={isGeneratingContract} variant="outline" className="w-full h-12 border-green-500 text-green-600">{isGeneratingContract ? <Loader2 className="animate-spin mr-2" /> : <Download className="mr-2" />} Baixar PDF Profissional</Button>}
+             <Button onClick={handleDownloadFinalPDF} disabled={isGeneratingContract} variant="outline" className="w-full h-12 border-green-500 text-green-600">{isGeneratingContract ? <Loader2 className="animate-spin mr-2" /> : <Download className="mr-2" />} Baixar PDF Profissional</Button>
           </div>
 
           <div className="border rounded-lg bg-white divide-y">
@@ -232,14 +232,14 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
            
            {/* 1. SE ASSINADO -> CONFIRMAR RESERVA */}
            {status === 'pending_signature' && (
-             <Button className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-lg shadow-sm" onClick={() => updateStatus('reserved')} disabled={!isSigned}>
+             <Button className="w-full h-12 bg-primary hover:bg-primary/90 text-lg shadow-sm" onClick={() => updateStatus('reserved')} disabled={!isSigned}>
                <CheckCircle className="mr-2 h-5 w-5" /> Confirmar Reserva
              </Button>
            )}
 
            {/* 2. SE RESERVADO -> REGISTRAR SAÍDA (CHECK-OUT) */}
            {status === 'reserved' && (
-             <Button className="w-full h-12 bg-purple-600 hover:bg-purple-700 text-lg shadow-sm" onClick={() => updateStatus('picked_up')}>
+             <Button className="w-full h-12 bg-secondary hover:bg-secondary/90 text-lg shadow-sm" onClick={() => updateStatus('picked_up')}>
                <ClipboardCheck className="mr-2 h-5 w-5" /> Registrar Retirada (Check-out)
              </Button>
            )}

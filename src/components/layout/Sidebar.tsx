@@ -42,7 +42,7 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
   return (
     <div className="w-64 bg-white border-r h-screen flex flex-col md:fixed left-0 top-0">
       <div className="p-6">
-        <h1 className="text-2xl font-bold text-blue-600 flex items-center gap-2">
+        <h1 className="text-2xl font-heading font-extrabold text-secondary flex items-center gap-2">
           <Package className="w-8 h-8" />
           RentalPro
         </h1>
@@ -57,13 +57,13 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
               to={item.path}
               onClick={onLinkClick}
               className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
                 isActive 
-                  ? "bg-blue-50 text-blue-700" 
+                  ? "bg-secondary/10 text-secondary" 
                   : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
               )}
             >
-              <item.icon className={cn("w-5 h-5", isActive ? "text-blue-700" : "text-gray-400")} />
+              <item.icon className={cn("w-5 h-5", isActive ? "text-secondary" : "text-gray-400")} />
               {item.label}
             </Link>
           );
@@ -75,18 +75,18 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
           to="/settings"
           onClick={onLinkClick}
           className={cn(
-            "flex items-center gap-3 px-3 py-2 w-full rounded-lg text-sm font-medium transition-colors",
+            "flex items-center gap-3 px-3 py-2 w-full rounded-md text-sm font-medium transition-colors",
             location.pathname === '/settings' 
-              ? "bg-blue-50 text-blue-700" 
+              ? "bg-secondary/10 text-secondary" 
               : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
           )}
         >
-          <Settings className={cn("w-5 h-5", location.pathname === '/settings' ? "text-blue-700" : "text-gray-400")} />
+          <Settings className={cn("w-5 h-5", location.pathname === '/settings' ? "text-secondary" : "text-gray-400")} />
           Configurações
         </Link>
         <button 
           onClick={handleLogout}
-          className="flex items-center gap-3 px-3 py-2 w-full rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+          className="flex items-center gap-3 px-3 py-2 w-full rounded-md text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
         >
           <LogOut className="w-5 h-5 text-red-400" />
           Sair

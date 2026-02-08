@@ -27,10 +27,10 @@ const RevenueChart = () => {
     return (
       <Card className="rounded-xl shadow-sm col-span-full lg:col-span-2">
         <CardHeader>
-          <CardTitle className="text-xl font-bold">Receita Mensal (Últimos 6 Meses)</CardTitle>
+          <CardTitle className="text-xl font-heading font-extrabold">Receita Mensal (Últimos 6 Meses)</CardTitle>
         </CardHeader>
         <CardContent className="h-80 flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </CardContent>
       </Card>
     );
@@ -39,7 +39,7 @@ const RevenueChart = () => {
   return (
     <Card className="rounded-xl shadow-sm col-span-full lg:col-span-2">
       <CardHeader>
-        <CardTitle className="text-xl font-bold">Receita Mensal (Últimos 6 Meses)</CardTitle>
+        <CardTitle className="text-xl font-heading font-extrabold">Receita Mensal (Últimos 6 Meses)</CardTitle>
       </CardHeader>
       <CardContent className="h-80 p-4">
         {hasData ? (
@@ -66,7 +66,7 @@ const RevenueChart = () => {
               />
               <Bar 
                 dataKey="revenue" 
-                fill="hsl(221 83% 53%)" // Custom blue color
+                fill="hsl(var(--primary))" // Safety Orange
                 radius={[4, 4, 0, 0]} 
                 maxBarSize={30}
               />

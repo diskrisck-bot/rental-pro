@@ -98,18 +98,18 @@ const Timeline = () => {
     switch (status) {
       case 'signed': return { bg: 'bg-green-500/90', border: 'border-green-600', text: 'text-white', label: 'ASSINADO' };
       case 'picked_up': return { bg: 'bg-purple-500/90', border: 'border-purple-600', text: 'text-white', label: 'NA RUA' };
-      case 'reserved': return { bg: 'bg-blue-500/90', border: 'border-blue-600', text: 'text-white', label: 'RESERVADO' };
+      case 'reserved': return { bg: 'bg-secondary/90', border: 'border-secondary', text: 'text-white', label: 'RESERVADO' };
       default: return { bg: 'bg-gray-400/90', border: 'border-gray-500', text: 'text-gray-900', label: 'RASCUNHO' };
     }
   };
 
-  if (loadingProducts && !products) return <div className="flex justify-center p-20"><Loader2 className="animate-spin h-8 w-8 text-blue-600"/></div>;
+  if (loadingProducts && !products) return <div className="flex justify-center p-20"><Loader2 className="animate-spin h-8 w-8 text-primary"/></div>;
 
   return (
-    <div className="p-4 md:p-8 space-y-6 h-screen flex flex-col bg-gray-50/30">
+    <div className="p-4 md:p-8 space-y-6 h-screen flex flex-col bg-background">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gray-900">Timeline</h1>
+            <h1 className="text-2xl md:text-3xl font-heading font-extrabold tracking-tight text-gray-900">Timeline</h1>
             <p className="text-muted-foreground">Visualize a ocupação dos seus produtos.</p>
         </div>
         
@@ -122,7 +122,7 @@ const Timeline = () => {
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="end">
-              <Calendar mode="single" selected={selectedDate} onSelect={handleDateSelect} initialFocus locale={ptBR} modifiers={{ event: (day) => daysWithEvents.has(format(day, 'yyyy-MM-dd')) }} modifiersStyles={{ event: { border: '2px solid hsl(221 83% 53%)', borderRadius: '50%' } }} />
+              <Calendar mode="single" selected={selectedDate} onSelect={handleDateSelect} initialFocus locale={ptBR} modifiers={{ event: (day) => daysWithEvents.has(format(day, 'yyyy-MM-dd')) }} modifiersStyles={{ event: { border: '2px solid hsl(var(--primary))', borderRadius: '50%' } }} />
             </PopoverContent>
           </Popover>
           <Button variant="ghost" size="icon" onClick={() => setViewStartDay(d => addDays(d, 15))}><ChevronRight className="h-4 w-4" /></Button>
@@ -136,9 +136,9 @@ const Timeline = () => {
             <div className="flex sticky top-0 z-20 bg-gray-50 border-b shadow-sm">
               <div className="w-64 p-4 border-r font-semibold text-gray-500 bg-gray-50 sticky left-0 z-30">Produtos / Ativos</div>
               {days.map((day) => (
-                <div key={day.toString()} className={`flex-1 min-w-[120px] p-4 text-center border-r last:border-r-0 ${isSameDay(day, new Date()) ? 'bg-blue-50/50' : ''}`}>
+                <div key={day.toString()} className={`flex-1 min-w-[120px] p-4 text-center border-r last:border-r-0 ${isSameDay(day, new Date()) ? 'bg-primary/10' : ''}`}>
                   <div className="text-xs uppercase text-gray-400 font-bold">{format(day, 'EEE', { locale: ptBR })}</div>
-                  <div className={`text-lg font-bold ${isSameDay(day, new Date()) ? 'text-blue-600' : ''}`}>{format(day, 'dd')}</div>
+                  <div className={`text-lg font-bold ${isSameDay(day, new Date()) ? 'text-primary' : ''}`}>{format(day, 'dd')}</div>
                 </div>
               ))}
             </div>
@@ -161,7 +161,7 @@ const Timeline = () => {
                    {/* Grade de Dias */}
                    <div className="flex flex-1 relative h-16">
                      {days.map((day) => (
-                        <div key={day.toString()} className={`flex-1 min-w-[120px] border-r last:border-r-0 ${isSameDay(day, new Date()) ? 'bg-blue-50/30' : ''}`} />
+                        <div key={day.toString()} className={`flex-1 min-w-[120px] border-r last:border-r-0 ${isSameDay(day, new Date()) ? 'bg-primary/5' : ''}`} />
                      ))}
                      
                      {/* Blocos de Pedidos */}

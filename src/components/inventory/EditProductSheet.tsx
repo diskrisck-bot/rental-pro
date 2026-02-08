@@ -170,7 +170,7 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
 
         {loading ? (
           <div className="flex flex-col items-center justify-center flex-1">
-            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
             <p className="text-sm text-muted-foreground mt-2">Carregando dados...</p>
           </div>
         ) : productData ? (
@@ -183,7 +183,7 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
             <div className="flex-1 overflow-y-auto py-6">
               <TabsContent value="details" className="mt-0 space-y-6">
                 {/* Informação de Aluguel Ativo */}
-                <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 text-sm text-orange-800">
+                <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 text-sm text-primary">
                     <p className="font-semibold">Alugados Ativos: {productData.active_rentals}</p>
                     <p className="text-xs mt-1">A Quantidade Total não pode ser menor que este número.</p>
                 </div>
@@ -257,7 +257,7 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
 
         <SheetFooter className="mt-auto pt-6 border-t sm:flex-col gap-2">
           <Button 
-            className="w-full h-12 bg-blue-600 hover:bg-blue-700" 
+            className="w-full h-12 bg-primary hover:bg-primary/90" 
             onClick={handleSave}
             disabled={isSaveDisabled}
           >

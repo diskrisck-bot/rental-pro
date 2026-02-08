@@ -60,9 +60,9 @@ const getAvailabilityStatus = (available: number, total: number) => {
   }
   if (percentage <= 0.2) { 
     return { 
-      color: 'text-orange-600 font-bold', 
-      badge: <Badge variant="secondary" className="ml-2 bg-orange-100 text-orange-800">Baixo Estoque</Badge>,
-      icon: <AlertTriangle className="h-4 w-4 text-orange-500" />
+      color: 'text-primary font-bold', 
+      badge: <Badge variant="secondary" className="ml-2 bg-primary/10 text-primary">Baixo Estoque</Badge>,
+      icon: <AlertTriangle className="h-4 w-4 text-primary" />
     };
   }
   return { 
@@ -80,10 +80,10 @@ const ProductCardMobile = ({ product, available, handleEditProduct }: { product:
     <div className="bg-white border rounded-xl p-4 shadow-sm space-y-3">
       <div className="flex justify-between items-start">
         <div className="flex items-center gap-3">
-          <Package className="h-6 w-6 text-blue-600" />
+          <Package className="h-6 w-6 text-secondary" />
           <div>
             <h3 className="font-bold text-lg">{product.name}</h3>
-            <Badge variant={product.type === 'trackable' ? 'default' : 'secondary'} className="capitalize text-xs">
+            <Badge variant={product.type === 'trackable' ? 'secondary' : 'default'} className="capitalize text-xs">
               {product.type === 'trackable' ? 'Rastreável' : 'Granel'}
             </Badge>
           </div>
@@ -92,7 +92,7 @@ const ProductCardMobile = ({ product, available, handleEditProduct }: { product:
       </div>
       <div className="grid grid-cols-3 gap-4 text-center border-t pt-3">
         <div><p className="text-xs text-muted-foreground">Total</p><p className="font-semibold">{product.total_quantity}</p></div>
-        <div><p className="text-xs text-muted-foreground">Alugados</p><p className="font-semibold text-blue-600">{rented}</p></div>
+        <div><p className="text-xs text-muted-foreground">Alugados</p><p className="font-semibold text-secondary">{rented}</p></div>
         <div><p className="text-xs text-muted-foreground">Diária</p><p className="font-semibold">R$ {Number(product.price).toFixed(2)}</p></div>
       </div>
       <div className="flex items-center justify-between border-t pt-3">
@@ -180,9 +180,9 @@ const Inventory = () => {
   return (
     <div className="p-4 md:p-8 space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div><h1 className="text-2xl md:text-3xl font-bold tracking-tight">Inventário</h1><p className="text-muted-foreground">Gerencie seus ativos.</p></div>
+        <div><h1 className="text-2xl md:text-3xl font-heading font-extrabold tracking-tight">Inventário</h1><p className="text-muted-foreground">Gerencie seus ativos.</p></div>
         <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-          <DialogTrigger asChild><Button className="bg-blue-600 hover:bg-blue-700 w-full md:w-auto"><Plus className="mr-2 h-4 w-4" /> Novo Produto</Button></DialogTrigger>
+          <DialogTrigger asChild><Button className="bg-primary hover:bg-primary/90 w-full md:w-auto"><Plus className="mr-2 h-4 w-4" /> Novo Produto</Button></DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Adicionar Novo Produto</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
@@ -194,7 +194,7 @@ const Inventory = () => {
               {isTrackable && (<div className="space-y-2"><Label>Serial Inicial</Label><Input value={newProduct.serial_number} onChange={(e) => setNewProduct({...newProduct, serial_number: e.target.value})} placeholder="SN-001" required /></div>)}
               <div className="space-y-2"><Label>Preço Diária (R$)</Label><Input type="number" step="0.01" value={newProduct.price} onChange={(e) => setNewProduct({...newProduct, price: parseFloat(e.target.value) || 0})} /></div>
             </div>
-            <DialogFooter><Button variant="outline" onClick={() => setIsAddModalOpen(false)}>Cancelar</Button><Button onClick={handleCreateProduct} disabled={isSaving}>{isSaving ? <Loader2 className="animate-spin" /> : 'Salvar'}</Button></DialogFooter>
+            <DialogFooter><Button variant="outline" onClick={() => setIsAddModalOpen(false)}>Cancelar</Button><Button onClick={handleCreateProduct} disabled={isSaving} className="bg-primary hover:bg-primary/90">{isSaving ? <Loader2 className="animate-spin" /> : 'Salvar'}</Button></DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
@@ -213,14 +213,14 @@ const Inventory = () => {
                   <TableHead>Nome</TableHead>
                   <TableHead>Tipo</TableHead>
                   <TableHead className="text-center">Total</TableHead>
-                  <TableHead className="text-center text-blue-600">Alugados (Hoje)</TableHead>
+                  <TableHead className="text-center text-secondary">Alugados (Hoje)</TableHead>
                   <TableHead className="text-center text-green-600">Disponível (Hoje)</TableHead>
                   <TableHead>Diária</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading ? <TableRow><TableCell colSpan={7} className="h-24 text-center"><Loader2 className="animate-spin mx-auto text-blue-600" /></TableCell></TableRow> : 
+                {isLoading ? <TableRow><TableCell colSpan={7} className="h-24 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></TableCell></TableRow> : 
                  filteredProducts?.length === 0 ? <TableRow><TableCell colSpan={7} className="text-center h-24">Nenhum produto.</TableCell></TableRow> :
                  filteredProducts?.map((product) => {
                    const { available, rented } = calculateStock(product.id, product.total_quantity || 0);
@@ -228,9 +228,9 @@ const Inventory = () => {
                    return (
                      <TableRow key={product.id}>
                        <TableCell className="font-medium">{product.name}</TableCell>
-                       <TableCell><Badge variant={product.type === 'trackable' ? 'default' : 'secondary'}>{product.type === 'trackable' ? 'Rastreável' : 'Granel'}</Badge></TableCell>
+                       <TableCell><Badge variant={product.type === 'trackable' ? 'secondary' : 'default'}>{product.type === 'trackable' ? 'Rastreável' : 'Granel'}</Badge></TableCell>
                        <TableCell className="text-center text-gray-500">{product.total_quantity}</TableCell>
-                       <TableCell className="text-center font-bold text-blue-600 bg-blue-50/50 rounded">{rented}</TableCell>
+                       <TableCell className="text-center font-bold text-secondary bg-secondary/10 rounded">{rented}</TableCell>
                        <TableCell className="text-center"><div className="flex items-center justify-center gap-1"><span className={cn("font-bold", status.color)}>{available}</span>{status.badge}</div></TableCell>
                        <TableCell>R$ {Number(product.price).toFixed(2)}</TableCell>
                        <TableCell className="text-right"><Button variant="ghost" size="sm" onClick={() => handleEditProduct(product.id)}><Edit className="h-4 w-4 mr-1" /> Editar</Button></TableCell>
