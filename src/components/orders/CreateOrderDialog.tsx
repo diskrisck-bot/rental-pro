@@ -290,10 +290,18 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
 
     try {
       setLoading(true);
+
+      // 1. Verificação de Usuário
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        showError("Sessão expirada. Faça login novamente.");
+        return;
+      }
+
       const newStart = new Date(`${values.start_date}T12:00:00`);
       const newEnd = new Date(`${values.end_date}T12:00:00`);
 
-      const orderPayload = {
+      const orderPayload: any = {
         customer_name: values.customer_name,
         customer_phone: values.customer_phone,
         customer_cpf: values.customer_cpf,
@@ -305,23 +313,69 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         fulfillment_type: values.fulfillment_type,
         delivery_method: values.delivery_method, 
         delivery_address: values.delivery_method === 'delivery' ? (deliveryAddress.trim() || null) : null,
-        status: orderId ? undefined : 'pending_signature'
+        user_id: user.id
       };
 
-      let currentOrderId = orderId;
-      if (orderId) {
-        await supabase.from('orders').update(orderPayload).eq('id', orderId);
-        await supabase.from('order_items').delete().eq('order_id', orderId);
-      } else {
-        const { data: orderData } = await supabase.from('orders').insert([orderPayload]).select().single();
-        currentOrderId = orderData.id;
+      // Só define o status se for um novo pedido
+      if (!orderId) {
+        orderPayload.status = 'pending_signature';
       }
 
-      await supabase.from('order_items').insert(selectedItems.map(item => ({ order_id: currentOrderId, product_id: item.product_id, quantity: item.quantity })));
+      let currentOrderId = orderId;
+
+      if (orderId) {
+        // Atualização Defensiva
+        const { error: updateError } = await supabase
+          .from('orders')
+          .update(orderPayload)
+          .eq('id', orderId);
+
+        if (updateError) {
+          console.error("[CreateOrderDialog] Update error:", updateError);
+          throw new Error(`Erro ao atualizar pedido: ${updateError.message}`);
+        }
+
+        // Limpa itens antigos para reinserir
+        await supabase.from('order_items').delete().eq('order_id', orderId);
+      } else {
+        // Inserção Defensiva
+        const { data: newOrder, error: insertError } = await supabase
+          .from('orders')
+          .insert([orderPayload])
+          .select()
+          .single();
+
+        if (insertError || !newOrder) {
+          console.error("[CreateOrderDialog] Insert error:", insertError);
+          throw new Error(`Erro ao criar pedido no banco: ${insertError?.message || 'Retorno vazio'}`);
+        }
+
+        currentOrderId = newOrder.id;
+      }
+
+      // 3. Inserção de Itens com verificação
+      const { error: itemsError } = await supabase
+        .from('order_items')
+        .insert(selectedItems.map(item => ({ 
+          order_id: currentOrderId, 
+          product_id: item.product_id, 
+          quantity: item.quantity 
+        })));
+
+      if (itemsError) {
+        console.error("[CreateOrderDialog] Items error:", itemsError);
+        throw new Error(`Pedido criado, mas falha ao inserir itens: ${itemsError.message}`);
+      }
+
       showSuccess(orderId ? "Pedido atualizado!" : "Pedido criado!");
       setOpen(false);
       onOrderCreated();
-    } catch (error: any) { showError(error.message); } finally { setLoading(false); }
+    } catch (error: any) { 
+      console.error("[CreateOrderDialog] Submit error:", error);
+      showError(error.message); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const isDataLoading = fetchingData || isProductsLoading;
