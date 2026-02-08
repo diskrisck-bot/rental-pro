@@ -128,57 +128,36 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
     const startBoundary = `${start}T12:00:00.000Z`;
     const endBoundary = `${end}T12:00:00.000Z`;
 
-    // Lógica de Colisão CORRIGIDA:
-    // Um aluguel existente (Order) colide com o período selecionado (Selected) se:
-    // (Order.start_date <= Selected.end_date) AND (Order.end_date >= Selected.start_date)
-    // Usamos <= e >= para garantir que 1-day rentals (Start=End) sejam contados como conflito.
-    
-    // Se for produto rastreável, a quantidade total é 1, e a lógica de colisão é mais simples
-    if (product.type === 'trackable') {
-        
-        // Para produtos rastreáveis, se houver qualquer colisão, a disponibilidade é 0
-        const { count, error } = await supabase
-            .from('order_items')
-            .select('order_id', { count: 'exact', head: true })
-            .eq('product_id', productId)
-            .neq('order_id', orderId || '00000000-0000-0000-0000-000000000000') 
-            .in('orders.status', ['signed', 'reserved', 'picked_up'])
-            .lte('orders.start_date', endBoundary) // OrderStart <= SelectedEnd (CORREÇÃO APLICADA)
-            .gte('orders.end_date', startBoundary); // OrderEnd >= SelectedStart (CORREÇÃO APLICADA)
+    try {
+        // Usando a função RPC para calcular a quantidade ocupada de forma robusta
+        const { data: occupiedData, error: rpcError } = await supabase.rpc('get_occupied_quantity', {
+            p_product_id: productId,
+            p_start_date: startBoundary,
+            p_end_date: endBoundary,
+            p_current_order_id: orderId || null,
+        });
 
-        if (error) throw error;
+        if (rpcError) throw rpcError;
+
+        const occupiedQuantity = occupiedData as number;
         
-        // Se count > 0, está ocupado. Disponibilidade é 1 - count.
-        return Math.max(0, totalQuantity - (count || 0));
+        return Math.max(0, totalQuantity - occupiedQuantity);
+
+    } catch (error) {
+        console.error("[checkAvailability] Erro ao chamar RPC:", error);
+        throw error;
     }
-
-    // Lógica para produtos de Granel (Bulk)
-    const { data: conflictingItems, error: conflictError } = await supabase
-        .from('order_items')
-        .select(`
-            quantity,
-            orders!inner (
-                status,
-                start_date,
-                end_date
-            )
-        `)
-        .eq('product_id', productId)
-        .neq('order_id', orderId || '00000000-0000-0000-0000-000000000000') 
-        .in('orders.status', ['signed', 'reserved', 'picked_up'])
-        .lte('orders.start_date', endBoundary) // OrderStart <= SelectedEnd (CORREÇÃO APLICADA)
-        .gte('orders.end_date', startBoundary); // OrderEnd >= SelectedStart (CORREÇÃO APLICADA)
-
-    if (conflictError) throw conflictError;
-
-    const occupiedQuantity = conflictingItems.reduce((sum, item: any) => sum + item.quantity, 0);
-    
-    return Math.max(0, totalQuantity - occupiedQuantity);
   }, [productList, orderId]);
 
   // Efeito para atualizar a disponibilidade na UI
   useEffect(() => {
     if (currentProductId && startDateStr && endDateStr) {
+      // Validação de datas: End date must be equal or after start date
+      if (isBefore(parseISO(endDateStr), parseISO(startDateStr))) {
+        setCurrentAvailability(0);
+        return;
+      }
+
       setCurrentAvailability(null);
       checkAvailability(currentProductId, startDateStr, endDateStr)
         .then(setCurrentAvailability)
@@ -253,6 +232,10 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
     // 1. PRÉ-REQUISITO DE DATA
     if (!startDateStr || !endDateStr) {
         showError("Selecione o período do evento para verificar a disponibilidade.");
+        return;
+    }
+    if (isBefore(parseISO(endDateStr), parseISO(startDateStr))) {
+        showError("A data de fim deve ser igual ou posterior à data de início.");
         return;
     }
     if (!currentProductId || currentQuantity < 1) return;
@@ -412,7 +395,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
 
   const isDataLoading = fetchingData || isProductsLoading;
   const isImmediate = watchFulfillmentType === 'immediate';
-  const isAddButtonDisabled = !currentProductId || currentQuantity < 1 || loading || !startDateStr || !endDateStr;
+  const isAddButtonDisabled = !currentProductId || currentQuantity < 1 || loading || !startDateStr || !endDateStr || isBefore(parseISO(endDateStr), parseISO(startDateStr));
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
