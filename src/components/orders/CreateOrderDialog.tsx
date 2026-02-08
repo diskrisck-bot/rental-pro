@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Plus, Trash2, Loader2, Wallet, Edit, CreditCard, Clock, Zap, Calendar, AlertTriangle, Package, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Loader2, Wallet, Edit, CreditCard, Clock, Zap, Calendar, AlertTriangle, Package, AlertCircle, CheckCircle } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { 
   Dialog, 
@@ -124,8 +124,13 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
 
     const totalQuantity = product.total_quantity || 0;
     
+    // Usamos T12:00:00Z para alinhar com o formato de salvamento e garantir a inclusão correta do dia.
+    const startBoundary = `${start}T12:00:00.000Z`;
+    const endBoundary = `${end}T12:00:00.000Z`;
+
     // Se for produto rastreável, a quantidade total é 1, e a lógica de colisão é mais simples
     if (product.type === 'trackable') {
+        
         // Para produtos rastreáveis, se houver qualquer colisão, a disponibilidade é 0
         const { count, error } = await supabase
             .from('order_items')
@@ -133,8 +138,8 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             .eq('product_id', productId)
             .neq('order_id', orderId || '00000000-0000-0000-0000-000000000000') 
             .in('orders.status', ['signed', 'reserved', 'picked_up'])
-            .lte('orders.start_date', `${end}T23:59:59.999Z`) // OrderStart <= SelectedEnd
-            .gte('orders.end_date', `${start}T00:00:00.000Z`); // OrderEnd >= SelectedStart
+            .lte('orders.start_date', endBoundary) // OrderStart <= SelectedEnd
+            .gte('orders.end_date', startBoundary); // OrderEnd >= SelectedStart
 
         if (error) throw error;
         
@@ -156,8 +161,8 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         .eq('product_id', productId)
         .neq('order_id', orderId || '00000000-0000-0000-0000-000000000000') 
         .in('orders.status', ['signed', 'reserved', 'picked_up'])
-        .lte('orders.start_date', `${end}T23:59:59.999Z`) // OrderStart <= SelectedEnd
-        .gte('orders.end_date', `${start}T00:00:00.000Z`); // OrderEnd >= SelectedStart
+        .lte('orders.start_date', endBoundary) // OrderStart <= SelectedEnd
+        .gte('orders.end_date', startBoundary); // OrderEnd >= SelectedStart
 
     if (conflictError) throw conflictError;
 
