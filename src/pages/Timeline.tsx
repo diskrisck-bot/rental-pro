@@ -1,20 +1,20 @@
 "use client";
 
 import React, { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Loader2, User, Box } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { format, addDays, startOfToday, eachDayOfInterval, isSameDay, isBefore, isAfter, parseISO, startOfDay } from 'date-fns';
+import { format, addDays, startOfToday, eachDayOfInterval, isSameDay, isBefore, isAfter, parseISO, startOfDay, isWithinInterval } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase'; // Import direto
+import { supabase } from '@/lib/supabase';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 const DAY_WIDTH_PX = 120;
 
-// Função auxiliar para calcular a posição e largura do bloco na timeline
 const getBlockPosition = (startDateStr: string, endDateStr: string, days: Date[]) => {
   const startDate = parseISO(startDateStr);
   const endDate = parseISO(endDateStr);
@@ -40,156 +40,143 @@ const Timeline = () => {
 
   const days = useMemo(() => eachDayOfInterval({ start: viewStartDay, end: addDays(viewStartDay, 14) }), [viewStartDay]);
 
-  // 1. BUSCA PRODUTOS (Sem filtro 'active' para garantir que apareçam)
-  const { data: products, isLoading: loadingProducts } = useQuery({
-    queryKey: ['timeline_products'],
-    queryFn: async () => {
-      // Removido .eq('active', true) para evitar sumiço
-      const { data } = await supabase.from('products').select('*').order('name');
-      return data || [];
-    }
-  });
-
-  // 2. BUSCA PEDIDOS ATIVOS (Assinados, Reservados ou Na Rua)
-  const { data: orderItems, isLoading: loadingOrders } = useQuery({
-    queryKey: ['timeline_orders', viewStartDay],
+  // QUERY: Busca PEDIDOS (Orders) em vez de produtos
+  const { data: orders, isLoading } = useQuery({
+    queryKey: ['timeline_orders_view', viewStartDay],
     queryFn: async () => {
       const rangeStart = viewStartDay.toISOString();
       const rangeEnd = addDays(viewStartDay, 15).toISOString();
 
       const { data } = await supabase
-        .from('order_items')
+        .from('orders')
         .select(`
-            quantity, 
-            product_id, 
-            orders!inner(id, customer_name, status, start_date, end_date)
+            *,
+            order_items (
+                quantity,
+                products (name)
+            )
         `)
-        // AQUI ESTÁ O SEGREDO: Inclui 'signed' (Assinado)
-        .in('orders.status', ['signed', 'reserved', 'picked_up']) 
-        // Otimização: carrega apenas o que colide com a tela atual
-        .lte('orders.start_date', rangeEnd) 
-        .gte('orders.end_date', rangeStart);
+        .in('status', ['signed', 'reserved', 'picked_up'])
+        .lte('start_date', rangeEnd)
+        .gte('end_date', rangeStart)
+        .order('start_date', { ascending: true }); // Ordena por data de início
 
       return data || [];
     }
   });
 
-  const isLoading = loadingProducts || loadingOrders;
-
-  // Dias com eventos (bolinha no calendário)
-  const daysWithEvents = useMemo(() => {
-    const dates = new Set<string>();
-    orderItems?.forEach(item => {
-      try {
-        const start = parseISO(item.orders.start_date);
-        const end = parseISO(item.orders.end_date);
-        if(isBefore(end, start)) return;
-        eachDayOfInterval({ start, end }).forEach(day => dates.add(format(day, 'yyyy-MM-dd')));
-      } catch (e) {}
-    });
-    return dates;
-  }, [orderItems]);
-
   const handleDateSelect = (date: Date | undefined) => {
     if (date) { setSelectedDate(date); setViewStartDay(startOfDay(date)); }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusConfig = (status: string, endDate: string) => {
+    const isEndingToday = isSameDay(parseISO(endDate), startOfToday());
+    
+    if (isEndingToday && status !== 'returned') {
+        return { bg: 'bg-[#D32F2F]', border: 'border-red-700', text: 'text-white', label: 'VENCE HOJE' };
+    }
+
     switch (status) {
-      case 'signed': 
-      case 'picked_up': 
-        return { bg: 'bg-[#10B981]', border: 'border-[#059669]', text: 'text-white', label: 'ASSINADO/NA RUA' };
-      case 'reserved': 
-      case 'pending_signature':
-        return { bg: 'bg-primary', border: 'border-primary/80', text: 'text-white', label: 'RESERVADO/PENDENTE' };
-      default: return { bg: 'bg-gray-400/90', border: 'border-gray-500', text: 'text-gray-900', label: 'RASCUNHO' };
+      case 'signed': return { bg: 'bg-[#10B981]', border: 'border-green-600', text: 'text-white', label: 'ASSINADO' };
+      case 'picked_up': return { bg: 'bg-[#F57C00]', border: 'border-orange-600', text: 'text-white', label: 'NA RUA' };
+      case 'reserved': return { bg: 'bg-[#1A237E]', border: 'border-blue-800', text: 'text-white', label: 'RESERVADO' };
+      default: return { bg: 'bg-gray-400', border: 'border-gray-500', text: 'text-gray-900', label: status };
     }
   };
 
-  if (loadingProducts && !products) return <div className="flex justify-center p-20"><Loader2 className="animate-spin h-8 w-8 text-primary"/></div>;
-
   return (
-    <div className="p-4 md:p-8 space-y-6 h-screen flex flex-col bg-background">
+    <div className="p-4 md:p-8 space-y-6 h-screen flex flex-col bg-[#F4F5F7]">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-            <h1 className="text-2xl md:text-3xl font-heading font-extrabold tracking-tight text-gray-900">Timeline</h1>
-            <p className="text-muted-foreground">Visualize a ocupação dos seus produtos.</p>
+            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-[#1A237E] uppercase">Timeline de Contratos</h1>
+            <p className="text-gray-500 font-medium">Gestão visual por contrato e período.</p>
         </div>
         
-        <div className="flex items-center gap-2 bg-white border rounded-xl p-1 shadow-sm">
-          <Button variant="ghost" size="icon" onClick={() => setViewStartDay(d => addDays(d, -15))}><ChevronLeft className="h-4 w-4" /></Button>
+        <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg p-1 shadow-sm">
+          <Button variant="ghost" size="icon" onClick={() => setViewStartDay(d => addDays(d, -15))}><ChevronLeft className="h-5 w-5 text-[#1A237E]" /></Button>
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant={"outline"} className={cn("w-[180px] justify-start text-left font-medium", !selectedDate && "text-muted-foreground")}>
+              <Button variant={"outline"} className={cn("w-[180px] justify-start text-left font-bold text-[#1A237E] border-gray-300")}>
                 <CalendarIcon className="mr-2 h-4 w-4" />{selectedDate ? format(selectedDate, "MMMM yyyy", { locale: ptBR }) : <span>Selecione</span>}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="end">
-              <Calendar mode="single" selected={selectedDate} onSelect={handleDateSelect} initialFocus locale={ptBR} modifiers={{ event: (day) => daysWithEvents.has(format(day, 'yyyy-MM-dd')) }} modifiersStyles={{ event: { border: '2px solid hsl(var(--primary))', borderRadius: '50%' } }} />
+              <Calendar mode="single" selected={selectedDate} onSelect={handleDateSelect} initialFocus locale={ptBR} />
             </PopoverContent>
           </Popover>
-          <Button variant="ghost" size="icon" onClick={() => setViewStartDay(d => addDays(d, 15))}><ChevronRight className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon" onClick={() => setViewStartDay(d => addDays(d, 15))}><ChevronRight className="h-5 w-5 text-[#1A237E]" /></Button>
         </div>
       </div>
 
-      <div className="flex-1 bg-white border rounded-xl overflow-hidden relative shadow-sm">
+      <div className="flex-1 bg-white border border-gray-300 rounded-xl overflow-hidden relative shadow-hard">
         <div className="overflow-x-auto h-full">
           <div className="inline-block min-w-full">
-            {/* Header das Datas */}
-            <div className="flex sticky top-0 z-20 bg-gray-50 border-b shadow-sm">
-              <div className="w-64 p-4 border-r font-semibold text-gray-500 bg-gray-50 sticky left-0 z-30">Produtos / Ativos</div>
+            {/* Header Dias */}
+            <div className="flex sticky top-0 z-20 bg-gray-50 border-b border-gray-300 shadow-sm">
+              <div className="w-72 p-4 border-r border-gray-300 font-extrabold text-[#1A237E] bg-gray-100 sticky left-0 z-30 uppercase tracking-wide flex items-center gap-2">
+                <User className="h-4 w-4" /> Cliente / Contrato
+              </div>
               {days.map((day) => (
-                <div key={day.toString()} className={`flex-1 min-w-[120px] p-4 text-center border-r last:border-r-0 ${isSameDay(day, new Date()) ? 'bg-primary/10' : ''}`}>
-                  <div className="text-xs uppercase text-gray-400 font-bold">{format(day, 'EEE', { locale: ptBR })}</div>
-                  <div className={`text-lg font-bold ${isSameDay(day, new Date()) ? 'text-primary' : ''}`}>{format(day, 'dd')}</div>
+                <div key={day.toString()} className={`flex-1 min-w-[120px] p-4 text-center border-r border-gray-200 last:border-r-0 ${isSameDay(day, new Date()) ? 'bg-blue-50' : ''}`}>
+                  <div className="text-xs uppercase text-gray-500 font-bold">{format(day, 'EEE', { locale: ptBR })}</div>
+                  <div className={`text-xl font-black ${isSameDay(day, new Date()) ? 'text-[#F57C00]' : 'text-gray-700'}`}>{format(day, 'dd')}</div>
                 </div>
               ))}
             </div>
 
-            {/* Linhas dos Produtos */}
-            {products?.length === 0 ? <div className="p-10 text-center text-gray-400">Nenhum produto encontrado.</div> : 
-             products?.map((product: any) => {
-               const allocations = orderItems?.filter((item: any) => item.product_id === product.id) || [];
+            {/* Linhas dos Contratos */}
+            {isLoading ? <div className="flex justify-center p-20"><Loader2 className="animate-spin h-8 w-8 text-[#1A237E]"/></div> : 
+             orders?.length === 0 ? <div className="p-10 text-center text-gray-400 font-medium">Nenhum contrato ativo neste período.</div> : 
+             orders?.map((order: any) => {
+               const position = getBlockPosition(order.start_date, order.end_date, days);
+               const style = getStatusConfig(order.status, order.end_date);
                
                return (
-                 <div key={product.id} className="flex border-b last:border-b-0 hover:bg-gray-50/50 transition-colors group">
-                   {/* Coluna Fixa do Nome */}
-                   <div className="w-64 p-4 border-r font-medium text-gray-700 bg-white sticky left-0 z-10 group-hover:bg-gray-50/50">
-                     {product.name}
-                     <div className="flex gap-2 mt-1">
-                        <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 rounded text-gray-500 border">Total: {product.total_quantity}</span>
-                     </div>
+                 <div key={order.id} className="flex border-b border-gray-200 last:border-b-0 hover:bg-gray-50 transition-colors group h-16 relative">
+                   {/* Coluna Fixa do Cliente */}
+                   <div className="w-72 p-3 border-r border-gray-300 bg-white sticky left-0 z-10 group-hover:bg-gray-50 flex flex-col justify-center shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                     <span className="font-bold text-[#1A237E] truncate" title={order.customer_name}>{order.customer_name}</span>
+                     <span className="text-xs text-gray-500 font-medium">#{order.id.split('-')[0]}</span>
                    </div>
                    
-                   {/* Grade de Dias */}
-                   <div className="flex flex-1 relative h-16">
+                   {/* Grade e Barra */}
+                   <div className="flex flex-1 relative h-full items-center">
                      {days.map((day) => (
-                        <div key={day.toString()} className={`flex-1 min-w-[120px] border-r last:border-r-0 ${isSameDay(day, new Date()) ? 'bg-primary/5' : ''}`} />
+                        <div key={day.toString()} className={`flex-1 min-w-[120px] h-full border-r border-gray-100 last:border-r-0 ${isSameDay(day, new Date()) ? 'bg-blue-50/30' : ''}`} />
                      ))}
                      
-                     {/* Blocos de Pedidos */}
-                     {allocations.map((item: any, index: number) => {
-                       const order = item.orders;
-                       const position = getBlockPosition(order.start_date, order.end_date, days);
-                       if (!position) return null;
-                       const colorConfig = getStatusColor(order.status);
-
-                       return (
-                         <Link 
-                           key={order.id + index} 
-                           to={`/orders?id=${order.id}`}
-                           className={cn(
-                             `absolute top-2 h-12 rounded-md border shadow-sm flex items-center px-3 text-xs font-bold overflow-hidden whitespace-nowrap z-10 transition-all cursor-pointer hover:shadow-md hover:scale-[1.01]`,
-                             colorConfig.bg, colorConfig.border, colorConfig.text
-                           )}
-                           style={{ left: `${position.left + 2}px`, width: `${position.width - 4}px` }} // +2 -4 para margem visual
-                           title={`Cliente: ${order.customer_name} | Período: ${format(parseISO(order.start_date), 'dd/MM')} a ${format(parseISO(order.end_date), 'dd/MM')}`}
-                         >
-                           <span className="mr-1 opacity-70">#{order.id.split('-')[0]}</span>
-                           {order.customer_name} (x{item.quantity})
-                         </Link>
-                       );
-                     })}
+                     {position && (
+                       <TooltipProvider delayDuration={0}>
+                         <Tooltip>
+                           <TooltipTrigger asChild>
+                             <Link 
+                               to={`/orders?id=${order.id}`}
+                               className={cn(
+                                 `absolute h-10 rounded-md border-l-4 shadow-sm flex items-center px-3 text-xs font-bold overflow-hidden whitespace-nowrap z-10 transition-all cursor-pointer hover:shadow-md hover:scale-[1.01] uppercase tracking-wide`,
+                                 style.bg, style.border, style.text
+                               )}
+                               style={{ left: `${position.left + 4}px`, width: `${position.width - 8}px` }}
+                             >
+                               {style.label}
+                             </Link>
+                           </TooltipTrigger>
+                           <TooltipContent className="bg-[#1A237E] text-white border-none p-4 rounded-lg shadow-xl">
+                             <div className="font-bold mb-2 text-lg border-b border-blue-500 pb-1">{order.customer_name}</div>
+                             <div className="text-xs text-blue-200 mb-2 font-mono">
+                               {format(parseISO(order.start_date), 'dd/MM')} até {format(parseISO(order.end_date), 'dd/MM')}
+                             </div>
+                             <div className="space-y-1">
+                               {order.order_items?.map((item: any, idx: number) => (
+                                 <div key={idx} className="flex items-center gap-2 text-sm">
+                                   <Box className="h-3 w-3 text-[#F57C00]" /> 
+                                   <span className="font-bold">{item.quantity}x</span> {item.products?.name}
+                                 </div>
+                               ))}
+                             </div>
+                           </TooltipContent>
+                         </Tooltip>
+                       </TooltipProvider>
+                     )}
                    </div>
                  </div>
                );
