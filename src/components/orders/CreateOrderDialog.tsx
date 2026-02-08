@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/select';
 import { supabase } from '@/lib/supabase';
 import { showSuccess, showError } from '@/utils/toast';
-import { format, parseISO, isBefore, isAfter, startOfDay, eachDayOfInterval, isWithinInterval } from 'date-fns';
+import { format, parseISO, isBefore, isAfter, startOfDay, eachDayOfInterval, isWithinInterval, addDays } from 'date-fns';
 import { calculateOrderTotal } from '@/utils/financial';
 import MaskedInput from 'react-text-mask';
 import { useQuery } from '@tanstack/react-query';
@@ -75,7 +75,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
   const productList = products || [];
 
   const defaultStartDate = format(new Date(), 'yyyy-MM-dd');
-  const defaultEndDate = format(new Date(Date.now() + 86400000), 'yyyy-MM-dd');
+  const defaultEndDate = format(addDays(new Date(), 1), 'yyyy-MM-dd');
 
   const { register, handleSubmit, reset, watch, setValue } = useForm({
     defaultValues: {
@@ -327,14 +327,16 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         // 3. Algoritmo de Pico Diário (Daily Peak)
         let maxUsage = 0;
         let peakDate = newOrderStartDate;
-        const start = parseISO(newOrderStartDate);
-        const end = parseISO(newOrderEndDate);
+        
+        // Usando new Date() para garantir que a iteração funcione corretamente
+        const start = new Date(newOrderStartDate);
+        const end = new Date(newOrderEndDate);
 
         // Loop dia a dia
-        for (let d = start; d <= end; d = addDays(d, 1)) {
+        for (let d = new Date(start); d <= end; d = addDays(d, 1)) {
           const currentDayStr = format(d, 'yyyy-MM-dd');
 
-          const usageOnThisDay = (activeRentals || []).reduce((acc, item) => {
+          const usageOnThisDay = (activeRentals || []).reduce((acc: number, item: any) => {
             // GARANTIA NUMÉRICA
             const itemQuantity = Number(item.quantity) || 0;
             
@@ -472,10 +474,10 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             const start = parseISO(values.start_date);
             const end = parseISO(values.end_date);
 
-            for (let d = start; d <= end; d = addDays(d, 1)) {
+            for (let d = new Date(start); d <= end; d = addDays(d, 1)) {
               const currentDayStr = format(d, 'yyyy-MM-dd');
 
-              const usageOnThisDay = (activeRentals || []).reduce((acc, rental) => {
+              const usageOnThisDay = (activeRentals || []).reduce((acc: number, rental: any) => {
                 const itemQuantity = Number(rental.quantity) || 0;
                 const itemStart = rental.orders.start_date.split('T')[0];
                 const itemEnd = rental.orders.end_date.split('T')[0];
