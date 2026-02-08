@@ -212,10 +212,19 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             setValue('payment_method', orderData.payment_method || 'Pix');
             setValue('payment_timing', orderData.payment_timing || 'paid_on_pickup');
             setValue('fulfillment_type', orderData.fulfillment_type || 'reservation');
-            setValue('delivery_method', orderData.delivery_method || 'pickup'); 
+            
+            // Parsing do Composite Field para edição
+            const rawMethod = orderData.delivery_method || 'pickup';
+            if (rawMethod.startsWith('delivery')) {
+                setValue('delivery_method', 'delivery');
+                setDeliveryAddress(rawMethod.split('|')[1] || '');
+            } else {
+                setValue('delivery_method', 'pickup');
+                setDeliveryAddress('');
+            }
+
             setCustomerDocument(orderData.customer_cpf || '');
             setValue('customer_cpf', orderData.customer_cpf || '');
-            setDeliveryAddress(orderData.delivery_address || '');
             const existingItems = orderData.order_items.map((item: any) => ({
               product_id: item.product_id,
               product_name: item.products.name,
@@ -291,7 +300,6 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
     try {
       setLoading(true);
 
-      // 1. Verificação de Usuário
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         showError("Sessão expirada. Faça login novamente.");
@@ -300,6 +308,11 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
 
       const newStart = new Date(`${values.start_date}T12:00:00`);
       const newEnd = new Date(`${values.end_date}T12:00:00`);
+
+      // Implementação do Composite Field pattern
+      const compositeDeliveryMethod = values.delivery_method === 'delivery' 
+        ? `delivery|${deliveryAddress.trim()}` 
+        : 'pickup';
 
       const orderPayload: any = {
         customer_name: values.customer_name,
@@ -311,12 +324,10 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         payment_method: values.payment_method,
         payment_timing: values.payment_timing,
         fulfillment_type: values.fulfillment_type,
-        delivery_method: values.delivery_method, 
-        delivery_address: values.delivery_method === 'delivery' ? (deliveryAddress.trim() || null) : null,
+        delivery_method: compositeDeliveryMethod, // Usando o campo composto
         user_id: user.id
       };
 
-      // Só define o status se for um novo pedido
       if (!orderId) {
         orderPayload.status = 'pending_signature';
       }
@@ -324,36 +335,24 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
       let currentOrderId = orderId;
 
       if (orderId) {
-        // Atualização Defensiva
         const { error: updateError } = await supabase
           .from('orders')
           .update(orderPayload)
           .eq('id', orderId);
 
-        if (updateError) {
-          console.error("[CreateOrderDialog] Update error:", updateError);
-          throw new Error(`Erro ao atualizar pedido: ${updateError.message}`);
-        }
-
-        // Limpa itens antigos para reinserir
+        if (updateError) throw new Error(`Erro ao atualizar pedido: ${updateError.message}`);
         await supabase.from('order_items').delete().eq('order_id', orderId);
       } else {
-        // Inserção Defensiva
         const { data: newOrder, error: insertError } = await supabase
           .from('orders')
           .insert([orderPayload])
           .select()
           .single();
 
-        if (insertError || !newOrder) {
-          console.error("[CreateOrderDialog] Insert error:", insertError);
-          throw new Error(`Erro ao criar pedido no banco: ${insertError?.message || 'Retorno vazio'}`);
-        }
-
+        if (insertError || !newOrder) throw new Error(`Erro ao criar pedido: ${insertError?.message || 'Erro desconhecido'}`);
         currentOrderId = newOrder.id;
       }
 
-      // 3. Inserção de Itens com verificação
       const { error: itemsError } = await supabase
         .from('order_items')
         .insert(selectedItems.map(item => ({ 
@@ -362,16 +361,12 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
           quantity: item.quantity 
         })));
 
-      if (itemsError) {
-        console.error("[CreateOrderDialog] Items error:", itemsError);
-        throw new Error(`Pedido criado, mas falha ao inserir itens: ${itemsError.message}`);
-      }
+      if (itemsError) throw new Error(`Pedido criado, mas falha ao inserir itens: ${itemsError.message}`);
 
       showSuccess(orderId ? "Pedido atualizado!" : "Pedido criado!");
       setOpen(false);
       onOrderCreated();
     } catch (error: any) { 
-      console.error("[CreateOrderDialog] Submit error:", error);
       showError(error.message); 
     } finally { 
       setLoading(false); 
