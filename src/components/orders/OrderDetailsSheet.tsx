@@ -9,13 +9,12 @@ import { Badge } from '@/components/ui/badge';
 import { 
   Loader2, Calendar, Package, ClipboardCheck, ArrowRightLeft, Edit, 
   CheckCircle, Phone, User, History, AlertCircle, MessageCircle, 
-  Download, AlertTriangle, XCircle 
+  Download, AlertTriangle, XCircle, Truck 
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { format, isAfter, parseISO, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { showSuccess, showError } from '@/utils/toast';
-import CreateOrderDialog from './CreateOrderDialog';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import jsPDF from 'jspdf';
@@ -71,7 +70,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     return `https://wa.me/${order.customer_phone?.replace(/\D/g, '')}?text=${encodeURIComponent(messageText)}`;
   };
 
-  // --- GERADOR DE PDF ---
+  // --- GERADOR DE PDF (MANTIDO O SEU CÓDIGO ORIGINAL) ---
   const generatePDF = async (order: any, owner: OwnerProfile | null) => {
     const doc = new jsPDF({ format: 'a4', unit: 'mm' });
     const primaryColor = [30, 58, 138]; 
@@ -160,22 +159,26 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     try { setIsGeneratingContract(true); const doc = await generatePDF(order, ownerProfile); doc.save(`Contrato-${order.id.split('-')[0]}.pdf`); showSuccess("Download iniciado."); } catch (e: any) { showError("Erro ao gerar PDF."); } finally { setIsGeneratingContract(false); }
   };
 
+  // --- ATUALIZAÇÃO DE STATUS LOGÍSTICO ---
   const updateStatus = async (newStatus: string) => {
     if (!orderId) return;
-    // Bloqueio: Não deixa avançar sem assinatura (exceto cancelar)
-    if (newStatus !== 'canceled' && !order.signed_at && newStatus !== 'pending_signature') { 
-        showError("É necessário que o cliente assine o contrato primeiro."); 
-        return; 
-    }
     
     try {
-      setUpdating(true); const p: any = { status: newStatus };
-      if (newStatus === 'picked_up') p.picked_up_at = new Date().toISOString(); // Isso atualiza o DASHBOARD (Itens na rua)
-      if (newStatus === 'returned') p.returned_at = new Date().toISOString(); // Isso devolve ao estoque
+      setUpdating(true); 
+      const p: any = { status: newStatus };
       
-      await supabase.from('orders').update(p).eq('id', orderId);
+      // LOGÍSTICA: Atualiza datas para controle de inventário
+      if (newStatus === 'picked_up') p.picked_up_at = new Date().toISOString(); 
+      if (newStatus === 'returned') p.returned_at = new Date().toISOString(); 
       
-      showSuccess("Status atualizado!"); 
+      const { error } = await supabase.from('orders').update(p).eq('id', orderId);
+      if(error) throw error;
+      
+      showSuccess(
+        newStatus === 'picked_up' ? "Equipamento retirado! Bom trabalho." : 
+        newStatus === 'returned' ? "Equipamento devolvido! Estoque liberado." : "Status atualizado!"
+      );
+
       queryClient.invalidateQueries({ queryKey: ['orders'] }); 
       fetchOrderDetails(); 
       onStatusUpdate();
@@ -189,71 +192,97 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
   const isSigned = !!order?.signed_at;
   const status = order?.status;
 
-  // Renderização do Status Visual
   const getStatusBadge = () => {
       switch(status) {
-          case 'pending_signature': return <Badge variant="pending">Aguardando Assinatura</Badge>;
-          case 'reserved': return <Badge variant="pending">Reservado</Badge>;
-          case 'picked_up': return <Badge variant="signed" className="bg-purple-600">Em Andamento (Na Rua)</Badge>; 
-          case 'returned': return <Badge variant="signed">Concluído</Badge>;
-          case 'canceled': return <Badge variant="overdue">Cancelado</Badge>;
+          case 'pending_signature': return <Badge variant="outline" className="text-orange-600 border-orange-200 bg-orange-50">Aguardando Assinatura</Badge>;
+          case 'signed': return <Badge className="bg-green-600">Assinado</Badge>;
+          case 'reserved': return <Badge className="bg-blue-600">Reservado</Badge>;
+          case 'picked_up': return <Badge className="bg-[#F57C00]">Em Andamento (Na Rua)</Badge>; 
+          case 'returned': return <Badge className="bg-gray-600">Concluído</Badge>;
+          case 'canceled': return <Badge variant="destructive">Cancelado</Badge>;
           default: return <Badge>{status}</Badge>;
       }
   };
   
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-md flex flex-col h-full">
-        <SheetHeader>
+      <SheetContent className="sm:max-w-md flex flex-col h-full bg-[#F4F5F7]">
+        <SheetHeader className="mb-4">
           <div className="flex justify-between items-start">
-            <div><SheetTitle>{order?.customer_name}</SheetTitle><p className="text-xs text-muted-foreground">#{order?.id.split('-')[0]}</p></div>
+            <div>
+                <SheetTitle className="text-[#1A237E] font-extrabold text-xl uppercase">{order?.customer_name}</SheetTitle>
+                <p className="text-xs text-gray-500 font-bold">Pedido #{order?.id.split('-')[0]}</p>
+            </div>
             {getStatusBadge()}
           </div>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto py-6 space-y-6">
-          <div className="bg-secondary rounded-xl p-6 text-white shadow"><p className="text-xs font-bold opacity-80 mb-1">Total</p><p className="text-3xl font-heading font-extrabold">R$ {Number(order?.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p></div>
+        <div className="flex-1 overflow-y-auto space-y-6">
+          {/* Valor Total */}
+          <div className="bg-[#1A237E] rounded-xl p-6 text-white shadow-hard text-center">
+            <p className="text-xs font-bold opacity-80 uppercase tracking-widest mb-1">Valor do Contrato</p>
+            <p className="text-4xl font-black">R$ {Number(order?.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+          </div>
           
-          {/* Seção de Contrato e PDF */}
-          <div className="space-y-3">
-             <a href={getWhatsappLink(order)} target="_blank" rel="noopener noreferrer" className="w-full h-12 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow"><MessageCircle className="h-5 w-5" /> {isSigned ? 'Reenviar Contrato' : 'Link de Assinatura'}</a>
-             <Button onClick={handleDownloadFinalPDF} disabled={isGeneratingContract} variant="outline" className="w-full h-12 border-green-500 text-green-600">{isGeneratingContract ? <Loader2 className="animate-spin mr-2" /> : <Download className="mr-2" />} Baixar PDF Profissional</Button>
+          {/* Ações Documentais */}
+          <div className="grid grid-cols-2 gap-3">
+             <a href={getWhatsappLink(order)} target="_blank" rel="noopener noreferrer" className="w-full">
+                <Button variant="outline" className="w-full h-12 border-green-500 text-green-700 hover:bg-green-50 font-bold">
+                    <MessageCircle className="h-4 w-4 mr-2" /> WhatsApp
+                </Button>
+             </a>
+             <Button onClick={handleDownloadFinalPDF} disabled={isGeneratingContract} variant="outline" className="w-full h-12 border-[#1A237E] text-[#1A237E] font-bold">
+                {isGeneratingContract ? <Loader2 className="animate-spin mr-2" /> : <Download className="mr-2 h-4 w-4" />} PDF
+             </Button>
           </div>
 
-          <div className="border rounded-lg bg-white divide-y">
-            {order?.order_items.map((item: any, idx: number) => (
-              <div key={idx} className="p-3 flex justify-between"><span className="text-sm">{item.products?.name}</span><Badge variant="secondary">x{item.quantity}</Badge></div>
-            ))}
+          {/* Lista de Itens */}
+          <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+            <h4 className="text-xs font-bold text-gray-500 uppercase mb-3 flex items-center gap-2"><Package className="h-4 w-4"/> Equipamentos</h4>
+            <div className="divide-y divide-gray-100">
+                {order?.order_items.map((item: any, idx: number) => (
+                  <div key={idx} className="py-3 flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-800">{item.products?.name}</span>
+                      <Badge className="bg-[#1A237E]">x{item.quantity}</Badge>
+                  </div>
+                ))}
+            </div>
           </div>
         </div>
 
-        {/* --- AQUI ESTÁ A CORREÇÃO: BOTÕES OPERACIONAIS --- */}
-        <SheetFooter className="mt-auto pt-4 border-t flex-col gap-3">
+        {/* --- FOOTER OPERACIONAL CORRIGIDO --- */}
+        <SheetFooter className="mt-auto pt-4 border-t border-gray-200 flex flex-col gap-3 bg-white -mx-6 px-6 pb-6">
            
-           {/* 1. SE ASSINADO -> CONFIRMAR RESERVA */}
-           {status === 'pending_signature' && (
-             <Button className="w-full h-12 bg-primary hover:bg-primary/90 text-lg shadow-sm" onClick={() => updateStatus('reserved')} disabled={!isSigned}>
-               <CheckCircle className="mr-2 h-5 w-5" /> Confirmar Reserva
+           {/* LOGÍSTICA DE SAÍDA: Aparece se estiver Assinado OU Reservado */}
+           {(status === 'signed' || status === 'reserved') && (
+             <Button 
+                className="w-full h-14 bg-[#F57C00] hover:bg-orange-600 text-white font-bold uppercase tracking-wide text-lg shadow-hard" 
+                onClick={() => updateStatus('picked_up')}
+             >
+               <Truck className="mr-2 h-6 w-6" /> Confirmar Retirada
              </Button>
            )}
 
-           {/* 2. SE RESERVADO -> REGISTRAR SAÍDA (CHECK-OUT) */}
-           {status === 'reserved' && (
-             <Button className="w-full h-12 bg-secondary hover:bg-secondary/90 text-lg shadow-sm" onClick={() => updateStatus('picked_up')}>
-               <ClipboardCheck className="mr-2 h-5 w-5" /> Registrar Retirada (Check-out)
-             </Button>
-           )}
-
-           {/* 3. SE NA RUA -> REGISTRAR DEVOLUÇÃO (CHECK-IN) */}
+           {/* LOGÍSTICA DE RETORNO: Aparece se estiver Na Rua */}
            {status === 'picked_up' && (
-             <Button className="w-full h-12 bg-green-600 hover:bg-green-700 text-lg shadow-sm" onClick={() => updateStatus('returned')}>
-               <ArrowRightLeft className="mr-2 h-5 w-5" /> Registrar Devolução (Check-in)
+             <Button 
+                className="w-full h-14 bg-[#10B981] hover:bg-green-600 text-white font-bold uppercase tracking-wide text-lg shadow-hard" 
+                onClick={() => updateStatus('returned')}
+             >
+               <ArrowRightLeft className="mr-2 h-6 w-6" /> Registrar Devolução
              </Button>
            )}
 
-           {/* BOTÃO DE CANCELAR (Sempre visível exceto se concluído) */}
+           {/* MENSAGEM DE SUCESSO */}
+           {status === 'returned' && (
+               <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-center justify-center gap-2 text-green-700 font-bold">
+                   <CheckCircle className="h-5 w-5" /> Contrato Finalizado
+               </div>
+           )}
+
+           {/* CANCELAR */}
            {status !== 'returned' && status !== 'canceled' && (
-             <Button variant="ghost" className="w-full text-red-600 hover:bg-red-50" onClick={handleCancelOrder}>
+             <Button variant="ghost" className="w-full text-red-500 hover:text-red-700 hover:bg-red-50 font-bold uppercase text-xs" onClick={handleCancelOrder}>
                <XCircle className="mr-2 h-4 w-4" /> Cancelar Pedido
              </Button>
            )}
