@@ -126,12 +126,13 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
     
     // 1. Busca de Dados: Pedidos que colidem com o período solicitado
     
-    // Usamos T12:00:00Z para consistência ao salvar e verificar
+    // Datas de limite para a consulta (usando T12:00:00Z para evitar problemas de fuso horário)
     const requestedStart = parseISO(`${start}T12:00:00.000Z`);
     const requestedEnd = parseISO(`${end}T12:00:00.000Z`);
 
-    // Fetch orders that *might* overlap with the requested period
-    // Colisão: (order.start <= requested_end) AND (order.end >= requested_start)
+    // Filtro estrito de status ativos
+    const activeStatuses = ['signed', 'reserved', 'picked_up'];
+
     const { data: conflictingItems, error: conflictError } = await supabase
         .from('order_items')
         .select(`
@@ -146,9 +147,9 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         `)
         .eq('product_id', productId)
         .neq('order_id', orderId || '00000000-0000-0000-0000-000000000000') 
-        .in('orders.status', ['signed', 'reserved', 'picked_up'])
-        .lte('orders.start_date', requestedEnd.toISOString()) 
-        .gte('orders.end_date', requestedStart.toISOString()); 
+        .in('orders.status', activeStatuses) // FILTRO CRÍTICO DE STATUS
+        .lte('orders.start_date', requestedEnd.toISOString()) // Colisão: OrderStart <= RequestedEnd
+        .gte('orders.end_date', requestedStart.toISOString()); // Colisão: OrderEnd >= RequestedStart
 
     if (conflictError) throw conflictError;
 
@@ -183,8 +184,15 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
 
     const available = Math.max(0, totalQuantity - maxUsage);
     
-    console.log(`[Inventory Check] Product: ${product.name}, Total: ${totalQuantity}, Requested Period: ${start} to ${end}`);
-    console.log(`[Inventory Check] Peak Usage: ${maxUsage} units on ${peakDate}. Available: ${available}`);
+    // DEBUG OBRIGATÓRIO
+    console.log('DEBUG ESTOQUE:', { 
+        productName: product.name,
+        total: totalQuantity, 
+        activeRentals: conflictingItems.length, 
+        maxUsageInPeriod: maxUsage, 
+        available: available,
+        peakDate: peakDate
+    });
 
     return { available, maxUsage, peakDate };
   }, [productList, orderId]);
@@ -302,7 +310,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         if (totalRequested > availableQuantity) {
             // Feedback de erro detalhado
             const unitsFree = product.total_quantity - maxUsage;
-            showError(`Estoque insuficiente para este período. O dia mais cheio (${peakDate}) tem apenas ${unitsFree} unidades livres. Disponível: ${availableQuantity}, Solicitado: ${totalRequested}`);
+            showError(`Estoque insuficiente para este período. O dia mais cheio (${peakDate}) tem apenas ${unitsFree} unidades livres. Máximo para este período: ${availableQuantity}`);
             return;
         }
     } catch (error: any) {
