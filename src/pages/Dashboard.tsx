@@ -29,21 +29,36 @@ import RevenueChart from '@/components/dashboard/RevenueChart';
 
 // --- SUB-COMPONENTES VISUAIS ---
 
-const MetricCard = ({ title, value, subtext, icon: Icon, colorClass }: any) => (
-  <Card className="shadow-sm border-none bg-white relative overflow-hidden group hover:shadow-md transition-all">
-    <div className={`absolute top-0 left-0 w-1 h-full ${colorClass}`} />
-    <CardContent className="p-6 flex items-start justify-between">
-      <div>
-        <p className="text-sm font-medium text-gray-500 mb-1">{title}</p>
-        <h3 className="text-3xl font-heading font-extrabold text-gray-800">{value}</h3>
-        {subtext && <p className="text-xs text-gray-400 mt-2 flex items-center gap-1">{subtext}</p>}
-      </div>
-      <div className={`p-3 rounded-xl bg-opacity-10 ${colorClass.replace('bg-', 'bg-opacity-10 bg-')} `}>
-        <Icon className={`h-6 w-6 ${colorClass.replace('bg-', 'text-')}`} />
-      </div>
-    </CardContent>
-  </Card>
-);
+interface MetricCardProps {
+  title: string;
+  value: string | number;
+  subtext?: React.ReactNode;
+  icon: React.ElementType;
+  variant: 'primary' | 'secondary';
+}
+
+const MetricCard: React.FC<MetricCardProps> = ({ title, value, subtext, icon: Icon, variant }) => {
+  const iconClasses = variant === 'primary' 
+    ? "bg-primary text-white" // Safety Orange
+    : "bg-secondary text-white"; // Legal Blue
+
+  const valueClasses = "text-secondary"; // Legal Blue para todos os valores
+
+  return (
+    <Card className="shadow-hard-shadow border border-border bg-white">
+      <CardContent className="p-6 flex items-start justify-between">
+        <div>
+          <p className="text-sm font-medium text-gray-500 mb-1">{title}</p>
+          <h3 className={cn("text-3xl font-heading font-extrabold", valueClasses)}>{value}</h3>
+          {subtext && <p className="text-xs text-gray-400 mt-2 flex items-center gap-1">{subtext}</p>}
+        </div>
+        <div className={cn("p-3 rounded-lg", iconClasses)}>
+          <Icon className="h-6 w-6" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
 
 // Widget de Inventário Rápido (Lado Direito)
 const QuickInventoryWidget = ({ products, activeOrders }: any) => {
@@ -81,19 +96,19 @@ const QuickInventoryWidget = ({ products, activeOrders }: any) => {
   }, [products, activeOrders]);
 
   return (
-    <Card className="h-full border-none shadow-sm bg-white">
-      <CardHeader className="pb-2 border-b border-gray-50">
+    <Card className="h-full border-none shadow-hard-shadow bg-white">
+      <CardHeader className="pb-2 border-b border-gray-200">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-heading font-bold text-gray-800">Inventário Rápido</CardTitle>
+          <CardTitle className="text-lg font-heading font-extrabold text-gray-800">Inventário Rápido</CardTitle>
           <Button variant="ghost" size="sm" onClick={() => navigate('/inventory')} className="text-xs text-secondary hover:text-secondary/90">Ver tudo</Button>
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        <div className="divide-y divide-gray-50">
+        <div className="divide-y divide-gray-100">
           {inventoryStatus.map((item: any) => (
             <div key={item.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
               <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg ${item.status === 'out_of_stock' ? 'bg-red-50 text-red-600' : item.status === 'low_stock' ? 'bg-primary/10 text-primary' : 'bg-green-50 text-green-600'}`}>
+                <div className="p-2 rounded-lg bg-secondary/10 text-secondary">
                   <Package className="h-4 w-4" />
                 </div>
                 <div>
@@ -103,13 +118,13 @@ const QuickInventoryWidget = ({ products, activeOrders }: any) => {
               </div>
               <div className="text-right">
                 {item.status === 'out_of_stock' && (
-                   <Badge variant="destructive" className="bg-red-100 text-red-700 hover:bg-red-100 border-none">Esgotado</Badge>
+                   <Badge variant="overdue">Esgotado</Badge>
                 )}
                 {item.status === 'low_stock' && (
-                   <Badge variant="secondary" className="bg-primary/10 text-primary hover:bg-primary/10 border-none">{item.available} Restantes</Badge>
+                   <Badge variant="pending">{item.available} Restantes</Badge>
                 )}
                 {item.status === 'available' && (
-                   <Badge variant="secondary" className="bg-green-100 text-green-700 hover:bg-green-100 border-none">{item.available} Disponíveis</Badge>
+                   <Badge variant="signed">{item.available} Disponíveis</Badge>
                 )}
               </div>
             </div>
@@ -130,11 +145,11 @@ const TimelineWidget = ({ products, activeOrders }: any) => {
   const DAY_WIDTH = 60; // Mais compacto que a tela cheia
 
   return (
-    <Card className="h-full border-none shadow-sm bg-white overflow-hidden flex flex-col">
-      <CardHeader className="pb-2 border-b border-gray-50 bg-white z-20">
+    <Card className="h-full border-none shadow-hard-shadow bg-white overflow-hidden flex flex-col">
+      <CardHeader className="pb-2 border-b border-gray-200 bg-white z-20">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <CardTitle className="text-lg font-heading font-bold text-gray-800">Timeline de Disponibilidade</CardTitle>
+            <CardTitle className="text-lg font-heading font-extrabold text-gray-800">Timeline de Disponibilidade</CardTitle>
             <Badge variant="outline" className="text-xs font-normal text-gray-500">Próximos 7 dias</Badge>
           </div>
           <div className="flex gap-2">
@@ -198,7 +213,7 @@ const TimelineWidget = ({ products, activeOrders }: any) => {
                                         key={idx}
                                         className={cn(
                                             "absolute top-2 h-8 rounded mx-0.5 text-[10px] font-bold text-white flex items-center px-2 shadow-sm overflow-hidden whitespace-nowrap",
-                                            isSigned ? "bg-green-500" : "bg-secondary"
+                                            isSigned ? "bg-[#10B981]" : "bg-primary" // Usando cores estáticas
                                         )}
                                         style={{ 
                                             left: `${left}%`, 
@@ -312,28 +327,28 @@ const Dashboard = () => {
             value={formatCurrency(metrics.revenue)} 
             subtext={<span className="text-green-600 font-bold flex items-center"><TrendingUp className="h-3 w-3 mr-1"/> Acumulado</span>}
             icon={DollarSign} 
-            colorClass="bg-primary" 
+            variant="primary" 
         />
         <MetricCard 
             title="Contratos Ativos" 
             value={metrics.active} 
             subtext="Assinados ou Na Rua"
             icon={FileText} 
-            colorClass="bg-secondary" 
+            variant="secondary" 
         />
         <MetricCard 
             title="Itens Alugados" 
             value={metrics.itemsOut} 
             subtext="Equipamentos fora"
             icon={Box} 
-            colorClass="bg-orange-500" 
+            variant="primary" 
         />
         <MetricCard 
             title="Base de Clientes" 
             value={metrics.clients} 
             subtext="Clientes únicos"
             icon={Users} 
-            colorClass="bg-emerald-500" 
+            variant="secondary" 
         />
       </div>
 
