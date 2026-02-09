@@ -198,12 +198,12 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     doc.line(120, yAssin, 190, yAssin); 
     doc.text("LOCATÁRIO", 120, yAssin + 5);
     
-    // Testemunhas (Opcional)
-    currentY = yAssin + 20;
-    doc.line(margin, currentY, margin + 70, currentY); 
-    doc.text("TESTEMUNHA 1", margin, currentY + 5);
-    doc.line(120, currentY, 190, currentY); 
-    doc.text("TESTEMUNHA 2", 120, currentY + 5);
+    // REMOVIDO: Testemunhas (Opcional)
+    // currentY = yAssin + 20;
+    // doc.line(margin, currentY, margin + 70, currentY); 
+    // doc.text("TESTEMUNHA 1", margin, currentY + 5);
+    // doc.line(120, currentY, 190, currentY); 
+    // doc.text("TESTEMUNHA 2", 120, currentY + 5);
 
     // Certificado Digital (Se assinado)
     if (order.signed_at) {
