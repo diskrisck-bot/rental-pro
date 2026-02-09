@@ -31,7 +31,7 @@ import { fetchAllProducts } from '@/integrations/supabase/queries';
 import { Badge } from '@/components/ui/badge';
 
 interface CreateOrderDialogProps {
-  orderId?: string; // Se presente, entra em modo de edição
+  orderId?: string; 
   onOrderCreated: () => void;
   children: React.ReactNode;
 }
@@ -51,9 +51,7 @@ interface ProductData {
   total_quantity: number;
 }
 
-// Máscaras
 const phoneMask = ['(', /[1-9]/, /\d/, ')', ' ', /\d/, /\d/, /\d/, /\d/, /\d/, '-', /\d/, /\d/, /\d/, /\d/];
-// Removendo cpfMask, pois usaremos lógica customizada para CPF/CNPJ
 
 const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDialogProps) => {
   const [open, setOpen] = useState(false);
@@ -65,14 +63,12 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
   const [currentQuantity, setCurrentQuantity] = useState(1);
   const [currentAvailability, setCurrentAvailability] = useState<number | null>(null);
   
-  // Novo estado para gerenciar o valor formatado do documento (CPF/CNPJ)
   const [customerDocument, setCustomerDocument] = useState('');
 
-  // Fetch products using useQuery
   const { data: products, isLoading: isProductsLoading, isError: isProductsError } = useQuery<ProductData[]>({
     queryKey: ['allProducts'],
     queryFn: fetchAllProducts,
-    enabled: open, // Only fetch when dialog is open
+    enabled: open,
   });
   
   const productList = products || [];
@@ -84,12 +80,12 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
     defaultValues: {
       customer_name: '',
       customer_phone: '',
-      customer_cpf: '', // Este campo será preenchido pelo estado local
+      customer_cpf: '',
       start_date: defaultStartDate,
       end_date: defaultEndDate,
-      payment_method: 'Pix', // Default value
-      payment_timing: 'paid_on_pickup', // Default value
-      fulfillment_type: 'reservation', // Novo campo padrão
+      payment_method: 'Pix',
+      payment_timing: 'paid_on_pickup',
+      fulfillment_type: 'reservation',
     }
   });
 
@@ -103,35 +99,25 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
     return calculateOrderTotal(startDateStr, endDateStr, selectedItems);
   }, [selectedItems, startDateStr, endDateStr]);
 
-  // Lógica de Máscara Dinâmica
   const handleDocumentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // 1. Remove tudo que não é número
     let value = e.target.value.replace(/\D/g, '');
-    
-    // 2. Limita a 14 números (CNPJ)
     if (value.length > 14) value = value.slice(0, 14);
 
-    // 3. Aplica a Máscara
     if (value.length <= 11) {
-      // Máscara CPF: 000.000.000-00
       value = value.replace(/(\d{3})(\d)/, '$1.$2');
       value = value.replace(/(\d{3})(\d)/, '$1.$2');
       value = value.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
     } else {
-      // Máscara CNPJ: 00.000.000/0000-00
       value = value.replace(/^(\d{2})(\d)/, '$1.$2');
       value = value.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
       value = value.replace(/\.(\d{3})(\d)/, '.$1/$2');
       value = value.replace(/(\d{4})(\d)/, '$1-$2');
     }
 
-    // 4. Atualiza o estado
     setCustomerDocument(value);
-    // Atualiza o valor no React Hook Form para submissão
     setValue('customer_cpf', value, { shouldValidate: true });
   };
 
-  // Efeito para ajustar a data de início quando o tipo de cumprimento muda
   useEffect(() => {
     if (watchFulfillmentType === 'immediate') {
       setValue('start_date', format(new Date(), 'yyyy-MM-dd'));
@@ -140,38 +126,29 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
     }
   }, [watchFulfillmentType, setValue, orderId]);
 
-
-  // Exibe erro se o carregamento de produtos falhar
   useEffect(() => {
     if (isProductsError) {
       showError("Erro ao carregar a lista de produtos.");
     }
   }, [isProductsError]);
 
-  // Lógica de verificação de disponibilidade (Peak Demand Algorithm)
-  // Esta função agora é apenas para feedback visual e não para a validação final
   const checkAvailabilityForUI = useCallback(async (productId: string, start: string, end: string): Promise<number> => {
     const product = productList.find(p => p.id === productId);
     if (!product) return 0;
 
-    // 1. Busca Fresca do Total
     const { data: productData, error: prodError } = await supabase
       .from('products')
       .select('total_quantity')
       .eq('id', productId)
       .single();
       
-    if (prodError || !productData) {
-      console.error("Erro ao buscar total de estoque para UI.");
-      return 0;
-    }
+    if (prodError || !productData) return 0;
     const totalEstoque = Number(productData.total_quantity) || 0;
 
-    // 2. Busca Ocupação
-    const newOrderStartDate = `${start}T12:00:00.000Z`;
-    const newOrderEndDate = `${end}T12:00:00.000Z`;
+    const startBoundary = `${start}T12:00:00.000Z`;
+    const endBoundary = `${end}T12:00:00.000Z`;
 
-    const { data: activeRentals, error: conflictError } = await supabase
+    const { data: activeRentals } = await supabase
       .from('order_items')
       .select(`
         quantity,
@@ -180,84 +157,56 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
       .eq('product_id', productId)
       .neq('order_id', orderId || '00000000-0000-0000-0000-000000000000') 
       .in('orders.status', ['signed', 'reserved', 'picked_up']) 
-      .lte('orders.start_date', newOrderEndDate)
-      .gte('orders.end_date', newOrderStartDate);
+      .lte('orders.start_date', endBoundary)
+      .gte('orders.end_date', startBoundary);
 
-    if (conflictError) {
-        console.error("Erro ao buscar aluguéis ativos para UI:", conflictError);
-        return 0;
-    }
-
-    // 3. Algoritmo de Pico Diário (Daily Peak)
     let maxUsage = 0;
     const startDay = parseISO(start);
     const endDay = parseISO(end);
 
-    // Loop dia a dia
     for (let d = startDay; d <= endDay; d = addDays(d, 1)) {
       const currentDayStr = format(d, 'yyyy-MM-dd');
-
       const usageOnThisDay = (activeRentals || []).reduce((acc, item) => {
-        // Garantia numérica
         const itemQuantity = Number(item.quantity) || 0;
-        
-        // Usamos split('T')[0] para garantir que a comparação seja apenas por data (YYYY-MM-DD)
         const itemStart = item.orders.start_date.split('T')[0];
         const itemEnd = item.orders.end_date.split('T')[0];
-
-        // Se o dia 'd' está dentro do período do aluguel existente
         if (currentDayStr >= itemStart && currentDayStr <= itemEnd) {
           return acc + itemQuantity;
         }
         return acc;
       }, 0);
-
       if (usageOnThisDay > maxUsage) maxUsage = usageOnThisDay;
     }
 
-    const disponivel = totalEstoque - maxUsage;
-    return Math.max(0, disponivel);
+    return Math.max(0, totalEstoque - maxUsage);
   }, [productList, orderId]);
 
-
-  // Efeito para atualizar a disponibilidade na UI
   useEffect(() => {
     if (currentProductId && startDateStr && endDateStr) {
       if (isBefore(parseISO(endDateStr), parseISO(startDateStr))) {
         setCurrentAvailability(0);
         return;
       }
-
       setCurrentAvailability(null);
       checkAvailabilityForUI(currentProductId, startDateStr, endDateStr)
         .then(setCurrentAvailability)
-        .catch((e) => {
-          console.error("Erro ao verificar disponibilidade para UI:", e);
-          setCurrentAvailability(0);
-        });
+        .catch(() => setCurrentAvailability(0));
     } else {
       setCurrentAvailability(null);
     }
   }, [currentProductId, startDateStr, endDateStr, checkAvailabilityForUI]);
 
-
-  // Carrega dados do pedido (se for edição) e inicializa o formulário
   useEffect(() => {
     if (open) {
       const init = async () => {
-        if (orderId && isProductsLoading) {
-            return; 
-        }
-
+        if (orderId && isProductsLoading) return; 
         setFetchingData(true);
-
         if (orderId) {
-          const { data: orderData, error } = await supabase
+          const { data: orderData } = await supabase
             .from('orders')
             .select('*, order_items(*, products(name, price))')
             .eq('id', orderId)
             .single();
-
           if (orderData) {
             setValue('customer_name', orderData.customer_name);
             setValue('customer_phone', orderData.customer_phone || '');
@@ -266,11 +215,8 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             setValue('payment_method', orderData.payment_method || 'Pix');
             setValue('payment_timing', orderData.payment_timing || 'paid_on_pickup');
             setValue('fulfillment_type', orderData.fulfillment_type || 'reservation');
-            
-            // Inicializa o estado local do documento
             setCustomerDocument(orderData.customer_cpf || '');
             setValue('customer_cpf', orderData.customer_cpf || '');
-            
             const existingItems = orderData.order_items.map((item: any) => ({
               product_id: item.product_id,
               product_name: item.products.name,
@@ -295,581 +241,124 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         }
         setFetchingData(false);
       };
-      
-      if (!orderId || !isProductsLoading) {
-        init();
-      }
+      if (!orderId || !isProductsLoading) init();
     }
   }, [open, orderId, setValue, reset, isProductsLoading]);
 
   const addItem = async () => {
-    // 1. PRÉ-REQUISITO DE DATA
-    if (!startDateStr || !endDateStr) {
-        showError("Selecione o período do evento para verificar a disponibilidade.");
-        return;
-    }
-    if (isBefore(parseISO(endDateStr), parseISO(startDateStr))) {
-        showError("A data de fim deve ser igual ou posterior à data de início.");
-        return;
-    }
-    if (!currentProductId || currentQuantity < 1) return;
-    
+    if (!startDateStr || !endDateStr || isBefore(parseISO(endDateStr), parseISO(startDateStr)) || !currentProductId || currentQuantity < 1) return;
     const product = productList.find(p => p.id === currentProductId);
     if (!product) return;
-
     setLoading(true);
-
     try {
-        // --- 1. ETAPA DE SEGURANÇA (Data Fetching Dedicado) ---
-        const selectedProductId = currentProductId;
-        const newOrderStartDate = startDateStr;
-        const newOrderEndDate = endDateStr;
-        const quantityInput = currentQuantity;
-
-        // 1. Busca Fresca do Total
-        const { data: productData, error: prodError } = await supabase
-          .from('products')
-          .select('total_quantity')
-          .eq('id', selectedProductId)
-          .single();
-          
-        if (prodError || !productData) {
-          showError("Erro ao verificar produto. Tente novamente.");
-          return;
-        }
-        
-        // GARANTIA NUMÉRICA: Força conversão para Number e fallback para 0
-        const totalEstoque = Number(productData.total_quantity) || 0;
-
-        // 2. Busca Ocupação
-        const startBoundary = `${newOrderStartDate}T12:00:00.000Z`;
-        const endBoundary = `${newOrderEndDate}T12:00:00.000Z`;
-
-        const { data: activeRentals, error: conflictError } = await supabase
-          .from('order_items')
-          .select(`
-            quantity,
-            orders!inner (start_date, end_date, status)
-          `)
-          .eq('product_id', selectedProductId)
-          .neq('order_id', orderId || '00000000-0000-0000-0000-000000000000') 
-          .in('orders.status', ['signed', 'reserved', 'picked_up']) 
-          .lte('orders.start_date', endBoundary)
-          .gte('orders.end_date', startBoundary);
-
-        if (conflictError) throw conflictError;
-
-        // 3. Algoritmo de Pico Diário (Daily Peak)
+        const { data: productData } = await supabase.from('products').select('total_quantity').eq('id', currentProductId).single();
+        const totalEstoque = Number(productData?.total_quantity) || 0;
+        const startBoundary = `${startDateStr}T12:00:00.000Z`;
+        const endBoundary = `${endDateStr}T12:00:00.000Z`;
+        const { data: activeRentals } = await supabase.from('order_items').select(`quantity, orders!inner(start_date, end_date, status)`).eq('product_id', currentProductId).neq('order_id', orderId || '00000000-0000-0000-0000-000000000000').in('orders.status', ['signed', 'reserved', 'picked_up']).lte('orders.start_date', endBoundary).gte('orders.end_date', startBoundary);
         let maxUsage = 0;
-        let peakDate = newOrderStartDate;
-        
-        // Usando new Date() para garantir que a iteração funcione corretamente
-        const start = parseISO(newOrderStartDate);
-        const end = parseISO(newOrderEndDate);
-
-        // Loop dia a dia
+        const start = parseISO(startDateStr);
+        const end = parseISO(endDateStr);
         for (let d = start; d <= end; d = addDays(d, 1)) {
-          const currentDayStr = format(d, 'yyyy-MM-dd');
-
-          const usageOnThisDay = (activeRentals || []).reduce((acc: number, item: any) => {
-            // GARANTIA NUMÉRICA
-            const itemQuantity = Number(item.quantity) || 0;
-            
-            // Usamos split('T')[0] para garantir que a comparação seja apenas por data (YYYY-MM-DD)
-            const itemStart = item.orders.start_date.split('T')[0];
-            const itemEnd = item.orders.end_date.split('T')[0];
-
-            // Se o dia 'd' está dentro do período do aluguel existente
-            if (currentDayStr >= itemStart && currentDayStr <= itemEnd) {
-              return acc + itemQuantity;
-            }
-            return acc;
-          }, 0);
-
-          if (usageOnThisDay > maxUsage) {
-            maxUsage = usageOnThisDay;
-            peakDate = currentDayStr;
-          }
+          const dayStr = format(d, 'yyyy-MM-dd');
+          const usage = (activeRentals || []).reduce((acc: number, item: any) => (dayStr >= item.orders.start_date.split('T')[0] && dayStr <= item.orders.end_date.split('T')[0]) ? acc + Number(item.quantity) : acc, 0);
+          if (usage > maxUsage) maxUsage = usage;
         }
-
-        const disponivel = totalEstoque - maxUsage;
-        
-        // DEBUG OBRIGATÓRIO
-        console.log('DEBUG ESTOQUE:', { 
-            total: totalEstoque, 
-            activeRentalsCount: activeRentals?.length, 
-            maxUsageInPeriod: maxUsage, 
-            available: disponivel,
-            peakDate: peakDate
-        });
-
-        // 4. VALIDAÇÃO
-        const qtdSolicitada = Number(quantityInput) || 0;
-        
-        // Soma a quantidade já selecionada no carrinho local para este produto
-        const quantityInCart = selectedItems
-            .filter(item => item.product_id === currentProductId)
-            .reduce((sum, item) => sum + item.quantity, 0);
-
-        const totalRequested = quantityInCart + qtdSolicitada;
-
-        if (totalRequested > disponivel) {
-            showError(`Estoque insuficiente para o período. Máximo disponível: ${disponivel} un. Ocupado no pico (${format(parseISO(peakDate), 'dd/MM')}): ${maxUsage} un.`);
-            return; // Bloqueia adição
+        const available = totalEstoque - maxUsage;
+        const inCart = selectedItems.filter(i => i.product_id === currentProductId).reduce((sum, i) => sum + i.quantity, 0);
+        if (inCart + currentQuantity > available) {
+            showError(`Estoque insuficiente. Disponível: ${available} un.`);
+            return;
         }
-
-        // 5. Se passou na validação, adiciona/atualiza o item
-        const existingItemIndex = selectedItems.findIndex(item => item.product_id === currentProductId);
-        
-        if (existingItemIndex !== -1) {
-            const updatedItems = selectedItems.map((item, index) => 
-                index === existingItemIndex 
-                    ? { ...item, quantity: totalRequested }
-                    : item
-            );
-            setSelectedItems(updatedItems);
+        const existingIdx = selectedItems.findIndex(i => i.product_id === currentProductId);
+        if (existingIdx !== -1) {
+            setSelectedItems(selectedItems.map((item, idx) => idx === existingIdx ? { ...item, quantity: item.quantity + currentQuantity } : item));
         } else {
-            const newItem: OrderItem = {
-                product_id: currentProductId,
-                product_name: product.name,
-                quantity: qtdSolicitada,
-                daily_price: Number(product.price)
-            };
-            setSelectedItems([...selectedItems, newItem]);
+            setSelectedItems([...selectedItems, { product_id: currentProductId, product_name: product.name, quantity: currentQuantity, daily_price: Number(product.price) }]);
         }
-
         setCurrentProductId("");
         setCurrentQuantity(1);
-        setCurrentAvailability(null);
-
-    } catch (error: any) {
-        showError("Erro ao verificar estoque: " + error.message);
-    } finally {
-        setLoading(false);
-    }
+    } catch (e: any) { showError(e.message); } finally { setLoading(false); }
   };
 
-  const removeItem = (index: number) => {
-    setSelectedItems(selectedItems.filter((_, i) => i !== index));
-  };
+  const removeItem = (index: number) => setSelectedItems(selectedItems.filter((_, i) => i !== index));
 
   const onSubmit = async (values: any) => {
-    if (selectedItems.length === 0) {
-      showError("Adicione pelo menos um item ao pedido");
-      return;
-    }
-
+    if (selectedItems.length === 0) { showError("Adicione itens"); return; }
     try {
       setLoading(true);
-
-      // --- CORREÇÃO DE FUSO HORÁRIO ---
-      const newStart = new Date(`${values.start_date}T12:00:00`);
-      const newEnd = new Date(`${values.end_date}T12:00:00`);
-
-      // --- 3. MÓDULO DE ESTOQUE E CONFLITOS (Revalidação Final) ---
-      // Revalidação final de estoque antes de salvar (para garantir que as datas não mudaram)
-      for (const item of selectedItems) {
-        const product = productList.find(p => p.id === item.product_id);
-        
-        if (product) {
-            // 1. Busca Fresca do Total
-            const { data: productData, error: prodError } = await supabase
-              .from('products')
-              .select('total_quantity')
-              .eq('id', item.product_id)
-              .single();
-              
-            if (prodError || !productData) {
-              showError("Erro ao verificar produto na validação final.");
-              setLoading(false);
-              return;
-            }
-            const totalEstoque = Number(productData.total_quantity) || 0;
-
-            // 2. Busca Ocupação
-            const startBoundary = `${values.start_date}T12:00:00.000Z`;
-            const endBoundary = `${values.end_date}T12:00:00.000Z`;
-
-            const { data: activeRentals, error: conflictError } = await supabase
-              .from('order_items')
-              .select(`
-                quantity,
-                orders!inner (start_date, end_date, status)
-              `)
-              .eq('product_id', item.product_id)
-              .neq('order_id', orderId || '00000000-0000-0000-0000-000000000000') 
-              .in('orders.status', ['signed', 'reserved', 'picked_up']) 
-              .lte('orders.start_date', endBoundary)
-              .gte('orders.end_date', startBoundary);
-
-            if (conflictError) throw conflictError;
-
-            // 3. Algoritmo de Pico Diário (Daily Peak)
-            let maxUsage = 0;
-            const start = parseISO(values.start_date);
-            const end = parseISO(values.end_date);
-
-            for (let d = new Date(start); d <= end; d = addDays(d, 1)) {
-              const currentDayStr = format(d, 'yyyy-MM-dd');
-
-              const usageOnThisDay = (activeRentals || []).reduce((acc: number, rental: any) => {
-                const itemQuantity = Number(rental.quantity) || 0;
-                const itemStart = rental.orders.start_date.split('T')[0];
-                const itemEnd = rental.orders.end_date.split('T')[0];
-
-                if (currentDayStr >= itemStart && currentDayStr <= itemEnd) {
-                  return acc + itemQuantity;
-                }
-                return acc;
-              }, 0);
-
-              if (usageOnThisDay > maxUsage) maxUsage = usageOnThisDay;
-            }
-
-            const disponivel = totalEstoque - maxUsage;
-            
-            if (item.quantity > disponivel) {
-                showError(`Falha na validação final: O item "${product.name}" excede o estoque disponível (${disponivel} un) para o período selecionado.`);
-                setLoading(false);
-                return;
-            }
-        }
-      }
-
-      const initialStatus = 'pending_signature';
-
       const orderPayload = {
         customer_name: values.customer_name,
         customer_phone: values.customer_phone,
         customer_cpf: values.customer_cpf,
-        start_date: newStart.toISOString(), // Salva a data segura (12:00)
-        end_date: newEnd.toISOString(),     // Salva a data segura (12:00)
+        start_date: new Date(`${values.start_date}T12:00:00`).toISOString(),
+        end_date: new Date(`${values.end_date}T12:00:00`).toISOString(),
         total_amount: financialSummary.totalAmount,
         payment_method: values.payment_method,
         payment_timing: values.payment_timing,
         fulfillment_type: values.fulfillment_type,
-        status: orderId ? undefined : initialStatus 
+        status: orderId ? undefined : 'pending_signature' 
       };
-
       let currentOrderId = orderId;
-
       if (orderId) {
-        const { error: updateError } = await supabase
-          .from('orders')
-          .update(orderPayload)
-          .eq('id', orderId);
-        
-        if (updateError) throw updateError;
-
-        // Deleta itens antigos antes de inserir os novos
-        const { error: deleteError } = await supabase
-          .from('order_items')
-          .delete()
-          .eq('order_id', orderId);
-        
-        if (deleteError) throw deleteError;
+        await supabase.from('orders').update(orderPayload).eq('id', orderId);
+        await supabase.from('order_items').delete().eq('order_id', orderId);
       } else {
-        const { data: orderData, error: orderError } = await supabase
-          .from('orders')
-          .insert([orderPayload])
-          .select()
-          .single();
-
-        if (orderError) throw orderError;
-        currentOrderId = orderData.id;
+        const { data } = await supabase.from('orders').insert([orderPayload]).select().single();
+        currentOrderId = data.id;
       }
-
-      const itemsToInsert = selectedItems.map(item => ({
-        order_id: currentOrderId,
-        product_id: item.product_id,
-        quantity: item.quantity
-      }));
-
-      const { error: itemsError } = await supabase
-        .from('order_items')
-        .insert(itemsToInsert);
-
-      if (itemsError) throw itemsError;
-
-      showSuccess(orderId ? "Pedido atualizado com sucesso!" : "Pedido criado com sucesso! Aguardando assinatura.");
+      const itemsToInsert = selectedItems.map(item => ({ order_id: currentOrderId, product_id: item.product_id, quantity: item.quantity }));
+      await supabase.from('order_items').insert(itemsToInsert);
+      showSuccess("Sucesso!");
       setOpen(false);
       onOrderCreated();
-    } catch (error: any) {
-      showError("Erro ao processar pedido: " + error.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e: any) { showError(e.message); } finally { setLoading(false); }
   };
 
-  const isDataLoading = fetchingData || isProductsLoading;
   const isImmediate = watchFulfillmentType === 'immediate';
-  const isAddButtonDisabled = !currentProductId || currentQuantity < 1 || loading || !startDateStr || !endDateStr || isBefore(parseISO(endDateStr), parseISO(startDateStr));
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {children}
-      </DialogTrigger>
+      <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{orderId ? 'Editar Locação' : 'Nova Locação'}</DialogTitle>
-        </DialogHeader>
-        
-        {isDataLoading ? (
-          <div className="flex flex-col items-center justify-center py-12 gap-2">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">Carregando dados do pedido...</p>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 py-4">
-            
+        <DialogHeader><DialogTitle>{orderId ? 'Editar Locação' : 'Nova Locação'}</DialogTitle></DialogHeader>
+        {isDataLoading ? <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div> : (
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             <div className="space-y-3 border-b pb-4">
-              <h3 className="text-base font-semibold flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-secondary" /> Tipo de Pedido
-              </h3>
-              <Select 
-                value={watchFulfillmentType} 
-                onValueChange={(val) => setValue('fulfillment_type', val as 'immediate' | 'reservation')}
-                disabled={!!orderId} 
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Selecione o tipo de pedido" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="immediate">
-                    <div className="flex items-center gap-2">
-                      <Zap className="h-4 w-4 text-primary" /> Retirada Imediata
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="reservation">
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-secondary" /> Reserva Futura
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              
-              <Badge variant="secondary" className="text-xs bg-gray-100 text-gray-600 border-gray-200">
-                <AlertTriangle className="h-3 w-3 mr-1 text-primary" />
-                {isImmediate 
-                  ? "O estoque será baixado imediatamente APÓS a assinatura." 
-                  : "O estoque será reservado para o período selecionado APÓS a assinatura."}
-              </Badge>
+              <Label>Tipo de Pedido</Label>
+              <Select value={watchFulfillmentType} onValueChange={(val) => setValue('fulfillment_type', val as any)} disabled={!!orderId}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="immediate"><div className="flex items-center gap-2"><Zap className="h-4 w-4" /> Imediato</div></SelectItem><SelectItem value="reservation"><div className="flex items-center gap-2"><Clock className="h-4 w-4" /> Reserva</div></SelectItem></SelectContent></Select>
             </div>
-
             <div className="grid gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="customer_name">Nome do Cliente</Label>
-                <Input 
-                  id="customer_name" 
-                  placeholder="Ex: João Silva" 
-                  {...register('customer_name', { required: true })}
-                />
+              <Label>Nome Cliente</Label><Input {...register('customer_name', { required: true })} />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>Telefone</Label><MaskedInput mask={phoneMask} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={watch('customer_phone')} onChange={(e) => setValue('customer_phone', e.target.value)} required /></div>
+                <div className="space-y-2"><Label>CPF / CNPJ</Label><Input maxLength={18} value={customerDocument} onChange={handleDocumentChange} placeholder="CPF ou CNPJ" required /><input type="hidden" {...register('customer_cpf', { required: true })} /></div>
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="customer_phone">Telefone/WhatsApp</Label>
-                  <MaskedInput
-                    mask={phoneMask}
-                    placeholder="(XX) XXXXX-XXXX"
-                    id="customer_phone"
-                    type="tel"
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    value={watch('customer_phone')}
-                    onChange={(e) => setValue('customer_phone', e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="customer_cpf">CPF / CNPJ</Label>
-                  <Input
-                    id="customer_cpf"
-                    placeholder="Digite o CPF ou CNPJ"
-                    maxLength={18} // CNPJ formatado tem 18 caracteres
-                    value={customerDocument}
-                    onChange={handleDocumentChange}
-                    required
-                  />
-                  {/* O campo customer_cpf do RHF é atualizado via setValue em handleDocumentChange */}
-                  <input type="hidden" {...register('customer_cpf', { required: true })} />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="start_date">Data Início</Label>
-                  <Input 
-                    id="start_date" 
-                    type="date" 
-                    {...register('start_date', { required: true })}
-                    disabled={isImmediate && !orderId} 
-                  />
-                  {isImmediate && !orderId && (
-                    <p className="text-xs text-muted-foreground">Data de início definida para hoje (Retirada Imediata).</p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="end_date">Data Fim</Label>
-                  <Input 
-                    id="end_date" 
-                    type="date" 
-                    {...register('end_date', { required: true })}
-                  />
-                </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>Início</Label><Input type="date" {...register('start_date', { required: true })} disabled={isImmediate && !orderId} /></div>
+                <div className="space-y-2"><Label>Fim</Label><Input type="date" {...register('end_date', { required: true })} /></div>
               </div>
             </div>
-
             <div className="border-t pt-4">
-              <Label className="text-base font-semibold">Itens da Locação</Label>
-              <div className="flex flex-col md:flex-row gap-4 mt-2 items-end">
-                <div className="flex-1 space-y-2 w-full">
-                  <Label className="text-xs text-muted-foreground">Produto</Label>
-                  <Select 
-                    value={currentProductId} 
-                    onValueChange={setCurrentProductId}
-                    disabled={isProductsLoading || isProductsError}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={isProductsLoading ? "Carregando produtos..." : "Adicionar novo produto"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {isProductsError && (
-                        <SelectItem value="error" disabled>Erro ao carregar produtos</SelectItem>
-                      )}
-                      {productList.map(p => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name} (R$ {Number(p.price).toFixed(2)}/dia)
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="w-full md:w-24 space-y-2">
-                  <Label className="text-xs text-muted-foreground">Qtd</Label>
-                  <Input 
-                    type="number" 
-                    min="1" 
-                    value={currentQuantity} 
-                    onChange={(e) => setCurrentQuantity(parseInt(e.target.value) || 1)} 
-                  />
-                </div>
-                <Button type="button" onClick={addItem} variant="secondary" disabled={isAddButtonDisabled} className="w-full md:w-auto">
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />} Incluir
-                </Button>
+              <Label>Itens</Label>
+              <div className="flex gap-4 mt-2">
+                <Select value={currentProductId} onValueChange={setCurrentProductId}><SelectTrigger><SelectValue placeholder="Produto" /></SelectTrigger><SelectContent>{productList.map(p => (<SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>))}</SelectContent></Select>
+                <Input className="w-24" type="number" min="1" value={currentQuantity} onChange={(e) => setCurrentQuantity(parseInt(e.target.value) || 1)} />
+                <Button type="button" onClick={addItem} variant="secondary">Incluir</Button>
               </div>
-              
-              {/* Feedback de Disponibilidade */}
-              {currentProductId && startDateStr && endDateStr && (
-                <div className="mt-2 flex items-center gap-2 text-sm">
-                    {currentAvailability === null ? (
-                        <span className="text-muted-foreground flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Verificando disponibilidade...</span>
-                    ) : currentAvailability > 0 ? (
-                        <span className="text-success flex items-center gap-1 font-semibold"><CheckCircle className="h-3 w-3" /> Disponível para o período: {currentAvailability} un.</span>
-                    ) : (
-                        <span className="text-destructive flex items-center gap-1 font-semibold"><AlertCircle className="h-3 w-3" /> Esgotado para o período.</span>
-                    )}
-                </div>
-              )}
-
               <div className="mt-4 space-y-2">
-                {selectedItems.length > 0 ? (
-                  <div className="rounded-lg border bg-gray-50 p-4 space-y-2">
-                    {selectedItems.map((item, index) => (
-                      <div key={index} className="flex justify-between items-center bg-white p-2 rounded border shadow-sm">
-                        <div className="flex flex-col">
-                          <span className="text-sm font-medium">{item.product_name} x {item.quantity}</span>
-                          <span className="text-[10px] text-muted-foreground">R$ {item.daily_price.toFixed(2)} por unidade/dia</span>
-                        </div>
-                        <Button 
-                          type="button" 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => removeItem(index)}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
+                {selectedItems.map((item, index) => (
+                  <div key={index} className="flex justify-between items-center bg-gray-50 p-2 rounded border">
+                    <span className="text-sm font-medium">{item.product_name} x {item.quantity}</span>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => removeItem(index)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
                   </div>
-                ) : (
-                  <p className="text-sm text-center text-muted-foreground py-4 border-2 border-dashed rounded-lg">
-                    Adicione os produtos para calcular o valor.
-                  </p>
-                )}
+                ))}
               </div>
             </div>
-
-            <div className="border-t pt-4 space-y-4">
-              <h3 className="text-base font-semibold flex items-center gap-2">
-                <CreditCard className="h-4 w-4 text-secondary" /> Detalhes do Pagamento
-              </h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Forma de Pagamento</Label>
-                  <Select 
-                    value={watchPaymentMethod} 
-                    onValueChange={(val) => setValue('payment_method', val)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione a forma" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Pix">Pix</SelectItem>
-                      <SelectItem value="Cartão de Crédito">Cartão de Crédito</SelectItem>
-                      <SelectItem value="Cartão de Débito">Cartão de Débito</SelectItem>
-                      <SelectItem value="Dinheiro">Dinheiro</SelectItem>
-                      <SelectItem value="Boleto / Outros">Boleto / Outros</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label>Momento do Pagamento</Label>
-                  <Select 
-                    value={watchPaymentTiming} 
-                    onValueChange={(val) => setValue('payment_timing', val)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o momento" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="paid_on_pickup">✅ Pago na Retirada</SelectItem>
-                      <SelectItem value="pay_on_return">⏳ Pagar na Devolução</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+            <div className="bg-secondary/10 p-4 rounded-xl flex justify-between font-bold">
+                <span>Total:</span><span>R$ {financialSummary.totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
             </div>
-
-            <div className="bg-secondary/10 border border-secondary/20 rounded-xl p-6 space-y-3">
-              <div className="flex items-center gap-2 text-secondary font-semibold mb-2">
-                <Wallet className="h-5 w-5" />
-                Recálculo Financeiro
-              </div>
-              <div className="flex justify-between text-sm text-secondary">
-                <span>Duração Atualizada:</span>
-                <span className="font-bold">{financialSummary.durationInDays} {financialSummary.durationInDays === 1 ? 'dia' : 'dias'}</span>
-              </div>
-              <div className="flex justify-between text-sm text-secondary">
-                <span>Subtotal Diário:</span>
-                <span className="font-bold">R$ {financialSummary.subtotalDaily.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-              </div>
-              <div className="border-t border-secondary/20 pt-2 flex justify-between text-lg font-bold text-secondary">
-                <span>Novo Valor Total:</span>
-                <span>R$ {financialSummary.totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-              </div>
-            </div>
-
-            <DialogFooter>
-              <Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancelar</Button>
-              <Button type="submit" className="bg-primary hover:bg-primary/90 h-12 px-8" disabled={loading}>
-                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {orderId ? 'Salvar Alterações' : 'Salvar Pedido'}
-              </Button>
-            </DialogFooter>
+            <DialogFooter><Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancelar</Button><Button type="submit" disabled={loading}>{loading ? <Loader2 className="animate-spin" /> : 'Salvar'}</Button></DialogFooter>
           </form>
         )}
       </DialogContent>
