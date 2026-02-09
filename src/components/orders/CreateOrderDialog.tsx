@@ -316,6 +316,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
   };
 
   const isImmediate = watchFulfillmentType === 'immediate';
+  const isDataLoading = fetchingData || isProductsLoading;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
