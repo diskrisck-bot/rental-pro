@@ -40,7 +40,7 @@ const Timeline = () => {
 
   const days = useMemo(() => eachDayOfInterval({ start: viewStartDay, end: addDays(viewStartDay, 14) }), [viewStartDay]);
 
-  // QUERY: Busca PEDIDOS (Orders) em vez de produtos
+  // QUERY: Busca APENAS pedidos 'picked_up' (Em andamento) conforme nova regra
   const { data: orders, isLoading } = useQuery({
     queryKey: ['timeline_orders_view', viewStartDay],
     queryFn: async () => {
@@ -56,10 +56,10 @@ const Timeline = () => {
                 products (name)
             )
         `)
-        .in('status', ['signed', 'reserved', 'picked_up'])
+        .eq('status', 'picked_up') // REGRA: Apenas o que está na rua
         .lte('start_date', rangeEnd)
         .gte('end_date', rangeStart)
-        .order('start_date', { ascending: true }); // Ordena por data de início
+        .order('start_date', { ascending: true });
 
       return data || [];
     }
@@ -71,25 +71,21 @@ const Timeline = () => {
 
   const getStatusConfig = (status: string, endDate: string) => {
     const isEndingToday = isSameDay(parseISO(endDate), startOfToday());
+    const isOverdue = isBefore(parseISO(endDate), startOfToday());
     
-    if (isEndingToday && status !== 'returned') {
-        return { bg: 'bg-destructive', border: 'border-destructive/80', text: 'text-white', label: 'VENCE HOJE' };
+    if (isOverdue || isEndingToday) {
+        return { bg: 'bg-destructive', border: 'border-destructive/80', text: 'text-white', label: isOverdue ? 'ATRASADO' : 'VENCE HOJE' };
     }
 
-    switch (status) {
-      case 'signed': return { bg: 'bg-success', border: 'border-success/80', text: 'text-white', label: 'ASSINADO' };
-      case 'picked_up': return { bg: 'bg-primary', border: 'border-primary/80', text: 'text-white', label: 'NA RUA' };
-      case 'reserved': return { bg: 'bg-secondary', border: 'border-secondary/80', text: 'text-foreground', label: 'RESERVADO' };
-      default: return { bg: 'bg-gray-400', border: 'border-gray-500', text: 'text-gray-900', label: status };
-    }
+    return { bg: 'bg-primary', border: 'border-primary/80', text: 'text-white', label: 'NA RUA' };
   };
 
   return (
     <div className="p-4 md:p-8 space-y-6 h-screen flex flex-col bg-background">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground uppercase">Timeline de Contratos</h1>
-            <p className="text-muted-foreground font-medium">Gestão visual por contrato e período.</p>
+            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground uppercase">Timeline de Uso</h1>
+            <p className="text-muted-foreground font-medium">Visualização exclusiva de equipamentos que estão na rua.</p>
         </div>
         
         <div className="flex items-center gap-2 bg-card border border-border rounded-[var(--radius)] p-1 shadow-sm">
@@ -126,7 +122,7 @@ const Timeline = () => {
 
             {/* Linhas dos Contratos */}
             {isLoading ? <div className="flex justify-center p-20"><Loader2 className="animate-spin h-8 w-8 text-primary"/></div> : 
-             orders?.length === 0 ? <div className="p-10 text-center text-muted-foreground font-medium">Nenhum contrato ativo neste período.</div> : 
+             orders?.length === 0 ? <div className="p-10 text-center text-muted-foreground font-medium">Nenhum equipamento na rua neste período.</div> : 
              orders?.map((order: any) => {
                const position = getBlockPosition(order.start_date, order.end_date, days);
                const style = getStatusConfig(order.status, order.end_date);

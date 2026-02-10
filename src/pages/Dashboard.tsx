@@ -155,27 +155,12 @@ const QuickInventoryWidget = ({ products, activeOrders }: any) => {
   const inventoryStatus = useMemo(() => {
     if (!products || !activeOrders) return [];
     
-    const today = startOfDay(new Date());
-
     return products.map((product: any) => {
-      // REGRA DE OURO: O item só volta para o saldo "Disponível" quando o status do pedido mudar para "CONCLUÍDO"
+      // REGRA: Apenas 'picked_up' conta como estoque fora
       const rentedToday = activeOrders
         .filter((order: any) => {
             const hasProduct = order.order_items.some((item: any) => item.product_id === product.id);
-            if (!hasProduct) return false;
-
-            const status = order.status;
-            const start = startOfDay(parseISO(order.start_date));
-
-            // 1. Se está na rua (picked_up), está ocupado INDEPENDENTE da data de fim
-            if (status === 'picked_up') return true;
-            
-            // 2. Se está assinado ou reservado, está ocupado se a data de início já passou ou é hoje
-            if (['signed', 'reserved'].includes(status)) {
-                return isBefore(start, addDays(today, 1)); // start <= today
-            }
-            
-            return false;
+            return hasProduct && order.status === 'picked_up';
         })
         .reduce((acc: number, order: any) => {
             const item = order.order_items.find((i: any) => i.product_id === product.id);
@@ -244,23 +229,17 @@ const TimelineWidget = ({ activeOrders }: any) => {
 
   const sortedOrders = useMemo(() => {
     return (activeOrders || [])
-        .filter((order: any) => {
-            const start = parseISO(order.start_date);
-            const end = parseISO(order.end_date);
-            if (isBefore(end, today) && order.status !== 'picked_up') return false;
-            if (isAfter(start, days[days.length - 1])) return false;
-            return true;
-        })
+        .filter((order: any) => order.status === 'picked_up') // REGRA: Apenas o que está na rua
         .sort((a: any, b: any) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())
         .slice(0, 6);
-  }, [activeOrders, days, today]);
+  }, [activeOrders]);
 
   return (
     <Card className="h-full border border-gray-200 shadow-custom bg-card overflow-hidden flex flex-col rounded-[var(--radius)]">
       <CardHeader className="pb-2 border-b border-gray-100 bg-card z-20">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <CardTitle className="text-lg font-extrabold text-foreground">Timeline de Contratos</CardTitle>
+            <CardTitle className="text-lg font-extrabold text-foreground">Timeline de Uso</CardTitle>
             <Badge variant="outline" className="text-xs font-bold text-gray-500 border-gray-300">Próximos 7 dias</Badge>
           </div>
           <Button variant="outline" size="sm" onClick={() => navigate('/timeline')} className="text-xs font-bold uppercase tracking-wide border-gray-300 text-gray-600 hover:text-foreground">
@@ -286,7 +265,7 @@ const TimelineWidget = ({ activeOrders }: any) => {
                 })}
             </div>
 
-            {sortedOrders.length === 0 ? <div className="p-8 text-center text-gray-400 text-sm font-medium">Sem contratos ativos na semana.</div> :
+            {sortedOrders.length === 0 ? <div className="p-8 text-center text-gray-400 text-sm font-medium">Sem equipamentos na rua no momento.</div> :
              sortedOrders.map((order: any) => {
                 const start = parseISO(order.start_date);
                 const end = parseISO(order.end_date);
@@ -300,7 +279,7 @@ const TimelineWidget = ({ activeOrders }: any) => {
                 const width = (endIndex - startIndex + 1) * 100 / 7; 
                 const left = (startIndex) * 100 / 7;
                 
-                const isOverdue = order.status === 'picked_up' && isBefore(end, today);
+                const isOverdue = isBefore(end, today);
                 const isEndsToday = isSameDay(end, today);
 
                 return (
@@ -380,15 +359,9 @@ const Dashboard = () => {
 
     const clients = new Set(orders.filter(o => o.status !== 'draft').map(o => o.customer_cpf)).size;
     
-    // REGRA DE OURO: Itens alugados = Todos os picked_up + Reservas que já começaram
+    // REGRA: Itens alugados = Apenas os que estão fisicamente fora (picked_up)
     const itemsOut = activeOrders?.reduce((acc: number, order: any) => {
-        const status = order.status;
-        const start = startOfDay(parseISO(order.start_date));
-        
-        const isRented = status === 'picked_up' || (['signed', 'reserved'].includes(status) && isBefore(start, addDays(today, 1)));
-        
-        if (!isRented) return acc;
-
+        if (order.status !== 'picked_up') return acc;
         const orderTotal = order.order_items.reduce((sum: number, item: any) => sum + item.quantity, 0);
         return acc + orderTotal;
     }, 0) || 0;
@@ -420,7 +393,7 @@ const Dashboard = () => {
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <MetricCard title="Receita Total" value={formatCurrency(metrics.revenue)} subtext="Acumulado" icon={DollarSign} variant="primary" />
         <MetricCard title="Contratos Ativos" value={metrics.active} subtext="Em andamento" icon={FileText} variant="secondary" />
-        <MetricCard title="Itens Alugados" value={metrics.itemsOut} subtext="Equipamentos fora" icon={Box} variant="primary" />
+        <MetricCard title="Itens na Rua" value={metrics.itemsOut} subtext="Equipamentos fora" icon={Box} variant="primary" />
         <MetricCard title="Em Atraso" value={metrics.overdue} subtext="Devoluções pendentes" icon={AlertTriangle} variant={metrics.overdue > 0 ? 'destructive' : 'secondary'} />
       </div>
 
