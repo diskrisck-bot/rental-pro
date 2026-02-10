@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabase';
-import { format } from 'date-fns';
+import { format, isBefore, startOfDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import CreateOrderDialog from '@/components/orders/CreateOrderDialog';
 import OrderDetailsSheet from '@/components/orders/OrderDetailsSheet';
@@ -26,7 +26,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils';
 
 // --- STATUS BADGES ---
-const getStatusBadge = (status: string) => {
+const getStatusBadge = (status: string, isOverdue: boolean) => {
+  if (isOverdue) {
+    return (
+      <Badge variant="destructive" className="uppercase text-[10px] flex items-center gap-1 w-fit animate-pulse">
+         <AlertTriangle className="w-3 h-3" /> ATRASADO
+      </Badge>
+    );
+  }
+
   switch (status) {
     case 'draft': 
       return <Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-200 uppercase text-[10px]">Rascunho</Badge>;
@@ -46,7 +54,7 @@ const getStatusBadge = (status: string) => {
     case 'reserved': 
       return <Badge variant="pending" className="uppercase text-[10px]">Reservado</Badge>;
     case 'picked_up': 
-      return <Badge variant="signed" className="bg-purple-600 uppercase text-[10px]">Em Andamento</Badge>; // Mantendo roxo para 'Na Rua'
+      return <Badge variant="signed" className="bg-purple-600 uppercase text-[10px]">Em Andamento</Badge>;
     case 'returned': 
       return <Badge variant="signed" className="uppercase text-[10px]">Concluído</Badge>;
     case 'canceled': 
@@ -59,12 +67,6 @@ const getStatusBadge = (status: string) => {
 const getPaymentTimingBadge = (timing: string) => {
   if (timing === 'paid_on_pickup') return <Badge variant="signed" className="bg-emerald-700 text-[10px]"><DollarSign className="h-3 w-3 mr-1" /> Pago (Retirada)</Badge>;
   if (timing === 'pay_on_return') return <Badge variant="pending" className="text-[10px]"><Clock className="h-3 w-3 mr-1" /> A Pagar (Devolução)</Badge>;
-  return null;
-};
-
-const getFulfillmentTypeBadge = (type: string) => {
-  if (type === 'immediate') return <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-[10px]"><Zap className="h-3 w-3 mr-1" /> Imediata</Badge>;
-  if (type === 'reservation') return <Badge variant="secondary" className="bg-secondary/10 text-secondary border-secondary/20 text-[10px]"><Calendar className="h-3 w-3 mr-1" /> Reserva</Badge>;
   return null;
 };
 
@@ -89,6 +91,7 @@ const Orders = () => {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const today = startOfDay(new Date());
 
   const { data: businessConfig, isLoading: isLoadingConfig } = useQuery({
     queryKey: ['businessConfig'],
@@ -103,7 +106,6 @@ const Orders = () => {
   });
 
   const isCompanyConfigured = !!(businessConfig?.business_name?.trim());
-  const hasProducts = (productCount || 0) > 0;
 
   const fetchOrders = async () => {
     try {
@@ -201,12 +203,19 @@ const Orders = () => {
               ) : (
                 filteredOrders.map((order) => {
                   const isSigned = !!order.signed_at;
-                  // LÓGICA DE EDIÇÃO: Só pode editar se NÃO estiver assinado e NÃO estiver cancelado/finalizado
+                  const isOverdue = order.status === 'picked_up' && isBefore(parseISO(order.end_date), today);
                   const isEditable = !isSigned && order.status !== 'canceled' && order.status !== 'returned';
                   
                   const whatsappLink = getWhatsappLink(order, isSigned);
                   return (
-                    <TableRow key={order.id} className="hover:bg-gray-50/80 transition-colors cursor-pointer" onClick={() => handleViewDetails(order.id)}>
+                    <TableRow 
+                      key={order.id} 
+                      className={cn(
+                        "hover:bg-gray-50/80 transition-colors cursor-pointer",
+                        isOverdue && "bg-red-50/50 hover:bg-red-50"
+                      )} 
+                      onClick={() => handleViewDetails(order.id)}
+                    >
                       <TableCell>
                         <span className="font-mono text-xs text-gray-500 font-bold">#{order.id.split('-')[0]}</span>
                       </TableCell>
@@ -214,7 +223,7 @@ const Orders = () => {
                       <TableCell className="text-xs text-gray-500">
                         {format(new Date(order.start_date), 'dd/MM')} — {format(new Date(order.end_date), 'dd/MM')}
                       </TableCell>
-                      <TableCell>{getStatusBadge(order.status)}</TableCell>
+                      <TableCell>{getStatusBadge(order.status, isOverdue)}</TableCell>
                       <TableCell>{getPaymentTimingBadge(order.payment_timing)}</TableCell>
                       <TableCell className="font-bold text-primary">
                         R$ {Number(order.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
@@ -222,7 +231,6 @@ const Orders = () => {
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end gap-2 items-center">
                           
-                          {/* BOTÃO DE EDITAR (NOVO) */}
                           {isEditable && (
                             <div onClick={(e) => e.stopPropagation()}>
                                 <CreateOrderDialog orderId={order.id} onOrderCreated={fetchOrders}>

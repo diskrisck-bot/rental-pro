@@ -35,7 +35,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import EditProductSheet from '@/components/inventory/EditProductSheet';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { isWithinInterval, startOfDay, parseISO } from 'date-fns';
+import { isWithinInterval, startOfDay, parseISO, isBefore, addDays } from 'date-fns';
 
 // Tipagem
 interface InventoryItem {
@@ -114,7 +114,7 @@ const Inventory = () => {
   
   const [newProduct, setNewProduct] = useState({ name: '', type: 'trackable', total_quantity: 1, price: 0, serial_number: '' });
 
-  // 1. QUERY CORRIGIDA DE PRODUTOS (Sem filtro active)
+  // 1. QUERY DE PRODUTOS
   const { data: rawProducts, isLoading: loadingProducts } = useQuery({
     queryKey: ['allProducts'],
     queryFn: async () => {
@@ -123,7 +123,7 @@ const Inventory = () => {
     }
   });
 
-  // 2. QUERY CORRIGIDA DE PEDIDOS (Inclui signed)
+  // 2. QUERY DE PEDIDOS ATIVOS (Inclui signed, reserved e picked_up)
   const { data: activeOrders, isLoading: loadingOrders } = useQuery({
     queryKey: ['inventoryActiveOrders'],
     queryFn: async () => {
@@ -135,16 +135,27 @@ const Inventory = () => {
     }
   });
 
+  // REGRA DE OURO: O item só volta para o saldo "Disponível" quando o status do pedido mudar para "CONCLUÍDO"
   const calculateStock = (productId: string, total: number) => {
     if (!activeOrders) return { available: total, rented: 0 };
-    const today = startOfDay(new Date()); // Calcula para HOJE
+    const today = startOfDay(new Date());
 
     const rentedToday = activeOrders
       .filter((item: any) => {
         if (item.product_id !== productId) return false;
+        
+        const status = item.orders.status;
         const start = startOfDay(parseISO(item.orders.start_date));
-        const end = startOfDay(parseISO(item.orders.end_date));
-        return isWithinInterval(today, { start, end });
+        
+        // 1. Se está na rua (picked_up), está ocupado INDEPENDENTE da data de fim
+        if (status === 'picked_up') return true;
+        
+        // 2. Se está assinado ou reservado, está ocupado se a data de início já passou ou é hoje
+        if (['signed', 'reserved'].includes(status)) {
+            return isBefore(start, addDays(today, 1)); // start <= today
+        }
+        
+        return false;
       })
       .reduce((acc: number, item: any) => acc + item.quantity, 0);
 
@@ -180,7 +191,7 @@ const Inventory = () => {
   return (
     <div className="p-4 md:p-8 space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div><h1 className="text-2xl md:text-3xl font-heading font-extrabold tracking-tight">Inventário</h1><p className="text-muted-foreground">Gerencie seus ativos.</p></div>
+        <div><h1 className="text-2xl md:text-3xl font-heading font-extrabold tracking-tight">Inventário</h1><p className="text-muted-foreground">Gerencie seus ativos com base no status real de locação.</p></div>
         <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
           <DialogTrigger asChild><Button className="bg-primary hover:bg-primary/90 w-full md:w-auto"><Plus className="mr-2 h-4 w-4" /> Novo Produto</Button></DialogTrigger>
           <DialogContent>
@@ -213,8 +224,8 @@ const Inventory = () => {
                   <TableHead>Nome</TableHead>
                   <TableHead>Tipo</TableHead>
                   <TableHead className="text-center">Total</TableHead>
-                  <TableHead className="text-center text-secondary">Alugados (Hoje)</TableHead>
-                  <TableHead className="text-center text-green-600">Disponível (Hoje)</TableHead>
+                  <TableHead className="text-center text-secondary">Ocupado (Status)</TableHead>
+                  <TableHead className="text-center text-green-600">Disponível Real</TableHead>
                   <TableHead>Diária</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>

@@ -27,12 +27,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import CreateOrderDialog from '@/components/orders/CreateOrderDialog';
-// ThemeSwitcher removido daqui
 
 // --- SUB-COMPONENTES VISUAIS ---
 
 const MetricCard = ({ title, value, subtext, icon: Icon, variant }: any) => {
-  const isPrimary = variant === 'primary'; // Laranja/Indigo
+  const isPrimary = variant === 'primary';
   const bgColor = isPrimary ? 'bg-primary/10' : 'bg-secondary/10';
   const textColor = isPrimary ? 'text-primary' : 'text-secondary';
 
@@ -53,85 +52,135 @@ const MetricCard = ({ title, value, subtext, icon: Icon, variant }: any) => {
   );
 };
 
-// WIDGET: ALERTAS DE DEVOLUÇÃO
+// WIDGET: ALERTAS DE DEVOLUÇÃO E ATRASOS
 const ReturnsAlertWidget = ({ orders }: { orders: any[] }) => {
   const navigate = useNavigate();
   const today = startOfDay(new Date());
 
+  // Lógica de Atrasados: Status 'picked_up' e data de fim < hoje
+  const overdueOrders = useMemo(() => {
+    return orders?.filter(o => {
+      const end = startOfDay(parseISO(o.end_date));
+      return o.status === 'picked_up' && isBefore(end, today);
+    }) || [];
+  }, [orders, today]);
+
+  // Lógica de Devoluções Hoje: Status 'picked_up' e data de fim == hoje
   const returnsToday = useMemo(() => {
     return orders?.filter(o => {
       const end = startOfDay(parseISO(o.end_date));
-      const isActive = ['signed', 'picked_up'].includes(o.status);
-      return isSameDay(end, today) && isActive;
+      return o.status === 'picked_up' && isSameDay(end, today);
     }) || [];
-  }, [orders]);
+  }, [orders, today]);
 
-  if (returnsToday.length === 0) return null;
+  if (overdueOrders.length === 0 && returnsToday.length === 0) return null;
 
   return (
-    <Card className="border-2 border-primary bg-primary/5 shadow-custom mb-6 rounded-[var(--radius)]">
-      <CardHeader className="pb-2 border-b border-primary/20">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-primary" />
-            <CardTitle className="text-lg font-extrabold text-primary uppercase">Atenção: Devoluções Hoje</CardTitle>
-          </div>
-          <Badge className="bg-primary hover:bg-primary/90 text-white font-bold">{returnsToday.length} Pendentes</Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="p-0">
-        <div className="divide-y divide-primary/20">
-          {returnsToday.map((order) => (
-            <div key={order.id} className="p-4 flex items-center justify-between hover:bg-primary/10 transition-colors cursor-pointer" onClick={() => navigate(`/orders?id=${order.id}`)}>
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-card rounded-full border border-primary/20">
-                  <Clock className="h-4 w-4 text-primary" />
-                </div>
-                <div>
-                  <p className="font-bold text-foreground">{order.customer_name}</p>
-                  <p className="text-xs text-primary font-medium">Pedido #{order.id.split('-')[0]}</p>
-                </div>
+    <div className="space-y-4 mb-6">
+      {overdueOrders.length > 0 && (
+        <Card className="border-2 border-destructive bg-destructive/5 shadow-custom rounded-[var(--radius)]">
+          <CardHeader className="pb-2 border-b border-destructive/20">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-destructive" />
+                <CardTitle className="text-lg font-extrabold text-destructive uppercase">CRÍTICO: Devoluções em Atraso</CardTitle>
               </div>
-              <div className="text-right">
-                <Button size="sm" variant="ghost" className="text-primary font-bold hover:text-primary/90 hover:bg-primary/20">
-                  Ver Pedido <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              </div>
+              <Badge variant="destructive" className="font-bold">{overdueOrders.length} Contratos</Badge>
             </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="divide-y divide-destructive/20">
+              {overdueOrders.map((order) => (
+                <div key={order.id} className="p-4 flex items-center justify-between hover:bg-destructive/10 transition-colors cursor-pointer" onClick={() => navigate(`/orders?id=${order.id}`)}>
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-card rounded-full border border-destructive/20">
+                      <AlertTriangle className="h-4 w-4 text-destructive" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-foreground">{order.customer_name}</p>
+                      <p className="text-xs text-destructive font-bold">Venceu em: {format(parseISO(order.end_date), 'dd/MM/yyyy')}</p>
+                    </div>
+                  </div>
+                  <Button size="sm" variant="ghost" className="text-destructive font-bold hover:bg-destructive/20">
+                    Ver Pedido <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {returnsToday.length > 0 && (
+        <Card className="border-2 border-primary bg-primary/5 shadow-custom rounded-[var(--radius)]">
+          <CardHeader className="pb-2 border-b border-primary/20">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className="h-5 w-5 text-primary" />
+                <CardTitle className="text-lg font-extrabold text-primary uppercase">Devoluções para Hoje</CardTitle>
+              </div>
+              <Badge className="bg-primary text-white font-bold">{returnsToday.length} Pendentes</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="divide-y divide-primary/20">
+              {returnsToday.map((order) => (
+                <div key={order.id} className="p-4 flex items-center justify-between hover:bg-primary/10 transition-colors cursor-pointer" onClick={() => navigate(`/orders?id=${order.id}`)}>
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-card rounded-full border border-primary/20">
+                      <Clock className="h-4 w-4 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-foreground">{order.customer_name}</p>
+                      <p className="text-xs text-primary font-medium">Pedido #{order.id.split('-')[0]}</p>
+                    </div>
+                  </div>
+                  <Button size="sm" variant="ghost" className="text-primary font-bold hover:bg-primary/20">
+                    Ver Pedido <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 };
 
-// Widget de Inventário Rápido (Lado Direito)
+// Widget de Inventário Rápido
 const QuickInventoryWidget = ({ products, activeOrders }: any) => {
   const navigate = useNavigate();
   
   const inventoryStatus = useMemo(() => {
     if (!products || !activeOrders) return [];
     
-    const allRentedItems = activeOrders.flatMap((order: any) => 
-        order.order_items.map((item: any) => ({
-            product_id: item.product_id,
-            quantity: item.quantity,
-            start_date: order.start_date,
-            end_date: order.end_date
-        }))
-    );
-
     const today = startOfDay(new Date());
 
     return products.map((product: any) => {
-      const rentedToday = allRentedItems
-        .filter((item: any) => {
-          if (item.product_id !== product.id) return false;
-          const start = startOfDay(parseISO(item.start_date));
-          const end = startOfDay(parseISO(item.end_date));
-          return isWithinInterval(today, { start, end });
+      // REGRA DE OURO: O item só volta para o saldo "Disponível" quando o status do pedido mudar para "CONCLUÍDO"
+      const rentedToday = activeOrders
+        .filter((order: any) => {
+            const hasProduct = order.order_items.some((item: any) => item.product_id === product.id);
+            if (!hasProduct) return false;
+
+            const status = order.status;
+            const start = startOfDay(parseISO(order.start_date));
+
+            // 1. Se está na rua (picked_up), está ocupado INDEPENDENTE da data de fim
+            if (status === 'picked_up') return true;
+            
+            // 2. Se está assinado ou reservado, está ocupado se a data de início já passou ou é hoje
+            if (['signed', 'reserved'].includes(status)) {
+                return isBefore(start, addDays(today, 1)); // start <= today
+            }
+            
+            return false;
         })
-        .reduce((acc: number, item: any) => acc + item.quantity, 0);
+        .reduce((acc: number, order: any) => {
+            const item = order.order_items.find((i: any) => i.product_id === product.id);
+            return acc + (item?.quantity || 0);
+        }, 0);
 
       const available = product.total_quantity - rentedToday;
       let status = 'available';
@@ -187,7 +236,7 @@ const QuickInventoryWidget = ({ products, activeOrders }: any) => {
   );
 };
 
-// Widget de Timeline (Central)
+// Widget de Timeline
 const TimelineWidget = ({ activeOrders }: any) => {
   const navigate = useNavigate();
   const today = startOfDay(new Date());
@@ -198,7 +247,7 @@ const TimelineWidget = ({ activeOrders }: any) => {
         .filter((order: any) => {
             const start = parseISO(order.start_date);
             const end = parseISO(order.end_date);
-            if (isBefore(end, today)) return false;
+            if (isBefore(end, today) && order.status !== 'picked_up') return false;
             if (isAfter(start, days[days.length - 1])) return false;
             return true;
         })
@@ -222,9 +271,7 @@ const TimelineWidget = ({ activeOrders }: any) => {
       
       <div className="flex-1 overflow-x-auto overflow-y-auto relative bg-muted/50">
         <div className="min-w-[600px]">
-            {/* Header Dias */}
             <div className="flex border-b border-gray-200 bg-card sticky top-0 z-10 shadow-sm">
-                {/* Coluna ID Estreita */}
                 <div className="w-24 p-3 text-xs font-extrabold text-gray-400 border-r border-gray-200 bg-muted sticky left-0 z-20 uppercase tracking-wider flex items-center justify-center gap-1">
                     <Hash className="h-3 w-3" /> ID
                 </div>
@@ -239,7 +286,6 @@ const TimelineWidget = ({ activeOrders }: any) => {
                 })}
             </div>
 
-            {/* Linhas (Pedidos) */}
             {sortedOrders.length === 0 ? <div className="p-8 text-center text-gray-400 text-sm font-medium">Sem contratos ativos na semana.</div> :
              sortedOrders.map((order: any) => {
                 const start = parseISO(order.start_date);
@@ -254,11 +300,11 @@ const TimelineWidget = ({ activeOrders }: any) => {
                 const width = (endIndex - startIndex + 1) * 100 / 7; 
                 const left = (startIndex) * 100 / 7;
                 
+                const isOverdue = order.status === 'picked_up' && isBefore(end, today);
                 const isEndsToday = isSameDay(end, today);
 
                 return (
                     <div key={order.id} className="flex border-b border-gray-200 last:border-0 hover:bg-card transition-colors group h-12 relative bg-card">
-                        {/* Coluna ID Limpa */}
                         <div className="w-24 p-3 text-xs font-bold text-foreground border-r border-gray-200 bg-card sticky left-0 z-10 flex items-center justify-center shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                             #{order.id.split('-')[0]}
                         </div>
@@ -271,13 +317,13 @@ const TimelineWidget = ({ activeOrders }: any) => {
                             <div 
                                 className={cn(
                                     "absolute top-2 h-8 rounded-[var(--radius)] mx-0.5 text-[10px] font-bold text-white flex items-center px-2 shadow-sm overflow-hidden whitespace-nowrap",
-                                    isEndsToday ? "bg-destructive" : "bg-success" // Destructive for end today, Success for active
+                                    isOverdue ? "bg-destructive animate-pulse" : isEndsToday ? "bg-destructive" : "bg-success"
                                 )}
                                 style={{ left: `${left}%`, width: `${width}%`, maxWidth: '100%' }}
                                 title={order.customer_name}
                             >
-                                {isEndsToday && <AlertTriangle className="h-3 w-3 mr-1 text-white" />}
-                                {order.customer_name}
+                                {(isOverdue || isEndsToday) && <AlertTriangle className="h-3 w-3 mr-1 text-white" />}
+                                {order.customer_name} {isOverdue && "(ATRASADO)"}
                             </div>
                         </div>
                     </div>
@@ -292,6 +338,7 @@ const TimelineWidget = ({ activeOrders }: any) => {
 
 const Dashboard = () => {
   const { data: businessName } = useQuery({ queryKey: ['businessName'], queryFn: fetchBusinessName });
+  const today = startOfDay(new Date());
   
   const { data: orders } = useQuery({
     queryKey: ['dashboardOrders'],
@@ -321,25 +368,33 @@ const Dashboard = () => {
   });
 
   const metrics = useMemo(() => {
-    if (!orders) return { revenue: 0, active: 0, future: 0, clients: 0, itemsOut: 0 };
+    if (!orders) return { revenue: 0, active: 0, overdue: 0, clients: 0, itemsOut: 0 };
 
     const revenue = orders.filter(o => o.status !== 'draft').reduce((acc, curr) => acc + (Number(curr.total_amount) || 0), 0);
     const active = orders.filter(o => ['signed', 'reserved', 'picked_up'].includes(o.status)).length;
     
-    const today = startOfDay(new Date());
-    const future = orders.filter(o => {
-        const start = new Date(o.start_date);
-        return ['signed', 'reserved'].includes(o.status) && isAfter(start, today);
+    const overdue = orders.filter(o => {
+        const end = startOfDay(parseISO(o.end_date));
+        return o.status === 'picked_up' && isBefore(end, today);
     }).length;
 
     const clients = new Set(orders.filter(o => o.status !== 'draft').map(o => o.customer_cpf)).size;
+    
+    // REGRA DE OURO: Itens alugados = Todos os picked_up + Reservas que já começaram
     const itemsOut = activeOrders?.reduce((acc: number, order: any) => {
+        const status = order.status;
+        const start = startOfDay(parseISO(order.start_date));
+        
+        const isRented = status === 'picked_up' || (['signed', 'reserved'].includes(status) && isBefore(start, addDays(today, 1)));
+        
+        if (!isRented) return acc;
+
         const orderTotal = order.order_items.reduce((sum: number, item: any) => sum + item.quantity, 0);
         return acc + orderTotal;
     }, 0) || 0;
 
-    return { revenue, active, future, clients, itemsOut };
-  }, [orders, activeOrders]);
+    return { revenue, active, overdue, clients, itemsOut };
+  }, [orders, activeOrders, today]);
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
@@ -366,7 +421,7 @@ const Dashboard = () => {
         <MetricCard title="Receita Total" value={formatCurrency(metrics.revenue)} subtext="Acumulado" icon={DollarSign} variant="primary" />
         <MetricCard title="Contratos Ativos" value={metrics.active} subtext="Em andamento" icon={FileText} variant="secondary" />
         <MetricCard title="Itens Alugados" value={metrics.itemsOut} subtext="Equipamentos fora" icon={Box} variant="primary" />
-        <MetricCard title="Clientes" value={metrics.clients} subtext="Base total" icon={Users} variant="secondary" />
+        <MetricCard title="Em Atraso" value={metrics.overdue} subtext="Devoluções pendentes" icon={AlertTriangle} variant={metrics.overdue > 0 ? 'destructive' : 'secondary'} />
       </div>
 
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-12">
