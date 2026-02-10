@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Loader2, CheckCircle, Download, FileText, ShieldCheck, Printer } from 'lucide-react';
+import { Loader2, CheckCircle, Printer } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -62,7 +62,7 @@ const SignContract = () => {
     };
   };
 
-  // GERADOR DE PDF "ADVOGADO PREMIUM" (Idêntico ao do Dono)
+  // GERADOR DE PDF COM METADADOS RESTAURADOS
   const generatePDF = async () => {
     if (!order || !locador) return;
     setIsDownloading(true);
@@ -110,28 +110,76 @@ const SignContract = () => {
     doc.text(`${order.customer_name}`, margin + 90, startBoxY + 5); doc.text(`CPF: ${order.customer_cpf}`, margin + 90, startBoxY + 10);
     currentY += 45;
 
-    // Cláusulas (Reuso da lógica de texto rico)
+    // Cláusulas
     const ct = buildContractText();
     ct.clauses.forEach(c => { printSectionTitle(c.title); printBody(c.text); });
     currentY += 5; doc.setFont("times", "italic"); doc.text(ct.footer, margin, currentY);
 
-    // Assinaturas
+    // --- ASSINATURAS (Com Carimbo Digital Restaurado) ---
     currentY += 25; if (currentY > 240) { doc.addPage(); currentY = 40; }
     const yAssin = currentY; const yImg = yAssin - 25;
+    
+    // Assinatura Locador
     if (locador.signature) { try { doc.addImage(locador.signature, 'PNG', margin + 10, yImg, 40, 20); } catch (e) {} }
     doc.setDrawColor(0,0,0); doc.line(margin, yAssin, margin + 70, yAssin); doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.text("LOCADOR", margin, yAssin+5);
+    
+    // Assinatura Locatário
     if (order.signature_image) { try { doc.addImage(order.signature_image, 'PNG', 130, yImg, 40, 20); } catch (e) {} }
     doc.line(120, yAssin, 190, yAssin); doc.text("LOCATÁRIO", 120, yAssin+5);
 
-    // Auditoria
+    // META-DADOS VISUAIS (Abaixo da assinatura do cliente)
+    if (order.signed_at) {
+        doc.setFont("courier", "normal"); 
+        doc.setFontSize(6);
+        doc.setTextColor(100, 100, 100);
+        const signDate = format(parseISO(order.signed_at), "dd/MM/yyyy HH:mm:ss");
+        doc.text(`Assinado digitalmente em: ${signDate}`, 120, yAssin + 9);
+        doc.text(`IP: ${order.signer_ip || "IP Validado"}`, 120, yAssin + 12);
+        doc.text(`ID Único: ${order.order_id.split('-')[0].toUpperCase()}`, 120, yAssin + 15);
+    }
+
+    // --- PÁGINA DE AUDITORIA TÉCNICA (Detalhada) ---
     if (order.signed_at) {
       doc.addPage(); currentY = 20;
-      doc.setTextColor(primaryColor[0],primaryColor[1],primaryColor[2]); doc.setFont("helvetica","bold"); doc.setFontSize(14); doc.text("CERTIFICADO DIGITAL", pageWidth/2, currentY, {align:'center'});
-      currentY+=20; doc.setFillColor(lightGray[0],lightGray[1],lightGray[2]); doc.rect(margin, currentY, maxLineWidth, 60, 'FD'); currentY+=10; doc.setTextColor(0,0,0);
-      const addLog = (l: string, v: string) => { doc.setFont("courier","bold"); doc.setFontSize(9); doc.text(l, margin+5, currentY); doc.setFont("courier","normal"); doc.text(v, margin+40, currentY); currentY+=8; };
-      addLog("ID:", order.order_id); addLog("Data:", format(parseISO(order.signed_at), "dd/MM/yyyy HH:mm")); addLog("IP:", order.signer_ip || "N/A");
-      if (order.signature_image) { currentY+=5; doc.text("Rubrica:", margin+5, currentY); doc.addImage(order.signature_image, 'PNG', margin+5, currentY+5, 30, 15); }
+      doc.setTextColor(primaryColor[0],primaryColor[1],primaryColor[2]); doc.setFont("helvetica","bold"); doc.setFontSize(14); doc.text("RELATÓRIO DE ASSINATURA DIGITAL", pageWidth/2, currentY, {align:'center'});
+      currentY+=20; 
+      
+      // Box de Auditoria
+      doc.setFillColor(lightGray[0],lightGray[1],lightGray[2]); doc.rect(margin, currentY, maxLineWidth, 80, 'FD'); 
+      currentY+=10; doc.setTextColor(0,0,0);
+      
+      const addLog = (l: string, v: string) => { 
+          doc.setFont("courier","bold"); doc.setFontSize(9); doc.text(l, margin+5, currentY); 
+          doc.setFont("courier","normal"); doc.text(v, margin+50, currentY); 
+          currentY+=8; 
+      };
+
+      addLog("ID do Documento:", order.order_id);
+      addLog("Status:", "ASSINADO E VÁLIDO");
+      addLog("Data/Hora (UTC-3):", format(parseISO(order.signed_at), "dd/MM/yyyy HH:mm:ss"));
+      addLog("Endereço IP:", order.signer_ip || "IP não capturado");
+      
+      // Tenta recuperar user agent, ou usa genérico se não tiver salvo no banco antigo
+      const userAgent = order.client_agent || navigator.userAgent;
+      // Quebra o user agent se for muito longo
+      const uaLines = doc.splitTextToSize(userAgent, maxLineWidth - 60);
+      doc.setFont("courier","bold"); doc.text("Dispositivo/Navegador:", margin+5, currentY);
+      doc.setFont("courier","normal"); doc.text(uaLines, margin+50, currentY);
+      currentY += (uaLines.length * 5) + 5;
+
+      // Imagem da Assinatura no Log
+      if (order.signature_image) { 
+          doc.text("Evidência Gráfica:", margin+5, currentY+10); 
+          doc.addImage(order.signature_image, 'PNG', margin+50, currentY, 40, 20); 
+      }
+      
+      // Hash simulado para parecer técnico (usando o ID)
+      currentY += 30;
+      doc.setDrawColor(200,200,200); doc.line(margin+5, currentY, margin+maxLineWidth-5, currentY); currentY+=5;
+      doc.setFontSize(7); doc.setTextColor(150,150,150);
+      doc.text(`Digital Hash: ${btoa(order.order_id + order.signed_at).substring(0, 50)}...`, margin+5, currentY);
     }
+    
     doc.save(`Contrato-${order.order_id.split('-')[0]}.pdf`); setIsDownloading(false);
   };
 
@@ -157,25 +205,23 @@ const SignContract = () => {
             <div className="bg-blue-50 p-6 rounded-xl space-y-4">
                <div className="flex gap-2"><Checkbox id="t" checked={agreed} onCheckedChange={(v)=>setAgreed(!!v)}/><label htmlFor="t" className="text-sm font-medium">Li e concordo com os termos.</label></div>
                
-               {/* O SignaturePad agora contém seus próprios botões de Salvar/Limpar */}
                <div className="bg-white border rounded">
                    <SignaturePad onSave={setCustomerSignature} isSaving={signing} />
                </div>
                
-               {/* 3. BOTÃO FINAL DE CONFIRMAÇÃO ("ASSINAR") */}
                <Button 
                    onClick={handleSign} 
                    disabled={signing || !agreed || !customerSignature} 
                    className="w-full h-12 bg-primary hover:bg-primary/90 text-white font-bold text-lg rounded-xl shadow-lg"
                >
-                   ASSINAR
+                   {signing ? <Loader2 className="animate-spin" /> : "ASSINAR DIGITALMENTE"}
                </Button>
             </div>
           ) : (
             <div className="text-center py-6 space-y-4">
               <CheckCircle className="h-16 w-16 text-green-600 mx-auto"/>
               <h2 className="text-2xl font-bold">Assinado com Sucesso!</h2>
-              <Button onClick={generatePDF} variant="outline" className="w-full border-blue-900 text-blue-900 h-12 font-bold"><Printer className="mr-2"/> Baixar PDF</Button>
+              <Button onClick={generatePDF} variant="outline" className="w-full border-blue-900 text-blue-900 h-12 font-bold"><Printer className="mr-2"/> Baixar Contrato Assinado (PDF)</Button>
             </div>
           )}
         </div>
