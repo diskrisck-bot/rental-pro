@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Plus, Search, Filter, Loader2, Edit, Package, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Plus, Search, Filter, Loader2, Edit, Package, AlertTriangle, CheckCircle, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
@@ -29,13 +29,14 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/lib/supabase';
 import { showSuccess, showError } from '@/utils/toast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import EditProductSheet from '@/components/inventory/EditProductSheet';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { startOfDay, parseISO } from 'date-fns';
+import { formatCurrencyBRL, parseCurrencyBRL } from '@/utils/currency';
 
 // Tipagem
 interface InventoryItem {
@@ -94,7 +95,7 @@ const ProductCardMobile = ({ product, available, handleEditProduct }: { product:
       <div className="grid grid-cols-3 gap-4 text-center border-t pt-3">
         <div><p className="text-xs text-muted-foreground">Total</p><p className="font-semibold">{product.total_quantity}</p></div>
         <div><p className="text-xs text-muted-foreground">Alugados</p><p className="font-semibold text-secondary">{rented}</p></div>
-        <div><p className="text-xs text-muted-foreground">Diária</p><p className="font-semibold">R$ {Number(product.price).toFixed(2)}</p></div>
+        <div><p className="text-xs text-muted-foreground">Diária</p><p className="font-semibold">{formatCurrencyBRL(product.price)}</p></div>
       </div>
       <div className="flex items-center justify-between border-t pt-3">
         <p className="text-sm font-semibold text-gray-700">Disponível Hoje:</p>
@@ -121,6 +122,10 @@ const Inventory = () => {
     replacement_value: 0,
     serial_number: '' 
   });
+
+  // Estados para exibição formatada nos inputs
+  const [displayPrice, setDisplayPrice] = useState('R$ 0,00');
+  const [displayReplacement, setDisplayReplacement] = useState('R$ 0,00');
 
   // 1. QUERY DE PRODUTOS
   const { data: rawProducts, isLoading: loadingProducts } = useQuery({
@@ -179,6 +184,8 @@ const Inventory = () => {
       setIsAddModalOpen(false);
       queryClient.invalidateQueries({ queryKey: ['allProducts'] });
       setNewProduct({ name: '', type: 'trackable', total_quantity: 1, price: 0, replacement_value: 0, serial_number: '' });
+      setDisplayPrice('R$ 0,00');
+      setDisplayReplacement('R$ 0,00');
     } catch (error: any) { showError("Erro: " + error.message); } finally { setIsSaving(false); }
   };
 
@@ -186,6 +193,20 @@ const Inventory = () => {
   const filteredProducts = rawProducts?.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
   const isLoading = loadingProducts || loadingOrders;
   const isTrackable = newProduct.type === 'trackable';
+
+  const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatCurrencyBRL(e.target.value);
+    const numeric = parseCurrencyBRL(e.target.value);
+    setDisplayPrice(formatted);
+    setNewProduct({ ...newProduct, price: numeric });
+  };
+
+  const handleReplacementChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatCurrencyBRL(e.target.value);
+    const numeric = parseCurrencyBRL(e.target.value);
+    setDisplayReplacement(formatted);
+    setNewProduct({ ...newProduct, replacement_value: numeric });
+  };
 
   return (
     <div className="p-4 md:p-8 space-y-6">
@@ -198,14 +219,59 @@ const Inventory = () => {
             <div className="space-y-4 py-4">
               <div className="space-y-2"><Label>Nome</Label><Input value={newProduct.name} onChange={(e) => setNewProduct({...newProduct, name: e.target.value})} placeholder="Ex: Câmera Sony" /></div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2"><Label>Tipo</Label><Select value={newProduct.type} onValueChange={(val: any) => setNewProduct({...newProduct, type: val, total_quantity: val === 'trackable' ? 1 : newProduct.total_quantity})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="trackable">Rastreável</SelectItem><SelectItem value="bulk">Granel</SelectItem></SelectContent></Select></div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1">
+                    <Label>Tipo</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          <p>Granel: Itens contados por quantidade (ex: cabos, andaimes). Unitário: Itens únicos com serial/patrimônio (ex: furadeira Bosch #123).</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                  <Select value={newProduct.type} onValueChange={(val: any) => setNewProduct({...newProduct, type: val, total_quantity: val === 'trackable' ? 1 : newProduct.total_quantity})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="trackable">Rastreável</SelectItem><SelectItem value="bulk">Granel</SelectItem></SelectContent></Select>
+                </div>
                 <div className="space-y-2"><Label>Qtd Total</Label><Input type="number" min={isTrackable ? "1" : "0"} value={newProduct.total_quantity} onChange={(e) => setNewProduct({...newProduct, total_quantity: parseInt(e.target.value) || 1})} disabled={isTrackable} /></div>
               </div>
               {isTrackable && (<div className="space-y-2"><Label>Serial Inicial</Label><Input value={newProduct.serial_number} onChange={(e) => setNewProduct({...newProduct, serial_number: e.target.value})} placeholder="SN-001" required /></div>)}
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2"><Label>Preço Diária (R$)</Label><Input type="number" step="0.01" value={newProduct.price} onChange={(e) => setNewProduct({...newProduct, price: parseFloat(e.target.value) || 0})} /></div>
-                <div className="space-y-2"><Label>Valor de Reposição (R$)</Label><Input type="number" step="0.01" value={newProduct.replacement_value} onChange={(e) => setNewProduct({...newProduct, replacement_value: parseFloat(e.target.value) || 0})} /></div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1">
+                    <Label>Preço Diária</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Valor cobrado por cada dia de locação deste item.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                  <Input value={displayPrice} onChange={handlePriceChange} />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1">
+                    <Label>Valor de Reposição</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          <p>Valor jurídico cobrado do cliente em caso de perda, roubo ou dano total. Este valor aparecerá no contrato.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                  <Input value={displayReplacement} onChange={handleReplacementChange} />
+                </div>
               </div>
             </div>
             <DialogFooter><Button variant="outline" onClick={() => setIsAddModalOpen(false)}>Cancelar</Button><Button onClick={handleCreateProduct} disabled={isSaving} className="bg-primary hover:bg-primary/90">{isSaving ? <Loader2 className="animate-spin" /> : 'Salvar'}</Button></DialogFooter>
@@ -246,7 +312,7 @@ const Inventory = () => {
                        <TableCell className="text-center text-gray-500">{product.total_quantity}</TableCell>
                        <TableCell className="text-center font-bold text-secondary bg-secondary/10 rounded">{rented}</TableCell>
                        <TableCell className="text-center"><div className="flex items-center justify-center gap-1"><span className={cn("font-bold", status.color)}>{available}</span>{status.badge}</div></TableCell>
-                       <TableCell>R$ {Number(product.price).toFixed(2)}</TableCell>
+                       <TableCell>{formatCurrencyBRL(product.price)}</TableCell>
                        <TableCell className="text-right"><Button variant="ghost" size="sm" onClick={() => handleEditProduct(product.id)}><Edit className="h-4 w-4 mr-1" /> Editar</Button></TableCell>
                      </TableRow>
                    );

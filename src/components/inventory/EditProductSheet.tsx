@@ -18,12 +18,14 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select';
-import { Loader2, Save } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Loader2, Save, Info } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { showSuccess, showError } from '@/utils/toast';
 import { useQueryClient } from '@tanstack/react-query';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AssetManagement from './AssetManagement';
+import { formatCurrencyBRL, parseCurrencyBRL } from '@/utils/currency';
 
 // Tipagem básica para os dados da view (incluindo active_rentals para validação)
 interface InventoryItem {
@@ -53,6 +55,11 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
     price: 0,
     replacement_value: 0,
   });
+
+  // Estados para exibição formatada
+  const [displayPrice, setDisplayPrice] = useState('R$ 0,00');
+  const [displayReplacement, setDisplayReplacement] = useState('R$ 0,00');
+
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('details');
@@ -80,6 +87,11 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
             price: Number(data.price),
             replacement_value: Number(data.replacement_value || 0),
           });
+
+          // Inicializa os displays formatados
+          setDisplayPrice(formatCurrencyBRL(Number(data.price)));
+          setDisplayReplacement(formatCurrencyBRL(Number(data.replacement_value || 0)));
+
           setActiveTab('details'); // Volta para a aba de detalhes ao abrir
         } catch (error: any) {
           showError("Erro ao carregar dados do produto: " + error.message);
@@ -98,6 +110,20 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
       ...prev,
       [id]: type === 'number' ? parseFloat(value) || parseInt(value) || 0 : value,
     }));
+  };
+
+  const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatCurrencyBRL(e.target.value);
+    const numeric = parseCurrencyBRL(e.target.value);
+    setDisplayPrice(formatted);
+    setFormData(prev => ({ ...prev, price: numeric }));
+  };
+
+  const handleReplacementChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatCurrencyBRL(e.target.value);
+    const numeric = parseCurrencyBRL(e.target.value);
+    setDisplayReplacement(formatted);
+    setFormData(prev => ({ ...prev, replacement_value: numeric }));
   };
 
   const handleSelectChange = (id: string, value: string) => {
@@ -206,7 +232,19 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
                   {/* Ajuste de Grid: grid-cols-1 no mobile, grid-cols-2 no desktop */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Tipo</Label>
+                      <div className="flex items-center gap-1">
+                        <Label>Tipo</Label>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                              <p>Granel: Itens contados por quantidade (ex: cabos, andaimes). Unitário: Itens únicos com serial/patrimônio (ex: furadeira Bosch #123).</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
                       <Select 
                         value={formData.type} 
                         onValueChange={(val) => handleSelectChange('type', val)}
@@ -234,23 +272,41 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="price">Preço da Diária (R$)</Label>
+                      <div className="flex items-center gap-1">
+                        <Label>Preço Diária</Label>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Valor cobrado por cada dia de locação deste item.</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
                       <Input 
-                        id="price" 
-                        type="number"
-                        step="0.01"
-                        value={formData.price} 
-                        onChange={handleChange}
+                        value={displayPrice} 
+                        onChange={handlePriceChange}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="replacement_value">Valor de Reposição (R$)</Label>
+                      <div className="flex items-center gap-1">
+                        <Label>Valor de Reposição</Label>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                              <p>Valor jurídico cobrado do cliente em caso de perda, roubo ou dano total. Este valor aparecerá no contrato.</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
                       <Input 
-                        id="replacement_value" 
-                        type="number"
-                        step="0.01"
-                        value={formData.replacement_value} 
-                        onChange={handleChange}
+                        value={displayReplacement} 
+                        onChange={handleReplacementChange}
                       />
                     </div>
                   </div>
