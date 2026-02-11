@@ -355,6 +355,8 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
     } catch (e: any) { showError(e.message); } finally { setLoading(false); }
   };
 
+  const isDataLoading = fetchingData || isProductsLoading;
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{children}</DialogTrigger>
