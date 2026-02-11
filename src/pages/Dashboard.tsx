@@ -102,7 +102,7 @@ const ReturnsAlertWidget = ({ orders }: { orders: any[] }) => {
                     </div>
                   </div>
                   <Button size="sm" variant="ghost" className="text-destructive font-bold hover:bg-destructive/20">
-                    Ver Pedido <ChevronRight className="h-4 w-4 ml-1" />
+                    Ver Locação <ChevronRight className="h-4 w-4 ml-1" />
                   </Button>
                 </div>
               ))}
@@ -132,11 +132,11 @@ const ReturnsAlertWidget = ({ orders }: { orders: any[] }) => {
                     </div>
                     <div>
                       <p className="font-bold text-foreground">{order.customer_name}</p>
-                      <p className="text-xs text-primary font-medium">Pedido #{order.id.split('-')[0]}</p>
+                      <p className="text-xs text-primary font-medium">Locação #{order.id.split('-')[0]}</p>
                     </div>
                   </div>
                   <Button size="sm" variant="ghost" className="text-primary font-bold hover:bg-primary/20">
-                    Ver Pedido <ChevronRight className="h-4 w-4 ml-1" />
+                    Ver Locação <ChevronRight className="h-4 w-4 ml-1" />
                   </Button>
                 </div>
               ))}
@@ -382,7 +382,7 @@ const Dashboard = () => {
         <div className="flex gap-3 items-center">
             <CreateOrderDialog onOrderCreated={() => window.location.reload()}> 
                 <Button className="bg-primary hover:bg-primary/90 text-white font-bold uppercase h-12 px-6 shadow-custom rounded-[var(--radius)] transition-all active:translate-y-1">
-                    + Novo Pedido
+                    + Nova Locação
                 </Button>
             </CreateOrderDialog>
         </div>

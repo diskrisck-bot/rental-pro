@@ -65,8 +65,8 @@ const getStatusBadge = (status: string, isOverdue: boolean) => {
 };
 
 const getPaymentTimingBadge = (timing: string) => {
-  if (timing === 'paid_on_pickup') return <Badge variant="signed" className="bg-emerald-700 text-[10px]"><DollarSign className="h-3 w-3 mr-1" /> Pago (Retirada)</Badge>;
-  if (timing === 'pay_on_return') return <Badge variant="pending" className="text-[10px]"><Clock className="h-3 w-3 mr-1" /> A Pagar (Devolução)</Badge>;
+  if (timing === 'paid_on_pickup') return <Badge variant="signed" className="bg-emerald-700 text-[10px]"><DollarSign className="h-3 w-3 mr-1" /> PAGO</Badge>;
+  if (timing === 'pay_on_return') return <Badge variant="pending" className="bg-amber-500 text-white text-[10px]"><Clock className="h-3 w-3 mr-1" /> PENDENTE</Badge>;
   return null;
 };
 
@@ -117,7 +117,7 @@ const Orders = () => {
       if (error) throw error;
       setOrders(data || []);
     } catch (error: any) {
-      showError("Erro ao carregar pedidos.");
+      showError("Erro ao carregar locações.");
     } finally {
       setLoading(false);
     }
@@ -155,7 +155,7 @@ const Orders = () => {
     return (
       <CreateOrderDialog onOrderCreated={fetchOrders}>
         <Button className="bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20">
-          <Plus className="mr-2 h-4 w-4" /> Novo Pedido
+          <Plus className="mr-2 h-4 w-4" /> Nova Locação
         </Button>
       </CreateOrderDialog>
     );
@@ -165,7 +165,7 @@ const Orders = () => {
     <div className="p-4 md:p-8 space-y-6 bg-background min-h-screen">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-heading font-extrabold tracking-tight text-gray-900">Pedidos</h1>
+          <h1 className="text-2xl md:text-3xl font-heading font-extrabold tracking-tight text-gray-900">Locações</h1>
           <p className="text-muted-foreground">Gerenciamento de contratos e locações.</p>
         </div>
         {renderHeaderButton()}
@@ -199,7 +199,7 @@ const Orders = () => {
               {loading ? (
                 <TableRow><TableCell colSpan={7} className="h-32 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" /></TableCell></TableRow>
               ) : filteredOrders.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="h-32 text-center text-gray-500">Nenhum pedido encontrado.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="h-32 text-center text-gray-500">Nenhuma locação encontrada.</TableCell></TableRow>
               ) : (
                 filteredOrders.map((order) => {
                   const isSigned = !!order.signed_at;
@@ -234,14 +234,14 @@ const Orders = () => {
                           {isEditable && (
                             <div onClick={(e) => e.stopPropagation()}>
                                 <CreateOrderDialog orderId={order.id} onOrderCreated={fetchOrders}>
-                                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-secondary hover:bg-secondary/10 hover:text-secondary" title="Editar Pedido">
+                                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-secondary hover:bg-secondary/10 hover:text-secondary" title="Editar Locação">
                                         <Edit className="h-4 w-4" />
                                     </Button>
                                 </CreateOrderDialog>
                             </div>
                           )}
 
-                          <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
+                          <a href={whatsappLink} target="_blank" rel="noreferrer">
                             <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-green-600 hover:bg-green-50 hover:text-green-700" title="WhatsApp">
                               <MessageCircle className="h-4 w-4" />
                             </Button>

@@ -239,7 +239,7 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
                             <TooltipTrigger asChild>
                               <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                             </TooltipTrigger>
-                            <TooltipContent className="max-w-xs">
+                            <TooltipContent side="bottom" align="start" className="max-w-[250px] z-[100] bg-secondary text-white border-none shadow-xl">
                               <p>Granel: Itens contados por quantidade (ex: cabos, andaimes). Unitário: Itens únicos com serial/patrimônio (ex: furadeira Bosch #123).</p>
                             </TooltipContent>
                           </Tooltip>
@@ -279,7 +279,7 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
                             <TooltipTrigger asChild>
                               <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                             </TooltipTrigger>
-                            <TooltipContent>
+                            <TooltipContent side="bottom" align="start" className="max-w-[250px] z-[100] bg-secondary text-white border-none shadow-xl">
                               <p>Valor cobrado por cada dia de locação deste item.</p>
                             </TooltipContent>
                           </Tooltip>
@@ -298,7 +298,7 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
                             <TooltipTrigger asChild>
                               <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                             </TooltipTrigger>
-                            <TooltipContent className="max-w-xs">
+                            <TooltipContent side="bottom" align="start" className="max-w-[250px] z-[100] bg-secondary text-white border-none shadow-xl">
                               <p>Valor jurídico cobrado do cliente em caso de perda, roubo ou dano total. Este valor aparecerá no contrato.</p>
                             </TooltipContent>
                           </Tooltip>

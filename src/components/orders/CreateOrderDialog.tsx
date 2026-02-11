@@ -96,6 +96,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
 
   const watchDates = watch(['start_date', 'end_date']);
   const watchPaymentMethod = watch('payment_method');
+  const watchPaymentTiming = watch('payment_timing');
   const watchDeliveryMethod = watch('delivery_method');
   const watchFulfillmentType = watch('fulfillment_type');
   const watchDiscount = watch('discount');
@@ -234,9 +235,6 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             setCustomerDocument(orderData.customer_cpf || '');
             setValue('customer_cpf', orderData.customer_cpf || '');
             
-            // Se houver desconto salvo no banco (precisaria de coluna, mas vamos usar o total_amount para inferir ou apenas resetar)
-            // Por enquanto, vamos manter o desconto como 0 na edição a menos que tenhamos a coluna
-            
             const existingItems = orderData.order_items.map((item: any) => ({
               product_id: item.product_id,
               product_name: item.products.name,
@@ -362,7 +360,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
                       <TooltipTrigger asChild>
                         <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                       </TooltipTrigger>
-                      <TooltipContent className="max-w-xs">
+                      <TooltipContent side="bottom" align="start" className="max-w-[250px] z-[100] bg-secondary text-white border-none shadow-xl">
                         <p>Selecione o locatário responsável. O contrato será gerado com os dados (CPF/CNPJ e Endereço) deste cadastro.</p>
                       </TooltipContent>
                     </Tooltip>
@@ -372,7 +370,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
               </div>
               
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label>Telefone</Label><MaskedInput mask={phoneMask} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={watch('customer_phone')} onChange={(e) => setValue('customer_phone', e.target.value)} required /></div>
+                <div className="space-y-2"><Label>Telefone</Label><MaskedInput mask={phoneMask} placeholder="(00) 00000-0000" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={watch('customer_phone')} onChange={(e) => setValue('customer_phone', e.target.value)} required /></div>
                 <div className="space-y-2"><Label>CPF / CNPJ</Label><Input maxLength={18} value={customerDocument} onChange={handleDocumentChange} placeholder="CPF ou CNPJ" required /><input type="hidden" {...register('customer_cpf', { required: true })} /></div>
               </div>
               
@@ -385,7 +383,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
                         <TooltipTrigger asChild>
                           <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                         </TooltipTrigger>
-                        <TooltipContent className="max-w-xs">
+                        <TooltipContent side="bottom" align="start" className="max-w-[250px] z-[100] bg-secondary text-white border-none shadow-xl">
                           <p>O sistema calcula o valor total automaticamente multiplicando o preço dos itens pelo número de dias selecionados neste intervalo.</p>
                         </TooltipContent>
                       </Tooltip>
@@ -401,7 +399,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
                         <TooltipTrigger asChild>
                           <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                         </TooltipTrigger>
-                        <TooltipContent className="max-w-xs">
+                        <TooltipContent side="bottom" align="start" className="max-w-[250px] z-[100] bg-secondary text-white border-none shadow-xl">
                           <p>O sistema calcula o valor total automaticamente multiplicando o preço dos itens pelo número de dias selecionados neste intervalo.</p>
                         </TooltipContent>
                       </Tooltip>
@@ -420,7 +418,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
                         <TooltipTrigger asChild>
                           <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                         </TooltipTrigger>
-                        <TooltipContent className="max-w-xs">
+                        <TooltipContent side="bottom" align="start" className="max-w-[250px] z-[100] bg-secondary text-white border-none shadow-xl">
                           <p>Defina como o cliente vai pagar. Essa informação constará na Cláusula 3 do contrato.</p>
                         </TooltipContent>
                       </Tooltip>
@@ -440,13 +438,38 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center gap-1">
+                    <Label>Status do Pagamento</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" align="start" className="max-w-[250px] z-[100] bg-secondary text-white border-none shadow-xl">
+                          <p>Indique se o valor já foi recebido ou se ficará pendente para o momento da entrega ou devolução.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                  <Select value={watchPaymentTiming} onValueChange={(val) => setValue('payment_timing', val)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="paid_on_pickup">Pago (Já recebido)</SelectItem>
+                      <SelectItem value="pay_on_return">Pendente (Pagar na Entrega/Devolução)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1">
                     <Label>Frete / Retirada</Label>
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                         </TooltipTrigger>
-                        <TooltipContent className="max-w-xs">
+                        <TooltipContent side="bottom" align="start" className="max-w-[250px] z-[100] bg-secondary text-white border-none shadow-xl">
                           <p>Retirada: Cliente busca no balcão (sem custo). Entrega: Sua equipe leva até o local (pode haver taxa de frete).</p>
                         </TooltipContent>
                       </Tooltip>
@@ -460,23 +483,22 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center gap-1">
-                  <Label>Desconto (R$)</Label>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs">
-                        <p>Valor em R$ para subtrair do total. Útil para negociações especiais ou parceiros.</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1">
+                    <Label>Desconto (R$)</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" align="start" className="max-w-[250px] z-[100] bg-secondary text-white border-none shadow-xl">
+                          <p>Valor em R$ para subtrair do total. Útil para negociações especiais ou parceiros.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                  <Input value={displayDiscount} onChange={handleDiscountChange} />
                 </div>
-                <Input value={displayDiscount} onChange={handleDiscountChange} />
               </div>
             </div>
             <div className="border-t pt-4">
