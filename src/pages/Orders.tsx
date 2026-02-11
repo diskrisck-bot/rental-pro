@@ -25,7 +25,6 @@ import { fetchBusinessConfig, fetchProductCount } from '@/integrations/supabase/
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
-// --- STATUS BADGES ---
 const getStatusBadge = (status: string, isOverdue: boolean) => {
   if (isOverdue) {
     return (
@@ -77,10 +76,15 @@ const getWhatsappLink = (order: any, isSigned: boolean) => {
       ? `Olá ${order.customer_name}! ✅\nSegue seu contrato assinado #${order.id.split('-')[0]}:\n${signLink}`
       : `Olá ${order.customer_name}! 📦\nSegue link para assinatura do contrato #${order.id.split('-')[0]}:\n${signLink}`;
     
-    const encodedMessage = encodeURIComponent(messageText);
-    let phone = order.customer_phone ? order.customer_phone.replace(/\D/g, '') : '';
-    if (phone.length >= 10) phone = `55${phone}`;
-    return `https://wa.me/${phone}?text=${encodedMessage}`;
+    // Higienização estrita do telefone
+    let phone = order.customer_phone?.replace(/\D/g, '') || '';
+    
+    // Validação de DDI Brasil (55)
+    if (phone.length === 10 || phone.length === 11) {
+      phone = `55${phone}`;
+    }
+    
+    return `https://wa.me/${phone}?text=${encodeURIComponent(messageText)}`;
 };
 
 const Orders = () => {

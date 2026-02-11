@@ -18,7 +18,7 @@ import { showSuccess, showError } from '@/utils/toast';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable'; // Importação necessária para o jsPDF funcionar corretamente
+import 'jspdf-autotable'; 
 
 interface OrderDetailsSheetProps {
   orderId: string | null;
@@ -68,15 +68,21 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     if (!order) return '#';
     const signLink = `${window.location.origin}/contract/${order.id}`;
     const messageText = `Olá ${order.customer_name}! 📄\nSegue o link do seu contrato de locação #${order.id.split('-')[0]}:\n${signLink}\n\nFavor assinar digitalmente.`;
-    return `https://wa.me/${order.customer_phone?.replace(/\D/g, '')}?text=${encodeURIComponent(messageText)}`;
+    
+    // Higienização estrita do telefone
+    let phone = order.customer_phone?.replace(/\D/g, '') || '';
+    
+    // Validação de DDI Brasil (55)
+    if (phone.length === 10 || phone.length === 11) {
+      phone = `55${phone}`;
+    }
+    
+    return `https://wa.me/${phone}?text=${encodeURIComponent(messageText)}`;
   };
 
-  // --- GERADOR DE PDF (REFACTOR JURÍDICO) ---
   const generatePDF = async (order: any, owner: OwnerProfile | null) => {
     const doc = new jsPDF({ format: 'a4', unit: 'mm' });
-    
-    // Configurações de Estilo
-    const primaryColor = [30, 58, 138]; // Navy Blue
+    const primaryColor = [30, 58, 138]; 
     const lightGray = [245, 245, 245];
     
     const locador = {
@@ -100,7 +106,6 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     const maxLineWidth = pageWidth - (margin * 2); 
     let currentY = 20;
 
-    // Funções de Impressão
     const printTitle = (text: string) => {
       doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
       doc.text(text, pageWidth / 2, currentY, { align: "center" });
@@ -122,10 +127,8 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
       doc.text(lines, margin, currentY); currentY += (lines.length * 5) + 3;
     };
 
-    // --- INÍCIO DO DOCUMENTO ---
     printTitle("CONTRATO DE LOCAÇÃO DE BENS MÓVEIS");
 
-    // Quadro de Identificação das Partes
     doc.setFillColor(lightGray[0], lightGray[1], lightGray[2]); doc.rect(margin, currentY, maxLineWidth, 45, 'FD');
     const startBoxY = currentY + 6;
     
@@ -145,39 +148,29 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     doc.text(`Telefone: ${order.customer_phone || '---'}`, margin + 90, startBoxY + 15);
     doc.text(`Endereço: ${order.customer_address || '---'}`, margin + 90, startBoxY + 20);
     
-    currentY += 55; // Espaço após o quadro
+    currentY += 55; 
 
-    // --- CLÁUSULAS ---
-    
-    // CLÁUSULA 1 - DO OBJETO
     printSectionTitle("CLÁUSULA 1 - DO OBJETO DA LOCAÇÃO"); 
     printBody(`O presente instrumento tem como objeto o aluguel dos seguintes bens móveis, que o LOCATÁRIO declara receber em perfeito estado de funcionamento e conservação:\n\n${listaItens}\n\nParágrafo Único: O valor de reposição de cada item é o valor que será cobrado integralmente do LOCATÁRIO em caso de perda, roubo, furto ou dano irreparável.`);
 
-    // CLÁUSULA 2 - DO PRAZO E ENTREGA
     printSectionTitle("CLÁUSULA 2 - DO PRAZO E ENTREGA"); 
     printBody(`A locação vigorará pelo período de ${dias} diária(s), iniciando-se em ${format(parseISO(order.start_date), "dd/MM/yyyy")} e encerrando-se em ${format(parseISO(order.end_date), "dd/MM/yyyy")}, devendo os bens ser devolvidos na data final até as 18:00h. O atraso na devolução configurará apropriação indébita e gerará cobrança de novas diárias, sem prejuízo de multa de 10% sobre o valor total do contrato.`);
 
-    // CLÁUSULA 3 - DO PREÇO E PAGAMENTO
     printSectionTitle("CLÁUSULA 3 - DO PREÇO E PAGAMENTO"); 
     printBody(`O valor total da locação é de ${formatMoney(order.total_amount)}, a ser pago via ${order.payment_method || 'combinar'}. O não pagamento na data acordada acarretará juros de mora de 1% (um por cento) ao mês e multa de 2% (dois por cento) sobre o valor devido.`);
 
-    // CLÁUSULA 4 - DA RESPONSABILIDADE E USO
     printSectionTitle("CLÁUSULA 4 - DA RESPONSABILIDADE E USO"); 
     printBody("O LOCATÁRIO declara receber os bens em perfeito estado de funcionamento e conservação. É de inteira responsabilidade do LOCATÁRIO a guarda e o uso correto dos equipamentos. Em caso de dano, avaria, roubo ou furto, o LOCATÁRIO arcará com o custo integral de reparo ou reposição do bem por um novo, de mesma marca e modelo, conforme os valores de reposição listados na Cláusula 1.");
 
-    // CLÁUSULA 5 - DO TRANSPORTE
     printSectionTitle("CLÁUSULA 5 - DO TRANSPORTE"); 
     printBody("O transporte dos equipamentos (retirada e devolução) corre por conta e risco do LOCATÁRIO, salvo disposição em contrário expressa neste contrato.");
 
-    // CLÁUSULA 6 - DA RESCISÃO
     printSectionTitle("CLÁUSULA 6 - DA RESCISÃO"); 
     printBody("O descumprimento de qualquer cláusula contratual ensejará a rescisão imediata deste contrato e a retomada dos bens pelo LOCADOR, sem prejuízo das penalidades cabíveis.");
 
-    // CLÁUSULA 7 - DO FORO
-    printSectionTitle("CLÁUSULA 7 - DO FORO"); 
+    printSectionTitle("CLÁULA 7 - DO FORO"); 
     printBody(`Fica eleito o foro da comarca de ${locador.city} para dirimir quaisquer dúvidas oriundas deste contrato, renunciando a qualquer outro, por mais privilegiado que seja.`);
 
-    // --- ENCERRAMENTO E ASSINATURAS ---
     currentY += 5; 
     doc.setFont("times", "italic"); 
     doc.text(`${locador.city}, ${format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}.`, margin, currentY);
@@ -188,24 +181,14 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     const yAssin = currentY; 
     const yImg = yAssin - 25;
     
-    // Assinatura Locador
     if (locador.signature) { try { doc.addImage(locador.signature, 'PNG', margin + 10, yImg, 40, 20); } catch (e) {} }
     doc.setDrawColor(0,0,0); doc.line(margin, yAssin, margin + 70, yAssin); 
     doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.text("LOCADOR", margin, yAssin + 5);
     
-    // Assinatura Locatário
     if (order.signature_image) { try { doc.addImage(order.signature_image, 'PNG', 130, yImg, 40, 20); } catch (e) {} }
     doc.line(120, yAssin, 190, yAssin); 
     doc.text("LOCATÁRIO", 120, yAssin + 5);
     
-    // REMOVIDO: Testemunhas (Opcional)
-    // currentY = yAssin + 20;
-    // doc.line(margin, currentY, margin + 70, currentY); 
-    // doc.text("TESTEMUNHA 1", margin, currentY + 5);
-    // doc.line(120, currentY, 190, currentY); 
-    // doc.text("TESTEMUNHA 2", 120, currentY + 5);
-
-    // Certificado Digital (Se assinado)
     if (order.signed_at) {
       doc.addPage(); currentY = 20;
       doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.text("CERTIFICADO DIGITAL DE ASSINATURA", pageWidth/2, currentY, {align: 'center'});
@@ -226,7 +209,6 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     try { setIsGeneratingContract(true); const doc = await generatePDF(order, ownerProfile); doc.save(`Contrato-${order.id.split('-')[0]}.pdf`); showSuccess("Download iniciado."); } catch (e: any) { showError("Erro ao gerar PDF: " + e.message); } finally { setIsGeneratingContract(false); }
   };
 
-  // --- ATUALIZAÇÃO DE STATUS LOGÍSTICO ---
   const updateStatus = async (newStatus: string) => {
     if (!orderId) return;
     
@@ -234,13 +216,9 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
       setUpdating(true); 
       const p: any = { status: newStatus };
       
-      // LÓGICA: Atualiza datas para controle de inventário
       if (newStatus === 'picked_up') p.picked_up_at = new Date().toISOString(); 
       if (newStatus === 'returned') p.returned_at = new Date().toISOString(); 
       
-      // Cenário A: Se o status atual for 'signed', e o novo for 'returned', 
-      // precisamos garantir que o picked_up_at seja definido para hoje, 
-      // pois estamos pulando a etapa 'picked_up'.
       if (order?.status === 'signed' && newStatus === 'returned') {
           p.picked_up_at = new Date().toISOString();
       }
@@ -268,7 +246,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
   const isSigned = !!order?.signed_at;
   const status = order?.status;
   const isFinalized = status === 'returned' || status === 'canceled';
-  const showWhatsappButton = !isSigned && !isFinalized;
+  const showWhatsappButton = !isFinalized;
 
   const getStatusBadge = () => {
       switch(status) {
@@ -286,7 +264,6 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="sm:max-w-md flex flex-col h-full p-0 gap-0 bg-background">
         
-        {/* HEADER FIXO */}
         <SheetHeader className="px-6 py-4 border-b border-gray-100 bg-card">
           <div className="flex justify-between items-start">
             <div>
@@ -297,19 +274,15 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
           </div>
         </SheetHeader>
 
-        {/* CORPO COM SCROLL */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-background">
           
-          {/* Valor Total */}
           <div className="bg-primary rounded-[var(--radius)] p-6 text-white shadow-custom text-center">
             <p className="text-xs font-bold opacity-80 uppercase tracking-widest mb-1">Valor do Contrato</p>
             <p className="text-4xl font-black">R$ {Number(order?.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
           </div>
           
-          {/* Ações Documentais */}
           <div className={cn("grid gap-3", showWhatsappButton ? "grid-cols-2" : "grid-cols-1")}>
              
-             {/* 1. BOTÃO WHATSAPP (SÓ SE NÃO ESTIVER ASSINADO E NÃO FINALIZADO) */}
              {showWhatsappButton && (
                 <a href={getWhatsappLink(order)} target="_blank" rel="noopener noreferrer" className="w-full">
                     <Button variant="outline" className="w-full h-12 border-success text-success hover:bg-success/10 font-bold">
@@ -318,7 +291,6 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
                 </a>
              )}
 
-             {/* 2. BOTÃO PDF */}
              <Button 
                 onClick={handleDownloadFinalPDF} 
                 disabled={isGeneratingContract} 
@@ -326,7 +298,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
                 className={cn(
                     "w-full h-12 font-bold", 
                     isSigned 
-                        ? "bg-secondary hover:bg-secondary/90 text-white" // CORREÇÃO APLICADA AQUI: Forçando text-white
+                        ? "bg-secondary hover:bg-secondary/90 text-white" 
                         : "border-foreground text-foreground", 
                     !showWhatsappButton && "col-span-full"
                 )}
@@ -336,7 +308,6 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
              </Button>
           </div>
 
-          {/* Lista de Itens */}
           <div className="bg-card rounded-[var(--radius)] border border-gray-200 p-4 shadow-custom">
             <h4 className="text-xs font-bold text-gray-500 uppercase mb-3 flex items-center gap-2"><Package className="h-4 w-4"/> Equipamentos</h4>
             <div className="divide-y divide-gray-100">
@@ -350,15 +321,13 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
           </div>
         </div>
 
-        {/* FOOTER FIXO */}
         <SheetFooter className="border-t border-gray-200 bg-card mt-auto w-full">
             <div className="p-6 flex flex-col gap-3 w-full">
                 
-                {/* AÇÃO PRINCIPAL (Retirada / Devolução) */}
                 {status === 'signed' && (
                     <Button 
                         className="w-full h-14 bg-success hover:bg-success/90 text-white font-bold uppercase text-lg shadow-lg" 
-                        onClick={() => updateStatus('picked_up')} // Corrigido para 'picked_up'
+                        onClick={() => updateStatus('picked_up')} 
                         disabled={updating}
                     >
                         {updating ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <Truck className="mr-2 h-6 w-6" />} 
@@ -388,14 +357,12 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
                     </Button>
                 )}
 
-                {/* MENSAGEM DE SUCESSO (Se finalizado) */}
                 {isFinalized && (
                     <div className="p-4 bg-success/10 border border-success/20 rounded-lg flex items-center justify-center gap-2 text-success font-bold">
                         <CheckCircle className="h-5 w-5" /> Contrato Finalizado
                     </div>
                 )}
 
-                {/* CANCELAR (Abaixo da ação principal, se não estiver finalizado) */}
                 {!isFinalized && (
                     <Button 
                         variant="ghost" 
