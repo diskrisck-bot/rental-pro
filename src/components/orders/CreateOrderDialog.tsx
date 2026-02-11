@@ -305,7 +305,18 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
   const removeItem = (index: number) => setSelectedItems(selectedItems.filter((_, i) => i !== index));
 
   const onSubmit = async (values: any) => {
-    if (selectedItems.length === 0) { showError("Adicione itens"); return; }
+    // 1. VALIDAÇÃO DE ITENS (Guard Clause)
+    if (selectedItems.length === 0) { 
+      showError("Erro: Adicione pelo menos um item à locação antes de salvar."); 
+      return; 
+    }
+
+    // 2. VALIDAÇÃO DE CLIENTE (Guard Clause)
+    if (!values.customer_name?.trim() || !values.customer_cpf?.trim()) {
+      showError("Erro: Preencha o nome e o CPF/CNPJ do cliente corretamente.");
+      return;
+    }
+
     try {
       setLoading(true);
       const orderPayload = {
@@ -321,20 +332,46 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         delivery_method: values.delivery_method,
         status: orderId ? undefined : 'pending_signature' 
       };
+
       let currentOrderId = orderId;
+
       if (orderId) {
-        await supabase.from('orders').update(orderPayload).eq('id', orderId);
-        await supabase.from('order_items').delete().eq('order_id', orderId);
+        const { error: updateError } = await supabase.from('orders').update(orderPayload).eq('id', orderId);
+        if (updateError) throw updateError;
+        
+        const { error: deleteError } = await supabase.from('order_items').delete().eq('order_id', orderId);
+        if (deleteError) throw deleteError;
       } else {
-        const { data } = await supabase.from('orders').insert([orderPayload]).select().single();
+        // 3. TRATAMENTO DE RETORNO DO SUPABASE (Proteção contra null)
+        const { data, error: insertError } = await supabase.from('orders').insert([orderPayload]).select().single();
+        
+        if (insertError) throw insertError;
+        if (!data) throw new Error("Falha ao criar locação: O banco de dados não retornou o registro criado.");
+        
         currentOrderId = data.id;
       }
-      const itemsToInsert = selectedItems.map(item => ({ order_id: currentOrderId, product_id: item.product_id, quantity: item.quantity }));
-      await supabase.from('order_items').insert(itemsToInsert);
-      showSuccess("Sucesso!");
+
+      // 4. PERSISTÊNCIA DE ITENS
+      if (!currentOrderId) throw new Error("Erro crítico: ID da locação não identificado.");
+
+      const itemsToInsert = selectedItems.map(item => ({ 
+        order_id: currentOrderId, 
+        product_id: item.product_id, 
+        quantity: item.quantity 
+      }));
+
+      const { error: itemsError } = await supabase.from('order_items').insert(itemsToInsert);
+      if (itemsError) throw itemsError;
+
+      showSuccess("Locação salva com sucesso!");
       setOpen(false);
       onOrderCreated();
-    } catch (e: any) { showError(e.message); } finally { setLoading(false); }
+    } catch (e: any) { 
+      console.error("[CreateOrderDialog] Erro ao salvar:", e);
+      showError(e.message || "Ocorreu um erro inesperado ao salvar a locação."); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const isImmediate = watchFulfillmentType === 'immediate';
