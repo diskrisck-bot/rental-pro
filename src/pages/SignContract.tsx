@@ -47,7 +47,7 @@ const SignContract = () => {
   const buildContractText = () => {
     if (!order || !locador) return { header: '', intro: '', clauses: [], footer: '', audit: null };
     
-    const dias = differenceInDays(parseISO(order.end_date), parseISO(order.start_date)) || 1;
+    const dias = differenceInDays(parseISO(order.end_date), parseISO(order.start_date)) + 1;
     const formatMoney = (val: any) => Number(val).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     const listaItens = order.items?.map((i: any) => `• ${i.quantity}x ${i.name} (Valor de Reposição: ${formatMoney(i.replacement_value)})`).join('\n');
     
@@ -73,12 +73,13 @@ Status: VÁLIDO E CONCLUÍDO
       clauses: [
         { title: "1. DO OBJETO", text: `Locação dos bens: \n${listaItens}` },
         { title: "2. DO PRAZO", text: `Vigência de ${dias} dias: ${format(parseISO(order.start_date), "dd/MM/yyyy")} a ${format(parseISO(order.end_date), "dd/MM/yyyy")}.` },
-        { title: "3. VALOR", text: `Total: ${formatMoney(order.total_amount)}. Pagamento: ${order.payment_method}.` },
-        { title: "4. REPOSIÇÃO", text: `O LOCATÁRIO assume risco integral sobre os bens, devendo ressarcir o LOCADOR em caso de dano ou perda pelos valores citados na Cláusula 1.` },
-        { title: "5. FORO", text: `Eleito o foro de ${locador.city} para dirimir dúvidas.` }
+        { title: "3. VALOR E PAGAMENTO", text: `Total: ${formatMoney(order.total_amount)}. Forma de Pagamento: ${order.payment_method || 'A Combinar'}.` },
+        { title: "4. ENTREGA E RETIRADA", text: `Método acordado: ${order.delivery_method || 'Retirada pelo Cliente (Balcão)'}.` },
+        { title: "5. REPOSIÇÃO", text: `O LOCATÁRIO assume risco integral sobre os bens, devendo ressarcir o LOCADOR em caso de dano ou perda pelos valores citados na Cláusula 1.` },
+        { title: "6. FORO", text: `Eleito o foro de ${locador.city} para dirimir dúvidas.` }
       ],
       footer: `${locador.city}, ${format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}.`,
-      audit: auditBlock // Passando o bloco de auditoria
+      audit: auditBlock 
     };
   };
 
@@ -152,17 +153,15 @@ Status: VÁLIDO E CONCLUÍDO
         doc.text(`IP: ${order.signer_ip || "IP Registrado"}`, 120, yAssin + 11);
     }
 
-    // --- PÁGINA EXTRA: RELATÓRIO DE AUDITORIA (Onde estão os metadados completos) ---
+    // --- PÁGINA EXTRA: RELATÓRIO DE AUDITORIA ---
     if (order.signed_at) {
       doc.addPage(); 
       currentY = 20;
       
-      // Cabeçalho da Auditoria
       doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
       doc.text("RELATÓRIO DE ASSINATURA DIGITAL", pageWidth/2, currentY, { align: "center" });
       currentY += 20;
 
-      // Caixa de Dados
       doc.setFillColor(240, 240, 240);
       doc.rect(margin, currentY, maxLineWidth, 90, 'FD');
       
@@ -190,14 +189,12 @@ Status: VÁLIDO E CONCLUÍDO
       doc.text(uaLines, margin + 5, logY);
       logY += (uaLines.length * 4) + 10;
 
-      // Reprodução da Assinatura no Log
       if (order.signature_image) {
         doc.setFont("courier", "bold"); doc.setFontSize(10);
         doc.text("Evidência Visual:", margin + 5, logY);
         doc.addImage(order.signature_image, 'PNG', margin + 50, logY - 5, 40, 20);
       }
       
-      // Hash Rodapé
       const hashY = currentY + 85;
       doc.setFontSize(6); doc.setTextColor(150,150,150);
       doc.text(`Hash de Segurança: ${btoa(order.order_id + order.signed_at).substring(0,60)}...`, margin + 5, hashY);
@@ -219,8 +216,8 @@ Status: VÁLIDO E CONCLUÍDO
         client_agent: navigator.userAgent 
       }); 
       showSuccess("Assinado com sucesso!"); 
-      fetchData(); // Recarrega para mostrar os metadados
-    } catch (e) { showError("Erro ao assinar."); } finally { setSigning(false); } 
+      fetchData(); 
+    } catch (e) { showError("Erro ao assinar."); } finally { setLoading(false); } 
   };
 
   if (loading) return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin" /></div>;
@@ -231,7 +228,6 @@ Status: VÁLIDO E CONCLUÍDO
       <div className="w-full max-w-4xl bg-white shadow-xl rounded-xl overflow-hidden border border-gray-200">
         <div className="bg-slate-900 text-white p-6 text-center"><h1 className="text-xl font-bold uppercase">Contrato Digital</h1></div>
         <div className="p-8 space-y-6">
-          {/* ÁREA DO TEXTO DO CONTRATO */}
           <div className="bg-slate-50 border p-6 h-96 overflow-y-auto shadow-inner rounded-lg">
              <div className="font-serif text-sm leading-relaxed whitespace-pre-wrap text-gray-800">
                <p className="text-center font-bold text-lg mb-4 text-black">{contractContent.header}</p>
@@ -239,7 +235,6 @@ Status: VÁLIDO E CONCLUÍDO
                {contractContent.clauses?.map((c: any, i: number) => (<div key={i} className="mb-4"><strong className="text-black">{c.title}</strong><br/>{c.text}</div>))}
                <p className="mt-4">{contractContent.footer}</p>
                
-               {/* AQUI: Exibe os metadados na tela se estiver assinado */}
                {contractContent.audit && (
                    <div className="mt-8 p-4 bg-gray-200 border border-gray-300 rounded text-xs font-mono text-gray-600 whitespace-pre">
                        {contractContent.audit}

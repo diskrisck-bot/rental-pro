@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Plus, Trash2, Loader2, Wallet, Edit, CreditCard, Clock, Zap, Calendar, AlertTriangle, Package, AlertCircle, CheckCircle } from 'lucide-react';
+import { Plus, Trash2, Loader2, Wallet, Edit, CreditCard, Clock, Zap, Calendar, AlertTriangle, Package, AlertCircle, CheckCircle, Truck } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { 
   Dialog, 
@@ -86,12 +86,13 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
       payment_method: 'Pix',
       payment_timing: 'paid_on_pickup',
       fulfillment_type: 'reservation',
+      delivery_method: 'Retirada pelo Cliente (Balcão)',
     }
   });
 
   const watchDates = watch(['start_date', 'end_date']);
   const watchPaymentMethod = watch('payment_method');
-  const watchPaymentTiming = watch('payment_timing');
+  const watchDeliveryMethod = watch('delivery_method');
   const watchFulfillmentType = watch('fulfillment_type');
   const [startDateStr, endDateStr] = watchDates;
 
@@ -215,6 +216,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             setValue('payment_method', orderData.payment_method || 'Pix');
             setValue('payment_timing', orderData.payment_timing || 'paid_on_pickup');
             setValue('fulfillment_type', orderData.fulfillment_type || 'reservation');
+            setValue('delivery_method', orderData.delivery_method || 'Retirada pelo Cliente (Balcão)');
             setCustomerDocument(orderData.customer_cpf || '');
             setValue('customer_cpf', orderData.customer_cpf || '');
             const existingItems = orderData.order_items.map((item: any) => ({
@@ -235,6 +237,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             payment_method: 'Pix',
             payment_timing: 'paid_on_pickup',
             fulfillment_type: 'reservation',
+            delivery_method: 'Retirada pelo Cliente (Balcão)',
           });
           setCustomerDocument('');
           setSelectedItems([]);
@@ -297,6 +300,7 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         payment_method: values.payment_method,
         payment_timing: values.payment_timing,
         fulfillment_type: values.fulfillment_type,
+        delivery_method: values.delivery_method,
         status: orderId ? undefined : 'pending_signature' 
       };
       let currentOrderId = orderId;
@@ -338,6 +342,34 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2"><Label>Início</Label><Input type="date" {...register('start_date', { required: true })} disabled={isImmediate && !orderId} /></div>
                 <div className="space-y-2"><Label>Fim</Label><Input type="date" {...register('end_date', { required: true })} /></div>
+              </div>
+
+              {/* NOVOS CAMPOS: PAGAMENTO E ENTREGA */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Forma de Pagamento</Label>
+                  <Select value={watchPaymentMethod} onValueChange={(val) => setValue('payment_method', val)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Pix">Pix</SelectItem>
+                      <SelectItem value="Dinheiro">Dinheiro</SelectItem>
+                      <SelectItem value="Cartão de Crédito">Cartão de Crédito</SelectItem>
+                      <SelectItem value="Cartão de Débito">Cartão de Débito</SelectItem>
+                      <SelectItem value="Boleto">Boleto</SelectItem>
+                      <SelectItem value="A Combinar">A Combinar</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Frete / Retirada</Label>
+                  <Select value={watchDeliveryMethod} onValueChange={(val) => setValue('delivery_method', val)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Retirada pelo Cliente (Balcão)">Retirada pelo Cliente (Balcão)</SelectItem>
+                      <SelectItem value="Entrega pelo Locador (Frete)">Entrega pelo Locador (Frete)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
             <div className="border-t pt-4">
