@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Loader2, User, Box } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Loader2, User, Box, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { format, addDays, startOfToday, eachDayOfInterval, isSameDay, isBefore, isAfter, parseISO, startOfDay, isWithinInterval } from 'date-fns';
+import { format, addDays, startOfToday, eachDayOfInterval, isSameDay, isBefore, isAfter, parseISO, startOfDay, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
@@ -15,9 +15,15 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 
 const DAY_WIDTH_PX = 120;
 
-const getBlockPosition = (startDateStr: string, endDateStr: string, days: Date[]) => {
+const getBlockPosition = (startDateStr: string, endDateStr: string, days: Date[], status: string) => {
+  const today = startOfToday();
   const startDate = parseISO(startDateStr);
-  const endDate = parseISO(endDateStr);
+  let endDate = parseISO(endDateStr);
+
+  // LÓGICA CRÍTICA: Se está na rua e a data de fim já passou, a "data visual" de fim é HOJE
+  if (status === 'picked_up' && isBefore(endDate, today)) {
+    endDate = today;
+  }
   
   let startIndex = days.findIndex(d => isSameDay(d, startDate));
   let endIndex = days.findIndex(d => isSameDay(d, endDate));
@@ -37,16 +43,18 @@ const getBlockPosition = (startDateStr: string, endDateStr: string, days: Date[]
 const Timeline = () => {
   const [viewStartDay, setViewStartDay] = useState(startOfToday());
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(startOfToday());
+  const today = startOfToday();
 
   const days = useMemo(() => eachDayOfInterval({ start: viewStartDay, end: addDays(viewStartDay, 14) }), [viewStartDay]);
 
-  // QUERY: Busca APENAS pedidos 'picked_up' (Em andamento) conforme nova regra
+  // QUERY AJUSTADA: Busca o que termina no futuro OU o que está na rua (mesmo que vencido)
   const { data: orders, isLoading } = useQuery({
     queryKey: ['timeline_orders_view', viewStartDay],
     queryFn: async () => {
       const rangeStart = viewStartDay.toISOString();
       const rangeEnd = addDays(viewStartDay, 15).toISOString();
 
+      // Filtro complexo: (status = picked_up) OU (end_date >= rangeStart)
       const { data } = await supabase
         .from('orders')
         .select(`
@@ -56,9 +64,8 @@ const Timeline = () => {
                 products (name)
             )
         `)
-        .eq('status', 'picked_up') // REGRA: Apenas o que está na rua
+        .or(`status.eq.picked_up,end_date.gte.${rangeStart}`)
         .lte('start_date', rangeEnd)
-        .gte('end_date', rangeStart)
         .order('start_date', { ascending: true });
 
       return data || [];
@@ -69,15 +76,38 @@ const Timeline = () => {
     if (date) { setSelectedDate(date); setViewStartDay(startOfDay(date)); }
   };
 
-  const getStatusConfig = (status: string, endDate: string) => {
-    const isEndingToday = isSameDay(parseISO(endDate), startOfToday());
-    const isOverdue = isBefore(parseISO(endDate), startOfToday());
+  const getStatusConfig = (status: string, endDateStr: string) => {
+    const endDate = parseISO(endDateStr);
+    const isEndingToday = isSameDay(endDate, today);
+    const isOverdue = isBefore(endDate, today) && status === 'picked_up';
     
-    if (isOverdue || isEndingToday) {
-        return { bg: 'bg-destructive', border: 'border-destructive/80', text: 'text-white', label: isOverdue ? 'ATRASADO' : 'VENCE HOJE' };
+    if (isOverdue) {
+        return { 
+          bg: 'bg-destructive', 
+          border: 'border-destructive/80', 
+          text: 'text-white', 
+          label: 'ATRASADO',
+          icon: <AlertTriangle className="h-3 w-3 mr-1 animate-pulse" />
+        };
     }
 
-    return { bg: 'bg-primary', border: 'border-primary/80', text: 'text-white', label: 'NA RUA' };
+    if (isEndingToday && status === 'picked_up') {
+        return { 
+          bg: 'bg-destructive', 
+          border: 'border-destructive/80', 
+          text: 'text-white', 
+          label: 'VENCE HOJE',
+          icon: <Clock className="h-3 w-3 mr-1" />
+        };
+    }
+
+    return { 
+      bg: status === 'picked_up' ? 'bg-primary' : 'bg-secondary', 
+      border: status === 'picked_up' ? 'border-primary/80' : 'border-secondary/80', 
+      text: 'text-white', 
+      label: status === 'picked_up' ? 'NA RUA' : 'RESERVADO',
+      icon: null
+    };
   };
 
   return (
@@ -85,7 +115,7 @@ const Timeline = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
             <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground uppercase">Timeline de Uso</h1>
-            <p className="text-muted-foreground font-medium">Visualização exclusiva de equipamentos que estão na rua.</p>
+            <p className="text-muted-foreground font-medium">Visualização de equipamentos na rua e reservas futuras.</p>
         </div>
         
         <div className="flex items-center gap-2 bg-card border border-border rounded-[var(--radius)] p-1 shadow-sm">
@@ -113,18 +143,18 @@ const Timeline = () => {
                 <User className="h-4 w-4" /> Cliente / Contrato
               </div>
               {days.map((day) => (
-                <div key={day.toString()} className={`flex-1 min-w-[120px] p-4 text-center border-r border-border/50 last:border-r-0 ${isSameDay(day, new Date()) ? 'bg-primary/10' : ''}`}>
+                <div key={day.toString()} className={`flex-1 min-w-[120px] p-4 text-center border-r border-border/50 last:border-r-0 ${isSameDay(day, today) ? 'bg-primary/10' : ''}`}>
                   <div className="text-xs uppercase text-muted-foreground font-bold">{format(day, 'EEE', { locale: ptBR })}</div>
-                  <div className={`text-xl font-black ${isSameDay(day, new Date()) ? 'text-primary' : 'text-foreground'}`}>{format(day, 'dd')}</div>
+                  <div className={`text-xl font-black ${isSameDay(day, today) ? 'text-primary' : 'text-foreground'}`}>{format(day, 'dd')}</div>
                 </div>
               ))}
             </div>
 
             {/* Linhas dos Contratos */}
             {isLoading ? <div className="flex justify-center p-20"><Loader2 className="animate-spin h-8 w-8 text-primary"/></div> : 
-             orders?.length === 0 ? <div className="p-10 text-center text-muted-foreground font-medium">Nenhum equipamento na rua neste período.</div> : 
+             orders?.length === 0 ? <div className="p-10 text-center text-muted-foreground font-medium">Nenhum equipamento na rua ou reserva neste período.</div> : 
              orders?.map((order: any) => {
-               const position = getBlockPosition(order.start_date, order.end_date, days);
+               const position = getBlockPosition(order.start_date, order.end_date, days, order.status);
                const style = getStatusConfig(order.status, order.end_date);
                
                return (
@@ -138,7 +168,7 @@ const Timeline = () => {
                    {/* Grade e Barra */}
                    <div className="flex flex-1 relative h-full items-center">
                      {days.map((day) => (
-                        <div key={day.toString()} className={`flex-1 min-w-[120px] h-full border-r border-border/50 last:border-r-0 ${isSameDay(day, new Date()) ? 'bg-primary/10' : ''}`} />
+                        <div key={day.toString()} className={`flex-1 min-w-[120px] h-full border-r border-border/50 last:border-r-0 ${isSameDay(day, today) ? 'bg-primary/10' : ''}`} />
                      ))}
                      
                      {position && (
@@ -153,6 +183,7 @@ const Timeline = () => {
                                )}
                                style={{ left: `${position.left + 4}px`, width: `${position.width - 8}px` }}
                              >
+                               {style.icon}
                                {style.label}
                              </Link>
                            </TooltipTrigger>
@@ -183,5 +214,9 @@ const Timeline = () => {
     </div>
   );
 };
+
+const Clock = ({ className }: { className?: string }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+);
 
 export default Timeline;

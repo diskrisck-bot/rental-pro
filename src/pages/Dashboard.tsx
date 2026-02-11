@@ -229,7 +229,7 @@ const TimelineWidget = ({ activeOrders }: any) => {
 
   const sortedOrders = useMemo(() => {
     return (activeOrders || [])
-        .filter((order: any) => order.status === 'picked_up') // REGRA: Apenas o que está na rua
+        .filter((order: any) => order.status === 'picked_up' || order.status === 'signed' || order.status === 'reserved')
         .sort((a: any, b: any) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())
         .slice(0, 6);
   }, [activeOrders]);
@@ -268,19 +268,26 @@ const TimelineWidget = ({ activeOrders }: any) => {
             {sortedOrders.length === 0 ? <div className="p-8 text-center text-gray-400 text-sm font-medium">Sem equipamentos na rua no momento.</div> :
              sortedOrders.map((order: any) => {
                 const start = parseISO(order.start_date);
-                const end = parseISO(order.end_date);
+                let end = parseISO(order.end_date);
                 
+                // LÓGICA CRÍTICA: Se está na rua e atrasado, estende a barra até HOJE
+                if (order.status === 'picked_up' && isBefore(end, today)) {
+                  end = today;
+                }
+
                 let startIndex = days.findIndex(d => isSameDay(d, start));
                 let endIndex = days.findIndex(d => isSameDay(d, end));
                 
                 if (isBefore(start, today)) startIndex = 0;
                 if (isAfter(end, days[days.length-1])) endIndex = 6;
                 
+                if (startIndex === -1 || endIndex === -1 || startIndex > endIndex) return null;
+
                 const width = (endIndex - startIndex + 1) * 100 / 7; 
                 const left = (startIndex) * 100 / 7;
                 
-                const isOverdue = isBefore(end, today);
-                const isEndsToday = isSameDay(end, today);
+                const isOverdue = order.status === 'picked_up' && isBefore(parseISO(order.end_date), today);
+                const isEndsToday = isSameDay(parseISO(order.end_date), today);
 
                 return (
                     <div key={order.id} className="flex border-b border-gray-200 last:border-0 hover:bg-card transition-colors group h-12 relative bg-card">
@@ -296,7 +303,7 @@ const TimelineWidget = ({ activeOrders }: any) => {
                             <div 
                                 className={cn(
                                     "absolute top-2 h-8 rounded-[var(--radius)] mx-0.5 text-[10px] font-bold text-white flex items-center px-2 shadow-sm overflow-hidden whitespace-nowrap",
-                                    isOverdue ? "bg-destructive animate-pulse" : isEndsToday ? "bg-destructive" : "bg-success"
+                                    isOverdue ? "bg-destructive animate-pulse" : isEndsToday ? "bg-destructive" : order.status === 'picked_up' ? "bg-success" : "bg-secondary"
                                 )}
                                 style={{ left: `${left}%`, width: `${width}%`, maxWidth: '100%' }}
                                 title={order.customer_name}
