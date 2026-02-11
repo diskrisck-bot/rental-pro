@@ -241,6 +241,8 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
             setValue('delivery_method', orderData.delivery_method || 'Retirada pelo Cliente (Balcão)');
             setCustomerDocument(orderData.customer_cpf || '');
             setValue('customer_cpf', orderData.customer_cpf || '');
+            setValue('discount', Number(orderData.discount) || 0);
+            setDisplayDiscount(formatCurrencyBRL(Number(orderData.discount) || 0));
             
             const existingItems = orderData.order_items.map((item: any) => ({
               product_id: item.product_id,
@@ -328,6 +330,8 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         payment_timing: values.payment_timing,
         fulfillment_type: values.fulfillment_type,
         delivery_method: values.delivery_method,
+        discount: Number(values.discount) || 0,
+        paid: values.payment_timing === 'paid_on_pickup',
         status: orderId ? undefined : 'pending_signature' 
       };
 
