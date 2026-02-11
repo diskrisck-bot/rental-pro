@@ -43,6 +43,7 @@ interface InventoryItem {
   name: string;
   type: 'trackable' | 'bulk';
   price: number;
+  replacement_value: number;
   total_quantity: number;
   active_rentals: number;
   available_quantity: number;
@@ -112,7 +113,14 @@ const Inventory = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   
-  const [newProduct, setNewProduct] = useState({ name: '', type: 'trackable', total_quantity: 1, price: 0, serial_number: '' });
+  const [newProduct, setNewProduct] = useState({ 
+    name: '', 
+    type: 'trackable', 
+    total_quantity: 1, 
+    price: 0, 
+    replacement_value: 0,
+    serial_number: '' 
+  });
 
   // 1. QUERY DE PRODUTOS
   const { data: rawProducts, isLoading: loadingProducts } = useQuery({
@@ -152,12 +160,12 @@ const Inventory = () => {
 
     setIsSaving(true);
     try {
-      // Removido o campo 'active' que estava causando erro de schema
       const productPayload = { 
         name: newProduct.name, 
         type: newProduct.type, 
         total_quantity: newProduct.total_quantity, 
-        price: newProduct.price 
+        price: newProduct.price,
+        replacement_value: newProduct.replacement_value
       };
       
       const { data: productData, error: productError } = await supabase.from('products').insert([productPayload]).select('id').single();
@@ -170,7 +178,7 @@ const Inventory = () => {
       showSuccess("Produto criado!");
       setIsAddModalOpen(false);
       queryClient.invalidateQueries({ queryKey: ['allProducts'] });
-      setNewProduct({ name: '', type: 'trackable', total_quantity: 1, price: 0, serial_number: '' });
+      setNewProduct({ name: '', type: 'trackable', total_quantity: 1, price: 0, replacement_value: 0, serial_number: '' });
     } catch (error: any) { showError("Erro: " + error.message); } finally { setIsSaving(false); }
   };
 
@@ -194,7 +202,11 @@ const Inventory = () => {
                 <div className="space-y-2"><Label>Qtd Total</Label><Input type="number" min={isTrackable ? "1" : "0"} value={newProduct.total_quantity} onChange={(e) => setNewProduct({...newProduct, total_quantity: parseInt(e.target.value) || 1})} disabled={isTrackable} /></div>
               </div>
               {isTrackable && (<div className="space-y-2"><Label>Serial Inicial</Label><Input value={newProduct.serial_number} onChange={(e) => setNewProduct({...newProduct, serial_number: e.target.value})} placeholder="SN-001" required /></div>)}
-              <div className="space-y-2"><Label>Preço Diária (R$)</Label><Input type="number" step="0.01" value={newProduct.price} onChange={(e) => setNewProduct({...newProduct, price: parseFloat(e.target.value) || 0})} /></div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>Preço Diária (R$)</Label><Input type="number" step="0.01" value={newProduct.price} onChange={(e) => setNewProduct({...newProduct, price: parseFloat(e.target.value) || 0})} /></div>
+                <div className="space-y-2"><Label>Valor de Reposição (R$)</Label><Input type="number" step="0.01" value={newProduct.replacement_value} onChange={(e) => setNewProduct({...newProduct, replacement_value: parseFloat(e.target.value) || 0})} /></div>
+              </div>
             </div>
             <DialogFooter><Button variant="outline" onClick={() => setIsAddModalOpen(false)}>Cancelar</Button><Button onClick={handleCreateProduct} disabled={isSaving} className="bg-primary hover:bg-primary/90">{isSaving ? <Loader2 className="animate-spin" /> : 'Salvar'}</Button></DialogFooter>
           </DialogContent>

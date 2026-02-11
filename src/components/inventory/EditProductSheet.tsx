@@ -31,6 +31,7 @@ interface InventoryItem {
   name: string;
   type: 'trackable' | 'bulk';
   price: number;
+  replacement_value: number;
   total_quantity: number;
   active_rentals: number;
   available_quantity: number;
@@ -50,6 +51,7 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
     type: 'trackable',
     total_quantity: 1,
     price: 0,
+    replacement_value: 0,
   });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -76,6 +78,7 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
             type: data.type,
             total_quantity: data.total_quantity,
             price: Number(data.price),
+            replacement_value: Number(data.replacement_value || 0),
           });
           setActiveTab('details'); // Volta para a aba de detalhes ao abrir
         } catch (error: any) {
@@ -127,6 +130,7 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
           type: formData.type,
           total_quantity: Number(newTotalQuantity),
           price: Number(formData.price),
+          replacement_value: Number(formData.replacement_value),
         })
         .eq('id', productId)
         .select(); // Adiciona .select() para obter o retorno
@@ -228,15 +232,27 @@ const EditProductSheet = ({ productId, open, onOpenChange }: EditProductSheetPro
                     </div>
                   </div>
                   
-                  <div className="space-y-2">
-                    <Label htmlFor="price">Preço da Diária (R$)</Label>
-                    <Input 
-                      id="price" 
-                      type="number"
-                      step="0.01"
-                      value={formData.price} 
-                      onChange={handleChange}
-                    />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="price">Preço da Diária (R$)</Label>
+                      <Input 
+                        id="price" 
+                        type="number"
+                        step="0.01"
+                        value={formData.price} 
+                        onChange={handleChange}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="replacement_value">Valor de Reposição (R$)</Label>
+                      <Input 
+                        id="replacement_value" 
+                        type="number"
+                        step="0.01"
+                        value={formData.replacement_value} 
+                        onChange={handleChange}
+                      />
+                    </div>
                   </div>
                 </div>
               </TabsContent>
