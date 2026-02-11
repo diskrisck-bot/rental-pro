@@ -152,7 +152,14 @@ const Inventory = () => {
 
     setIsSaving(true);
     try {
-      const productPayload = { name: newProduct.name, type: newProduct.type, total_quantity: newProduct.total_quantity, price: newProduct.price, active: true };
+      // Removido o campo 'active' que estava causando erro de schema
+      const productPayload = { 
+        name: newProduct.name, 
+        type: newProduct.type, 
+        total_quantity: newProduct.total_quantity, 
+        price: newProduct.price 
+      };
+      
       const { data: productData, error: productError } = await supabase.from('products').insert([productPayload]).select('id').single();
       if (productError) throw productError;
       
