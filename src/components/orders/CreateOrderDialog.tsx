@@ -1,7 +1,11 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Plus, Trash2, Loader2, Wallet, Edit, CreditCard, Clock, Zap, Calendar, AlertTriangle, Package, AlertCircle, CheckCircle, Truck, Info } from 'lucide-react';
+import { 
+  Plus, Trash2, Loader2, Wallet, Edit, CreditCard, Clock, Zap, 
+  Calendar, AlertTriangle, Package, AlertCircle, CheckCircle, 
+  Truck, Info, User, DollarSign, ShoppingCart, ArrowRight 
+} from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { 
   Dialog, 
@@ -21,6 +25,14 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select';
+import { 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableHead, 
+  TableHeader, 
+  TableRow 
+} from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/lib/supabase';
 import { showSuccess, showError } from '@/utils/toast';
@@ -31,6 +43,7 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchAllProducts } from '@/integrations/supabase/queries';
 import { Badge } from '@/components/ui/badge';
 import { formatCurrencyBRL, parseCurrencyBRL } from '@/utils/currency';
+import { cn } from '@/lib/utils';
 
 interface CreateOrderDialogProps {
   orderId?: string; 
@@ -142,23 +155,17 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
     }
   }, [watchFulfillmentType, setValue, orderId]);
 
-  useEffect(() => {
-    if (isProductsError) {
-      showError("Erro ao carregar a lista de produtos.");
-    }
-  }, [isProductsError]);
-
   const checkAvailabilityForUI = useCallback(async (productId: string, start: string, end: string): Promise<number> => {
     const product = productList.find(p => p.id === productId);
     if (!product) return 0;
 
-    const { data: productData, error: prodError } = await supabase
+    const { data: productData } = await supabase
       .from('products')
       .select('total_quantity')
       .eq('id', productId)
       .single();
       
-    if (prodError || !productData) return 0;
+    if (!productData) return 0;
     const totalEstoque = Number(productData.total_quantity) || 0;
 
     const startBoundary = `${start}T12:00:00.000Z`;
@@ -305,17 +312,8 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
   const removeItem = (index: number) => setSelectedItems(selectedItems.filter((_, i) => i !== index));
 
   const onSubmit = async (values: any) => {
-    // 1. VALIDAÇÃO DE ITENS (Guard Clause)
-    if (selectedItems.length === 0) { 
-      showError("Erro: Adicione pelo menos um item à locação antes de salvar."); 
-      return; 
-    }
-
-    // 2. VALIDAÇÃO DE CLIENTE (Guard Clause)
-    if (!values.customer_name?.trim() || !values.customer_cpf?.trim()) {
-      showError("Erro: Preencha o nome e o CPF/CNPJ do cliente corretamente.");
-      return;
-    }
+    if (selectedItems.length === 0) { showError("Erro: Adicione pelo menos um item."); return; }
+    if (!values.customer_name?.trim() || !values.customer_cpf?.trim()) { showError("Erro: Preencha os dados do cliente."); return; }
 
     try {
       setLoading(true);
@@ -336,23 +334,13 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
       let currentOrderId = orderId;
 
       if (orderId) {
-        const { error: updateError } = await supabase.from('orders').update(orderPayload).eq('id', orderId);
-        if (updateError) throw updateError;
-        
-        const { error: deleteError } = await supabase.from('order_items').delete().eq('order_id', orderId);
-        if (deleteError) throw deleteError;
+        await supabase.from('orders').update(orderPayload).eq('id', orderId);
+        await supabase.from('order_items').delete().eq('order_id', orderId);
       } else {
-        // 3. TRATAMENTO DE RETORNO DO SUPABASE (Proteção contra null)
-        const { data, error: insertError } = await supabase.from('orders').insert([orderPayload]).select().single();
-        
-        if (insertError) throw insertError;
-        if (!data) throw new Error("Falha ao criar locação: O banco de dados não retornou o registro criado.");
-        
+        const { data, error } = await supabase.from('orders').insert([orderPayload]).select().single();
+        if (error) throw error;
         currentOrderId = data.id;
       }
-
-      // 4. PERSISTÊNCIA DE ITENS
-      if (!currentOrderId) throw new Error("Erro crítico: ID da locação não identificado.");
 
       const itemsToInsert = selectedItems.map(item => ({ 
         order_id: currentOrderId, 
@@ -360,204 +348,248 @@ const CreateOrderDialog = ({ orderId, onOrderCreated, children }: CreateOrderDia
         quantity: item.quantity 
       }));
 
-      const { error: itemsError } = await supabase.from('order_items').insert(itemsToInsert);
-      if (itemsError) throw itemsError;
-
+      await supabase.from('order_items').insert(itemsToInsert);
       showSuccess("Locação salva com sucesso!");
       setOpen(false);
       onOrderCreated();
-    } catch (e: any) { 
-      console.error("[CreateOrderDialog] Erro ao salvar:", e);
-      showError(e.message || "Ocorreu um erro inesperado ao salvar a locação."); 
-    } finally { 
-      setLoading(false); 
-    }
+    } catch (e: any) { showError(e.message); } finally { setLoading(false); }
   };
-
-  const isImmediate = watchFulfillmentType === 'immediate';
-  const isDataLoading = fetchingData || isProductsLoading;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>{orderId ? 'Editar Locação' : 'Nova Locação'}</DialogTitle></DialogHeader>
-        {isDataLoading ? <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div> : (
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            <div className="space-y-3 border-b pb-4">
-              <Label>Tipo de Pedido</Label>
-              <Select value={watchFulfillmentType} onValueChange={(val) => setValue('fulfillment_type', val as any)} disabled={!!orderId}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="immediate"><div className="flex items-center gap-2"><Zap className="h-4 w-4" /> Imediato</div></SelectItem><SelectItem value="reservation"><div className="flex items-center gap-2"><Clock className="h-4 w-4" /> Reserva</div></SelectItem></SelectContent></Select>
-            </div>
-            <div className="grid gap-4">
-              <div className="space-y-2">
-                <div className="flex items-center gap-1">
-                  <Label>Nome Cliente</Label>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" align="start" className="max-w-[250px] z-[100] bg-secondary text-white border-none shadow-xl">
-                        <p>Selecione o locatário responsável. O contrato será gerado com os dados (CPF/CNPJ e Endereço) deste cadastro.</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-                <Input {...register('customer_name', { required: true })} />
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label>Telefone</Label><MaskedInput mask={phoneMask} placeholder="(00) 00000-0000" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={watch('customer_phone')} onChange={(e) => setValue('customer_phone', e.target.value)} required /></div>
-                <div className="space-y-2"><Label>CPF / CNPJ</Label><Input maxLength={18} value={customerDocument} onChange={handleDocumentChange} placeholder="CPF ou CNPJ" required /><input type="hidden" {...register('customer_cpf', { required: true })} /></div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-1">
-                    <Label>Início</Label>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" align="start" className="max-w-[250px] z-[100] bg-secondary text-white border-none shadow-xl">
-                          <p>O sistema calcula o valor total automaticamente multiplicando o preço dos itens pelo número de dias selecionados neste intervalo.</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                  <Input type="date" {...register('start_date', { required: true })} disabled={isImmediate && !orderId} />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-1">
-                    <Label>Fim</Label>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" align="start" className="max-w-[250px] z-[100] bg-secondary text-white border-none shadow-xl">
-                          <p>O sistema calcula o valor total automaticamente multiplicando o preço dos itens pelo número de dias selecionados neste intervalo.</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                  <Input type="date" {...register('end_date', { required: true })} />
-                </div>
-              </div>
+      <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto p-0 gap-0">
+        <DialogHeader className="p-6 border-b bg-white sticky top-0 z-10">
+          <div className="flex items-center justify-between">
+            <DialogTitle className="text-2xl font-heading font-extrabold text-gray-900">
+              {orderId ? 'Editar Locação' : 'Nova Locação'}
+            </DialogTitle>
+            <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 px-3 py-1">
+              {watchFulfillmentType === 'immediate' ? 'Saída Imediata' : 'Reserva Futura'}
+            </Badge>
+          </div>
+        </DialogHeader>
 
-              <div className="grid grid-cols-2 gap-4">
+        {isDataLoading ? (
+          <div className="flex justify-center py-20"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div>
+        ) : (
+          <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-8">
+            
+            {/* SEÇÃO 1: DADOS DO CLIENTE */}
+            <section className="space-y-4">
+              <div className="flex items-center gap-2 text-gray-500 font-bold text-xs uppercase tracking-wider">
+                <User className="h-4 w-4" /> Cliente
+              </div>
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 space-y-4 shadow-sm">
                 <div className="space-y-2">
                   <div className="flex items-center gap-1">
-                    <Label>Forma de Pagamento</Label>
+                    <Label className="text-gray-700 font-bold">Nome Completo / Razão Social</Label>
                     <TooltipProvider>
                       <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" align="start" className="max-w-[250px] z-[100] bg-secondary text-white border-none shadow-xl">
-                          <p>Defina como o cliente vai pagar. Essa informação constará na Cláusula 3 do contrato.</p>
+                        <TooltipTrigger asChild><Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger>
+                        <TooltipContent side="bottom" align="start" className="max-w-xs z-[100] bg-secondary text-white border-none shadow-xl">
+                          <p>O contrato será gerado com este nome. Certifique-se de que está correto conforme o documento.</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   </div>
-                  <Select value={watchPaymentMethod} onValueChange={(val) => setValue('payment_method', val)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Pix">Pix</SelectItem>
-                      <SelectItem value="Dinheiro">Dinheiro</SelectItem>
-                      <SelectItem value="Cartão de Crédito">Cartão de Crédito</SelectItem>
-                      <SelectItem value="Cartão de Débito">Cartão de Débito</SelectItem>
-                      <SelectItem value="Boleto">Boleto</SelectItem>
-                      <SelectItem value="A Combinar">A Combinar</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Input {...register('customer_name', { required: true })} placeholder="Ex: João Silva ou Empresa LTDA" className="bg-white h-11" />
                 </div>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-1">
-                    <Label>Status do Pagamento</Label>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" align="start" className="max-w-[250px] z-[100] bg-secondary text-white border-none shadow-xl">
-                          <p>Indique se o valor já foi recebido ou se ficará pendente para o momento da entrega ou devolução.</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-gray-700 font-bold">Telefone de Contato</Label>
+                    <MaskedInput 
+                      mask={phoneMask} 
+                      placeholder="(00) 00000-0000" 
+                      className="flex h-11 w-full rounded-md border border-input bg-white px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" 
+                      value={watch('customer_phone')} 
+                      onChange={(e) => setValue('customer_phone', e.target.value)} 
+                      required 
+                    />
                   </div>
-                  <Select value={watchPaymentTiming} onValueChange={(val) => setValue('payment_timing', val)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="paid_on_pickup">Pago (Já recebido)</SelectItem>
-                      <SelectItem value="pay_on_return">Pendente (Pagar na Entrega/Devolução)</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="space-y-2">
+                    <Label className="text-gray-700 font-bold">CPF ou CNPJ</Label>
+                    <Input 
+                      maxLength={18} 
+                      value={customerDocument} 
+                      onChange={handleDocumentChange} 
+                      placeholder="000.000.000-00" 
+                      className="bg-white h-11"
+                      required 
+                    />
+                    <input type="hidden" {...register('customer_cpf', { required: true })} />
+                  </div>
                 </div>
               </div>
+            </section>
 
-              <div className="grid grid-cols-2 gap-4">
+            {/* SEÇÃO 2: LOGÍSTICA E PRAZOS */}
+            <section className="space-y-4">
+              <div className="flex items-center gap-2 text-gray-500 font-bold text-xs uppercase tracking-wider">
+                <Calendar className="h-4 w-4" /> Período e Entrega
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <div className="flex items-center gap-1">
-                    <Label>Frete / Retirada</Label>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" align="start" className="max-w-[250px] z-[100] bg-secondary text-white border-none shadow-xl">
-                          <p>Retirada: Cliente busca no balcão (sem custo). Entrega: Sua equipe leva até o local (pode haver taxa de frete).</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                  <Label className="text-gray-700 font-bold">Data de Início</Label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                    <Input type="date" {...register('start_date', { required: true })} disabled={watchFulfillmentType === 'immediate' && !orderId} className="pl-10 h-11" />
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-gray-700 font-bold">Data de Término</Label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                    <Input type="date" {...register('end_date', { required: true })} className="pl-10 h-11" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-gray-700 font-bold">Método de Entrega</Label>
                   <Select value={watchDeliveryMethod} onValueChange={(val) => setValue('delivery_method', val)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Retirada pelo Cliente (Balcão)">Retirada pelo Cliente (Balcão)</SelectItem>
-                      <SelectItem value="Entrega pelo Locador (Frete)">Entrega pelo Locador (Frete)</SelectItem>
+                      <SelectItem value="Retirada pelo Cliente (Balcão)"><div className="flex items-center gap-2"><Package className="h-4 w-4" /> Retirada (Balcão)</div></SelectItem>
+                      <SelectItem value="Entrega pelo Locador (Frete)"><div className="flex items-center gap-2"><Truck className="h-4 w-4" /> Entrega (Frete)</div></SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-1">
-                    <Label>Desconto (R$)</Label>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" align="start" className="max-w-[250px] z-[100] bg-secondary text-white border-none shadow-xl">
-                          <p>Valor em R$ para subtrair do total. Útil para negociações especiais ou parceiros.</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+              </div>
+            </section>
+
+            {/* SEÇÃO 3: ITENS DA LOCAÇÃO */}
+            <section className="space-y-4">
+              <div className="flex items-center gap-2 text-gray-500 font-bold text-xs uppercase tracking-wider">
+                <ShoppingCart className="h-4 w-4" /> Equipamentos
+              </div>
+              
+              {/* BARRA DE ADIÇÃO */}
+              <div className="flex flex-col md:flex-row gap-3 bg-secondary/5 p-4 rounded-xl border border-secondary/10">
+                <div className="flex-1">
+                  <Select value={currentProductId} onValueChange={setCurrentProductId}>
+                    <SelectTrigger className="h-11 bg-white"><SelectValue placeholder="Selecione um produto para incluir..." /></SelectTrigger>
+                    <SelectContent>
+                      {productList.map(p => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name} — {formatCurrencyBRL(p.price)}/dia
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="w-full md:w-24">
+                  <Input type="number" min="1" value={currentQuantity} onChange={(e) => setCurrentQuantity(parseInt(e.target.value) || 1)} className="h-11 bg-white" />
+                </div>
+                <Button type="button" onClick={addItem} className="h-11 bg-secondary hover:bg-secondary/90 text-white font-bold px-6">
+                  {loading ? <Loader2 className="animate-spin" /> : <Plus className="h-4 w-4 mr-2" />} Incluir
+                </Button>
+              </div>
+
+              {/* TABELA DE ITENS */}
+              <div className="border rounded-xl overflow-hidden shadow-sm">
+                <Table>
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="font-bold">Produto</TableHead>
+                      <TableHead className="text-center font-bold">Qtd</TableHead>
+                      <TableHead className="text-right font-bold">Valor Diária</TableHead>
+                      <TableHead className="text-right font-bold">Subtotal</TableHead>
+                      <TableHead className="w-12"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {selectedItems.length === 0 ? (
+                      <TableRow><TableCell colSpan={5} className="h-24 text-center text-gray-400 italic">Nenhum item adicionado ainda.</TableCell></TableRow>
+                    ) : (
+                      selectedItems.map((item, index) => {
+                        const subtotal = item.daily_price * item.quantity * financialSummary.durationInDays;
+                        return (
+                          <TableRow key={index} className="hover:bg-slate-50/50">
+                            <TableCell className="font-medium text-gray-900">{item.product_name}</TableCell>
+                            <TableCell className="text-center"><Badge variant="outline" className="font-bold">{item.quantity}</Badge></TableCell>
+                            <TableCell className="text-right text-gray-600">{formatCurrencyBRL(item.daily_price)}</TableCell>
+                            <TableCell className="text-right font-bold text-gray-900">{formatCurrencyBRL(subtotal)}</TableCell>
+                            <TableCell>
+                              <Button type="button" variant="ghost" size="icon" onClick={() => removeItem(index)} className="text-red-400 hover:text-red-600 hover:bg-red-50">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </section>
+
+            {/* SEÇÃO 4: FINANCEIRO E FECHAMENTO */}
+            <section className="space-y-4">
+              <div className="flex items-center gap-2 text-gray-500 font-bold text-xs uppercase tracking-wider">
+                <DollarSign className="h-4 w-4" /> Pagamento
+              </div>
+              
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Inputs Financeiros */}
+                <div className="lg:col-span-7 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-gray-700 font-bold">Forma de Pagamento</Label>
+                    <Select value={watchPaymentMethod} onValueChange={(val) => setValue('payment_method', val)}>
+                      <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Pix">Pix</SelectItem>
+                        <SelectItem value="Dinheiro">Dinheiro</SelectItem>
+                        <SelectItem value="Cartão de Crédito">Cartão de Crédito</SelectItem>
+                        <SelectItem value="Boleto">Boleto</SelectItem>
+                        <SelectItem value="A Combinar">A Combinar</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <Input value={displayDiscount} onChange={handleDiscountChange} />
+                  <div className="space-y-2">
+                    <Label className="text-gray-700 font-bold">Status do Pagamento</Label>
+                    <Select value={watchPaymentTiming} onValueChange={(val) => setValue('payment_timing', val)}>
+                      <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="paid_on_pickup">Pago (Já recebido)</SelectItem>
+                        <SelectItem value="pay_on_return">Pendente (Pagar depois)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label className="text-gray-700 font-bold">Desconto Especial (R$)</Label>
+                    <Input value={displayDiscount} onChange={handleDiscountChange} className="h-11" placeholder="R$ 0,00" />
+                  </div>
+                </div>
+
+                {/* Card de Totais */}
+                <div className="lg:col-span-5">
+                  <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6 space-y-3 shadow-sm">
+                    <div className="flex justify-between text-sm text-blue-600 font-medium">
+                      <span>Subtotal ({financialSummary.durationInDays} dias)</span>
+                      <span>{formatCurrencyBRL(financialSummary.subtotalDaily * financialSummary.durationInDays)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm text-red-500 font-medium">
+                      <span>Desconto</span>
+                      <span>- {formatCurrencyBRL(watchDiscount)}</span>
+                    </div>
+                    <div className="pt-3 border-t border-blue-200 flex justify-between items-end">
+                      <span className="text-blue-900 font-extrabold uppercase text-xs tracking-widest mb-1">Total Final</span>
+                      <span className="text-3xl font-black text-blue-900">{formatCurrencyBRL(financialSummary.totalAmount)}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="border-t pt-4">
-              <Label>Itens</Label>
-              <div className="flex gap-4 mt-2">
-                <Select value={currentProductId} onValueChange={setCurrentProductId}><SelectTrigger><SelectValue placeholder="Produto" /></SelectTrigger><SelectContent>{productList.map(p => (<SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>))}</SelectContent></Select>
-                <Input className="w-24" type="number" min="1" value={currentQuantity} onChange={(e) => setCurrentQuantity(parseInt(e.target.value) || 1)} />
-                <Button type="button" onClick={addItem} variant="secondary">Incluir</Button>
+            </section>
+
+            <DialogFooter className="pt-6 border-t sticky bottom-0 bg-white z-10">
+              <div className="flex flex-col md:flex-row gap-3 w-full">
+                <Button variant="outline" type="button" onClick={() => setOpen(false)} className="h-12 flex-1 font-bold">Cancelar</Button>
+                <Button type="submit" disabled={loading} className="h-12 flex-[2] bg-primary hover:bg-primary/90 text-white font-black uppercase tracking-widest shadow-lg shadow-primary/20">
+                  {loading ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle className="h-5 w-5 mr-2" />}
+                  {orderId ? 'Atualizar Locação' : 'Finalizar e Gerar Contrato'}
+                </Button>
               </div>
-              <div className="mt-4 space-y-2">
-                {selectedItems.map((item, index) => (
-                  <div key={index} className="flex justify-between items-center bg-gray-50 p-2 rounded border">
-                    <span className="text-sm font-medium">{item.product_name} x {item.quantity}</span>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => removeItem(index)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="bg-secondary/10 p-4 rounded-xl flex justify-between font-bold">
-                <span>Total:</span><span>R$ {financialSummary.totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-            </div>
-            <DialogFooter><Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancelar</Button><Button type="submit" disabled={loading}>{loading ? <Loader2 className="animate-spin" /> : 'Salvar'}</Button></DialogFooter>
+            </DialogFooter>
           </form>
         )}
       </DialogContent>
