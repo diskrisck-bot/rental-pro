@@ -43,7 +43,7 @@ const SignContract = () => {
 
   useEffect(() => { fetchData(); }, [orderId]);
 
-  // Monta o texto para a TELA e serve de base para o PDF
+  // Monta o texto para a TELA e serve de base para o PDF (Sincronizado com OrderDetailsSheet)
   const buildContractText = () => {
     if (!order || !locador) return { header: '', intro: '', clauses: [], footer: '', audit: null };
     
@@ -71,12 +71,13 @@ Status: VÁLIDO E CONCLUÍDO
       header: "CONTRATO DE LOCAÇÃO DE BENS MÓVEIS",
       intro: `IDENTIFICAÇÃO DAS PARTES\n\nLOCADOR: ${locador.name}, CNPJ ${locador.cnpj}.\n\nLOCATÁRIO: ${order.customer_name}, CPF/CNPJ ${order.customer_cpf || 'Não inf.'}.`,
       clauses: [
-        { title: "1. DO OBJETO", text: `Locação dos bens: \n${listaItens}` },
-        { title: "2. DO PRAZO", text: `Vigência de ${dias} dias: ${format(parseISO(order.start_date), "dd/MM/yyyy")} a ${format(parseISO(order.end_date), "dd/MM/yyyy")}.` },
-        { title: "3. VALOR E PAGAMENTO", text: `Total: ${formatMoney(order.total_amount)}. Forma de Pagamento: ${order.payment_method || 'A Combinar'}.` },
-        { title: "4. ENTREGA E RETIRADA", text: `Método acordado: ${order.delivery_method || 'Retirada pelo Cliente (Balcão)'}.` },
-        { title: "5. REPOSIÇÃO", text: `O LOCATÁRIO assume risco integral sobre os bens, devendo ressarcir o LOCADOR em caso de dano ou perda pelos valores citados na Cláusula 1.` },
-        { title: "6. FORO", text: `Eleito o foro de ${locador.city} para dirimir dúvidas.` }
+        { title: "CLÁUSULA 1 - DO OBJETO DA LOCAÇÃO", text: `O presente instrumento tem como objeto o aluguel dos seguintes bens móveis, que o LOCATÁRIO declara receber em perfeito estado de funcionamento e conservação:\n\n${listaItens}\n\nParágrafo Único: O valor de reposição de cada item é o valor que será cobrado integralmente do LOCATÁRIO em caso de perda, roubo, furto ou dano irreparável.` },
+        { title: "CLÁUSULA 2 - DO PRAZO E ENTREGA", text: `A locação vigorará pelo período de ${dias} diária(s), iniciando-se em ${format(parseISO(order.start_date), "dd/MM/yyyy")} e encerrando-se em ${format(parseISO(order.end_date), "dd/MM/yyyy")}, devendo os bens ser devolvidos na data final até as 18:00h. O atraso na devolução configurará apropriação indébita e gerará cobrança de novas diárias, sem prejuízo de multa de 10% sobre o valor total do contrato.` },
+        { title: "CLÁUSULA 3 - DO PREÇO E PAGAMENTO", text: `O valor total da locação é de ${formatMoney(order.total_amount)}, a ser pago via ${order.payment_method || 'combinar'}. O não pagamento na data acordada acarretará juros de mora de 1% (um por cento) ao mês e multa de 2% (dois por cento) sobre o valor devido.` },
+        { title: "CLÁUSULA 4 - DA RESPONSABILIDADE E USO", text: "O LOCATÁRIO declara receber os bens em perfeito estado de funcionamento e conservação. É de inteira responsabilidade do LOCATÁRIO a guarda e o uso correto dos equipamentos. Em caso de dano, avaria, roubo ou furto, o LOCATÁRIO arcará com o custo integral de reparo ou reposição do bem por um novo, de mesma marca e modelo, conforme os valores de reposição listados na Cláusula 1." },
+        { title: "CLÁUSULA 5 - DO TRANSPORTE", text: `O transporte dos equipamentos (retirada e devolução) corre por conta e risco do LOCATÁRIO, salvo disposição em contrário expressa neste contrato. Método acordado: ${order.delivery_method || 'Retirada pelo Cliente (Balcão)'}.` },
+        { title: "CLÁUSULA 6 - DA RESCISÃO", text: "O descumprimento de qualquer cláusula contratual ensejará a rescisão imediata deste contrato e a retomada dos bens pelo LOCADOR, sem prejuízo das penalidades cabíveis." },
+        { title: "CLÁUSULA 7 - DO FORO", text: `Fica eleito o foro da comarca de ${locador.city} para dirimir quaisquer dúvidas oriundas deste contrato, renunciando a qualquer outro, por mais privilegiado que seja.` }
       ],
       footer: `${locador.city}, ${format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}.`,
       audit: auditBlock 

@@ -281,11 +281,12 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
             <p className="text-4xl font-black">R$ {Number(order?.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
           </div>
           
-          <div className={cn("grid gap-3", showWhatsappButton ? "grid-cols-2" : "grid-cols-1")}>
+          {/* AJUSTE DE RESPONSIVIDADE: grid-cols-1 no mobile, sm:grid-cols-2 no desktop */}
+          <div className={cn("grid gap-3", showWhatsappButton ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1")}>
              
              {showWhatsappButton && (
                 <a href={getWhatsappLink(order)} target="_blank" rel="noopener noreferrer" className="w-full">
-                    <Button variant="outline" className="w-full h-12 border-success text-success hover:bg-success/10 font-bold">
+                    <Button variant="outline" className="w-full h-12 border-success text-success hover:bg-success/10 font-bold text-sm">
                         <MessageCircle className="h-4 w-4 mr-2" /> Enviar Link (WA)
                     </Button>
                 </a>
@@ -296,7 +297,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
                 disabled={isGeneratingContract} 
                 variant={isSigned ? "default" : "outline"} 
                 className={cn(
-                    "w-full h-12 font-bold", 
+                    "w-full h-12 font-bold text-sm", 
                     isSigned 
                         ? "bg-secondary hover:bg-secondary/90 text-white" 
                         : "border-foreground text-foreground", 
@@ -304,7 +305,7 @@ const OrderDetailsSheet = ({ orderId, open, onOpenChange, onStatusUpdate }: Orde
                 )}
              >
                 {isGeneratingContract ? <Loader2 className="animate-spin mr-2" /> : <Download className="mr-2 h-4 w-4" />} 
-                {isSigned ? 'Baixar Contrato Assinado' : 'Baixar Rascunho PDF'}
+                {isSigned ? 'Baixar Contrato' : 'Baixar Rascunho'}
              </Button>
           </div>
 
